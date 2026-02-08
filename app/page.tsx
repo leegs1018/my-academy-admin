@@ -3,53 +3,72 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation'; // 1. 라우터 추가
 
 export default function DashboardPage() {
+  const router = useRouter(); // 2. 라우터 선언
   const [stats, setStats] = useState({ studentCount: 0, classCount: 0, attendanceCount: 0 });
   const [ongoingClasses, setOngoingClasses] = useState<any[]>([]);
-  const [recentNotices, setRecentNotices] = useState<any[]>([]); // 공지사항 상태 추가
+  const [recentNotices, setRecentNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    // 3. 페이지 접속 시 로그인 상태부터 체크!
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // 세션 없으면 로그인으로 강제 이동
+        router.replace('/login');
+      } else {
+        // 세션 있으면 데이터 불러오기
+        fetchDashboardData();
+      }
+    };
+
+    checkAuth();
+  }, [router]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
-    const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    const todayField = dayNames[now.getDay()];
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`;
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayField = dayNames[now.getDay()];
 
-    // 1. 통계 데이터
-    const { count: sCount } = await supabase.from('students').select('*', { count: 'exact', head: true });
-    const { count: cCount } = await supabase.from('classes').select('*', { count: 'exact', head: true });
-    const { count: aCount } = await supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('attendance_date', today).eq('status', '등원');
+      // 1. 통계 데이터
+      const { count: sCount } = await supabase.from('students').select('*', { count: 'exact', head: true });
+      const { count: cCount } = await supabase.from('classes').select('*', { count: 'exact', head: true });
+      const { count: aCount } = await supabase.from('attendance').select('*', { count: 'exact', head: true }).eq('attendance_date', today).eq('status', '등원');
 
-    setStats({ studentCount: sCount || 0, classCount: cCount || 0, attendanceCount: aCount || 0 });
+      setStats({ studentCount: sCount || 0, classCount: cCount || 0, attendanceCount: aCount || 0 });
 
-    // 2. 현재 진행 중인 수업
-    const { data: classData } = await supabase
-      .from('classes')
-      .select('*')
-      .eq(todayField, true)
-      .lte('start_time', currentTime)
-      .gte('end_time', currentTime);
-    
-    setOngoingClasses(classData || []);
+      // 2. 현재 진행 중인 수업
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('*')
+        .eq(todayField, true)
+        .lte('start_time', currentTime)
+        .gte('end_time', currentTime);
+      
+      setOngoingClasses(classData || []);
 
-    // 3. 최신 공지사항 불러오기 (최근 3개)
-    const { data: noticeData } = await supabase
-      .from('notices')
-      .select('*')
-      .order('is_important', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(3);
-    
-    setRecentNotices(noticeData || []);
-
-    setLoading(false);
+      // 3. 최신 공지사항 불러오기 (최근 3개)
+      const { data: noticeData } = await supabase
+        .from('notices')
+        .select('*')
+        .order('is_important', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(3);
+      
+      setRecentNotices(noticeData || []);
+    } catch (error) {
+      console.error("데이터 로드 실패:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return <div className="p-10 text-center font-black text-indigo-500 animate-pulse">원장님, 데이터를 가져오고 있어요... 🚀</div>;
@@ -106,11 +125,10 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-          {/* 장식용 배경 원 */}
           <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-800 rounded-full blur-3xl opacity-50"></div>
         </div>
 
-        {/* 3. 최신 공지사항 (새로 추가됨!) */}
+        {/* 3. 최신 공지사항 */}
         <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-gray-50 flex flex-col">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-2xl font-black text-gray-800 flex items-center gap-2">
@@ -139,7 +157,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         {[
           { label: '출석체크', icon: '✅', href: '/attendance', bg: 'bg-green-50 text-green-600' },
-          { label: '학생등록', icon: '👤', href: '/student-reg', bg: 'bg-blue-50 text-blue-600' },
+          { label: '학생등록', icon: '👤', href: '/student', bg: 'bg-blue-50 text-blue-600' },
           { label: '클래스관리', icon: '🏫', href: '/class', bg: 'bg-indigo-50 text-indigo-600' },
           { label: '공지사항', icon: '📢', href: '/notices', bg: 'bg-yellow-50 text-yellow-600' },
         ].map((menu, i) => (
