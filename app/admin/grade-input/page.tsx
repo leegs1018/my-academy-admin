@@ -168,7 +168,7 @@ export default function GradeInputPage() {
               <tbody className="divide-y divide-gray-100">
                 {students.map((student) => {
                   const validScores = student.scores.filter((s: any) => s !== '').map(Number);
-                  const average = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(1) : '-';
+                  const average = validScores.length > 0 ? (validScores.reduce((a: number, b: number) => a + b, 0) / validScores.length).toFixed(1) : '-';
                   return (
                     <tr key={student.id} className="hover:bg-indigo-50/20 group transition-colors">
                       <td className="py-6 px-8 font-black text-indigo-900 sticky left-0 bg-white border-r border-gray-50 text-lg group-hover:bg-indigo-50 transition-all">{student.name}</td>
