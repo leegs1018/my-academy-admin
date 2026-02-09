@@ -199,10 +199,16 @@ export default function StudentReport({ params }: { params: { id: string } }) {
                   }]
                 }}
                 options={{ 
-                  scales: { r: { suggestMin: 0, suggestMax: 100, ticks: { display: false } } },
-                  maintainAspectRatio: false,
-                  plugins: { legend: { display: false } }
-                }}
+  scales: { 
+    r: { 
+      suggestedMin: 0, // ed 추가
+      suggestedMax: 100, // ed 추가
+      ticks: { display: false } 
+    } 
+  },
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } }
+}}
               />
             </div>
           </div>
