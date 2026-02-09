@@ -2,15 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation'; // 1. usePathname 추가
+import { useRouter, usePathname } from 'next/navigation';
 import './globals.css';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
-  const pathname = usePathname(); // 2. 현재 주소(경로) 가져오기
+  const pathname = usePathname();
 
-  // 3. 현재 페이지가 로그인 페이지인지 확인
+  // 현재 페이지가 로그인 페이지인지 확인
   const isLoginPage = pathname === '/login';
 
   // 로그아웃 함수
@@ -21,11 +21,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
+  // 메뉴 아이템 설정 (반복되는 코드를 줄이기 위해 배열로 관리)
+  const menuItems = [
+    { href: '/', label: '홈 대시보드', icon: '🏠' },
+    { href: '/student', label: '학생 등록 관리', icon: '👤' },
+    { href: '/class', label: '클래스 관리', icon: '🏫' },
+    { href: '/admin/grade-input', label: '성적 입력', icon: '✍️', color: 'hover:bg-indigo-50' }, // 추가
+    { href: '/grade/report', label: '성적표 분석', icon: '📈', color: 'hover:bg-indigo-50' }, // 추가
+    { href: '/student-list', label: '학생 통합 명부', icon: '📋' },
+    { href: '/attendance', label: '출석 체크', icon: '✅', color: 'hover:bg-green-50' },
+    { href: '/notices', label: '공지사항', icon: '📢', color: 'hover:bg-yellow-50' },
+  ];
+
   return (
     <html lang="ko">
       <body className="bg-gray-50 min-h-screen">
         
-        {/* --- 로그인 페이지가 아닐 때만 햄버거 버튼과 사이드바 표시 --- */}
         {!isLoginPage && (
           <>
             {/* 1. 햄버거 버튼 */}
@@ -54,40 +65,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 
                 {/* 메뉴 리스트 */}
                 <div className="flex-1 space-y-2 overflow-y-auto">
-                  <Link href="/" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-indigo-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:scale-125 transition-transform">🏠</span>
-                    <span className="font-black text-lg text-gray-700">홈 대시보드</span>
-                  </Link>
-
-                  <Link href="/student" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-indigo-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:scale-125 transition-transform">👤</span>
-                    <span className="font-black text-lg text-gray-700">학생 등록 관리</span>
-                  </Link>
-
-                  <Link href="/class" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-indigo-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:scale-125 transition-transform">🏫</span>
-                    <span className="font-black text-lg text-gray-700">클래스 관리</span>
-                  </Link>
-
-                  <Link href="/grade" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-indigo-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:scale-125 transition-transform">📊</span>
-                    <span className="font-black text-lg text-gray-700">성적 입력 & 분석</span>
-                  </Link>
-
-                  <Link href="/student-list" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-indigo-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:scale-125 transition-transform">📋</span>
-                    <span className="font-black text-lg text-gray-700">학생 통합 명부</span>
-                  </Link>
-
-                  <Link href="/attendance" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-green-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:scale-125 transition-transform">✅</span>
-                    <span className="font-black text-lg text-gray-700">출석 체크</span>
-                  </Link>
-
-                  <Link href="/notices" onClick={() => setIsOpen(false)} className="group flex items-center p-4 hover:bg-yellow-50 rounded-2xl transition-all">
-                    <span className="text-xl mr-3 group-hover:rotate-12 transition-transform">📢</span>
-                    <span className="font-black text-lg text-gray-700">공지사항</span>
-                  </Link>
+                  {menuItems.map((item) => (
+                    <Link 
+                      key={item.href}
+                      href={item.href} 
+                      onClick={() => setIsOpen(false)} 
+                      className={`group flex items-center p-4 ${item.color || 'hover:bg-indigo-50'} rounded-2xl transition-all ${pathname === item.href ? 'bg-indigo-50 ring-1 ring-indigo-200' : ''}`}
+                    >
+                      <span className="text-xl mr-3 group-hover:scale-125 transition-transform">{item.icon}</span>
+                      <span className={`font-black text-lg ${pathname === item.href ? 'text-indigo-600' : 'text-gray-700'}`}>
+                        {item.label}
+                      </span>
+                    </Link>
+                  ))}
                 </div>
 
                 {/* 하단 로그아웃 버튼 영역 */}
@@ -117,7 +107,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
 
         {/* 4. 실제 페이지 내용 */}
-        {/* 로그인 페이지일 때는 위쪽 여백(pt-20)을 없애서 로그인 폼이 화면 중앙에 오게 함 */}
         <main className={`min-h-screen ${isLoginPage ? '' : 'pt-20 px-6'}`}>
           <div className={isLoginPage ? '' : 'max-w-7xl mx-auto'}>
             {children}
