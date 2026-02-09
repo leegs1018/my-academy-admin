@@ -78,7 +78,7 @@ export default function GradeInputPage() {
 
   const handleScoreChange = (studentId: string, idx: number, value: string) => {
     if (value !== '' && (Number(value) < 0 || Number(value) > maxScore)) return;
-    setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: s.scores.map((v, i) => i === idx ? value : v) } : s));
+   setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: s.scores.map((v: any, i: number) => i === idx ? value : v) } : s));
   };
 
   const getColumnAverage = (colIdx: number) => {
