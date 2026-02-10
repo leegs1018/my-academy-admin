@@ -312,7 +312,7 @@ export default function StudentPage() {
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div>
                <label className="text-xs font-black text-gray-400 uppercase">학교명</label>
-               <input className="w-full border-2 p-3 rounded-lg font-medium bg-white shadow-sm" value={formData.schoolName} onChange={e => setFormData({...formData, schoolName: e.target.value})} placeholder="학교 이름 (예: 대전초)" />
+               <input className="w-full border-2 p-2 rounded-lg font-medium bg-white shadow-sm" value={formData.schoolName} onChange={e => setFormData({...formData, schoolName: e.target.value})} placeholder="학교 이름 (예: 대전초)" />
              </div>
              <div>
                <label className="text-xs font-black text-indigo-500 uppercase">수강 클래스 선택</label>
