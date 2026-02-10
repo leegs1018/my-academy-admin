@@ -40,11 +40,22 @@ export default function StudentListPage() {
     return matchesSearch && matchesClass && matchesSchool;
   });
 
-  const deleteStudent = async (id: number, name: string) => {
-    if (!confirm(`${name} 학생의 모든 기록이 삭제됩니다. 정말 삭제하시겠습니까?`)) return;
-    const { error } = await supabase.from('students').delete().eq('id', id);
-    if (!error) fetchStudents();
-  };
+ const deleteStudent = async (id: string, name: string) => { // id 타입을 string으로 변경
+  if (!confirm(`${name} 학생의 모든 기록이 삭제됩니다. 정말 삭제하시겠습니까?`)) return;
+  
+  const { error } = await supabase
+    .from('students')
+    .delete()
+    .eq('id', id); // 숫자로 변환하지 않고 문자열 그대로 비교
+
+  if (error) {
+    console.error("삭제 에러:", error.message);
+    alert(`삭제 실패: ${error.message}`);
+  } else {
+    alert(`${name} 학생이 삭제되었습니다.`);
+    fetchStudents();
+  }
+};
 
   const openEditModal = (student: any) => {
     let memoArray = [];
