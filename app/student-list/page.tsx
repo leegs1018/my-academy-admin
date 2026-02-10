@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx'; // 엑셀 추출용 라이브러리
 
 export default function StudentListPage() {
   const router = useRouter();
@@ -19,25 +20,8 @@ export default function StudentListPage() {
   const [editingStudent, setEditingStudent] = useState<any>(null);
   const [newMemo, setNewMemo] = useState(''); 
 
-  // 학교 레벨 및 관계 정의
   const schoolLevels = ['유치', '초등', '중등', '고등', 'N수생', '기타'];
   const parentRelations = ['어머님 (모)', '아버님 (부)', '기타'];
-
-  // DB에 존재하는 학교 레벨만 동적으로 추출
-  const existingSchoolLevels = Array.from(new Set(students.map(s => s.school_level).filter(Boolean)))
-    .sort((a, b) => String(a).localeCompare(String(b)));
-
-  const getGradeOptions = (level: string) => {
-    switch (level) {
-      case '유치': return ['4세', '5세', '6세', '7세'];
-      case '초등': return ['1학년', '2학년', '3학년', '4학년', '5학년', '6학년'];
-      case '중등':
-      case '고등': return ['1학년', '2학년', '3학년'];
-      case 'N수생': return ['졸업/기타'];
-      case '기타': return ['기타'];
-      default: return [];
-    }
-  };
 
   useEffect(() => {
     fetchStudents();
@@ -54,10 +38,51 @@ export default function StudentListPage() {
     if (data) setClassList(data);
   };
 
+  // 엑셀 다운로드 함수
+  const downloadExcel = () => {
+    if (filteredStudents.length === 0) {
+      alert("다운로드할 데이터가 없습니다.");
+      return;
+    }
+
+    const excelData = filteredStudents.map(s => ({
+      이름: s.name,
+      상태: s.status || '재학중',
+      학교: s.school_name || '-',
+      학교급: s.school_level || '-',
+      학년: s.grade_level || '-',
+      클래스: s.class_name || '미배정',
+      학생연락처: s.student_phone || '-',
+      보호자연락처: s.parent_phone || '-',
+      관계: s.parent_relation || '-',
+      성별: s.gender || '-',
+      입학일: s.admission_date || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "학생명단");
+    XLSX.writeFile(workbook, `학원_학생명단_${new Date().toLocaleDateString()}.xlsx`);
+  };
+
+  const existingSchoolLevels = Array.from(new Set(students.map(s => s.school_level).filter(Boolean)))
+    .sort((a, b) => String(a).localeCompare(String(b)));
+
+  const getGradeOptions = (level: string) => {
+    switch (level) {
+      case '유치': return ['4세', '5세', '6세', '7세'];
+      case '초등': return ['1학년', '2학년', '3학년', '4학년', '5학년', '6학년'];
+      case '중등':
+      case '고등': return ['1학년', '2학년', '3학년'];
+      case 'N수생': return ['졸업/기타'];
+      case '기타': return ['기타'];
+      default: return [];
+    }
+  };
+
   const schoolList = Array.from(new Set(students.map(s => s.school_name).filter(Boolean)))
     .sort((a, b) => String(a).localeCompare(String(b)));
 
-  // 필터링 로직
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.name.includes(searchTerm) || 
                          (s.student_phone && s.student_phone.includes(searchTerm)) ||
@@ -142,13 +167,29 @@ export default function StudentListPage() {
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 pb-20 font-sans bg-gray-50/30 min-h-screen text-gray-800">
       
-      {/* 헤더 영역 */}
+ {/* 헤더 영역 */}
       <div className="flex justify-between items-center border-b-4 border-indigo-100 pb-6">
         <h1 className="text-3xl font-black text-indigo-700 tracking-tight">📋 학생 통합 명부</h1>
-        <button onClick={() => router.push('/registration')} className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl hover:bg-blue-700 font-black shadow-lg transition-all active:scale-95">학생 등록 ➕</button>
+        <div className="flex gap-3">
+          {/* 1. 학생 등록 버튼 (먼저) */}
+          <button 
+            onClick={() => router.push('/registration')} 
+            className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl hover:bg-blue-700 font-black shadow-lg transition-all active:scale-95"
+          >
+            학생 등록 ➕
+          </button>
+
+          {/* 2. 엑셀 저장 버튼 (그 다음) */}
+          <button 
+            onClick={downloadExcel} 
+            className="bg-emerald-50 text-emerald-600 px-6 py-2.5 rounded-2xl hover:bg-emerald-600 hover:text-white font-black shadow-md transition-all border border-emerald-100 flex items-center gap-2"
+          >
+            엑셀 저장 📥
+          </button>
+        </div>
       </div>
 
-      {/* 필터 영역 (7열 배치) */}
+      {/* 필터 영역 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 bg-white p-5 rounded-3xl shadow-sm border border-gray-100 font-bold text-sm">
         <input className="border-2 p-3 rounded-2xl focus:border-indigo-500 outline-none bg-gray-50/50" placeholder="이름/연락처 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         
@@ -180,7 +221,7 @@ export default function StudentListPage() {
         <button onClick={() => {setSearchTerm(''); setFilterClass(''); setFilterSchool(''); setFilterStatus(''); setFilterSchoolLevel(''); setFilterGradeLevel('');}} className="bg-gray-800 text-white py-3 rounded-2xl hover:bg-black transition-all font-black">초기화</button>
       </div>
 
-      {/* 명단 테이블 (전문가 추천 순서 적용) */}
+      {/* 명단 테이블 */}
       <div className="bg-white rounded-[2rem] shadow-xl border border-gray-100 overflow-hidden">
         <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead className="bg-gray-50 text-indigo-900 border-b-2 border-indigo-50 font-black text-xs text-center uppercase tracking-wider">
@@ -217,6 +258,12 @@ export default function StudentListPage() {
                 <td className="p-5 font-bold text-gray-400">{s.gender}</td>
                 <td className="p-5">
                   <div className="flex justify-center gap-2">
+                    <button 
+                      onClick={() => router.push(`/admin/report/${s.id}`)} 
+                      className="bg-amber-50 text-amber-600 px-4 py-2 rounded-xl text-xs font-black border border-amber-100 hover:bg-amber-600 hover:text-white transition-all shadow-sm"
+                    >
+                      성적표 📈
+                    </button>
                     <button onClick={() => openEditModal(s)} className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black border hover:bg-indigo-600 hover:text-white transition-all">수정</button>
                     <button onClick={() => deleteStudent(s.id, s.name)} className="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-xs font-black border hover:bg-red-500 hover:text-white transition-all">삭제</button>
                   </div>
@@ -227,7 +274,7 @@ export default function StudentListPage() {
         </table>
       </div>
 
-      {/* 수정 모달 */}
+      {/* 수정 모달 영역 (이전과 동일하여 생략 가능하지만 완전성을 위해 포함) */}
       {isEditModalOpen && editingStudent && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl max-h-[95vh] flex flex-col overflow-hidden border border-white/20">
@@ -302,7 +349,6 @@ export default function StudentListPage() {
                   </div>
                 </div>
 
-                {/* 기준 연도 (입력창) */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-black text-indigo-600 ml-1">기준 연도</label>
