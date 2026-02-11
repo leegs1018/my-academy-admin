@@ -24,13 +24,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // 메뉴 아이템 설정 (반복되는 코드를 줄이기 위해 배열로 관리)
   const menuItems = [
     { href: '/', label: '홈 대시보드', icon: '🏠' },
-    { href: '/student', label: '학생 등록 관리', icon: '👤' },
-    { href: '/class', label: '클래스 관리', icon: '🏫' },
+    { href: '/admin/student', label: '학생 등록 관리', icon: '👤' },
+    { href: '/admin/class', label: '클래스 관리', icon: '🏫' },
     { href: '/admin/grade-input', label: '성적 입력', icon: '✍️', color: 'hover:bg-indigo-50' }, // 추가
-    { href: '/grade/report', label: '성적표 분석', icon: '📈', color: 'hover:bg-indigo-50' }, // 추가
-    { href: '/student-list', label: '학생 통합 명부', icon: '📋' },
-    { href: '/attendance', label: '출석 체크', icon: '✅', color: 'hover:bg-green-50' },
-    { href: '/notices', label: '공지사항', icon: '📢', color: 'hover:bg-yellow-50' },
+    { href: '/admin/report', label: '성적표 분석', icon: '📈', color: 'hover:bg-indigo-50' }, // 추가
+    { href: '/admin/student-list', label: '학생 통합 명부', icon: '📋' },
+    { href: '/admin/attendance', label: '출석 체크', icon: '✅', color: 'hover:bg-green-50' },
+    { href: '/admin/notices', label: '공지사항', icon: '📢', color: 'hover:bg-yellow-50' },
   ];
 
   return (

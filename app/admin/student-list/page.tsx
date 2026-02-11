@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { utils, writeFile } from 'xlsx';
 
@@ -186,7 +186,7 @@ export default function StudentListPage() {
         <h1 className="text-3xl font-black text-indigo-700 tracking-tight">📋 학생 통합 명부</h1>
         <div className="flex gap-3">
           <button 
-            onClick={() => router.push('/registration')} 
+            onClick={() => router.push('admin/student/registration')} 
             className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl hover:bg-blue-700 font-black shadow-lg transition-all active:scale-95"
           >
             학생 등록 ➕
@@ -322,12 +322,12 @@ export default function StudentListPage() {
                 <td className="p-5 font-bold text-gray-400">{s.gender}</td>
                 <td className="p-5">
                   <div className="flex justify-center gap-2">
-                    <button 
-                      onClick={() => router.push(`/admin/report/${s.id}`)} 
-                      className="bg-amber-50 text-amber-600 px-4 py-2 rounded-xl text-xs font-black border border-amber-100 hover:bg-amber-600 hover:text-white transition-all shadow-sm"
-                    >
-                      성적표 📈
-                    </button>
+                   <button 
+  onClick={() => router.push(`/student/report/${s.id}`)} 
+  className="bg-amber-50 text-amber-600 px-4 py-2 rounded-xl text-xs font-black border border-amber-100 hover:bg-amber-600 hover:text-white transition-all shadow-sm"
+>
+  성적표 📈
+</button>
                     <button onClick={() => openEditModal(s)} className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-black border hover:bg-indigo-600 hover:text-white transition-all">수정</button>
                     <button onClick={() => deleteStudent(s.id, s.name)} className="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-xs font-black border hover:bg-red-500 hover:text-white transition-all">삭제</button>
                   </div>

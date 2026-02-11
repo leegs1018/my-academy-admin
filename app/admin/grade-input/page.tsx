@@ -11,6 +11,9 @@ export default function GradeInputPage() {
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   
+  // 과목 설명 상태
+  const [subjectDescription, setSubjectDescription] = useState('');
+  
   const [sessionDates, setSessionDates] = useState<string[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,6 +25,22 @@ export default function GradeInputPage() {
     }
     fetchClasses();
   }, []);
+
+  // 설명 데이터 불러오기 함수 (클래스 + 과목 기준)
+  const fetchDescription = async (classId: string, category: string) => {
+    const { data } = await supabase
+      .from('subject_descriptions')
+      .select('description')
+      .eq('class_id', classId)
+      .eq('category', category)
+      .maybeSingle();
+
+    if (data) {
+      setSubjectDescription(data.description);
+    } else {
+      setSubjectDescription('');
+    }
+  };
 
   useEffect(() => {
     if (!selectedClassId || classList.length === 0) return;
@@ -56,6 +75,8 @@ export default function GradeInputPage() {
 
       setSessionDates(dates); 
       fetchData(selectedClassId, selectedMonth, selectedCategory, dates);
+      // 설명 로드 추가
+      fetchDescription(selectedClassId, selectedCategory || cats[0]);
     }
   }, [selectedClassId, selectedMonth, selectedCategory, classList]);
 
@@ -69,7 +90,9 @@ export default function GradeInputPage() {
     const { data: gradeData } = await supabase.from('grades').select('*').filter('test_name', 'ilike', `[${category}] ${month}월%`);
 
     if (studentData) {
-      const formatted = studentData.map(student => {
+      const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+
+      const formatted = sortedStudents.map(student => {
         const scores = Array(dates.length).fill('');
         dates.forEach((date, i) => {
           const testName = `[${category}] ${month}월 ${i + 1}회차`;
@@ -101,33 +124,53 @@ export default function GradeInputPage() {
   };
 
   const handleSave = async () => {
-    if (!confirm(`${selectedMonth}월 [${selectedCategory}] 성적을 저장하시겠습니까?`)) return;
+    if (!confirm(`${selectedMonth}월 [${selectedCategory}] 성적과 설명을 저장하시겠습니까?`)) return;
     setLoading(true);
-    const upsertData: any[] = [];
     
+    // 1. 성적 데이터 준비
+    const upsertGrades: any[] = [];
     students.forEach(student => {
       student.scores.forEach((score: string, idx: number) => {
         if (score !== '') {
-          upsertData.push({
+          const rawDate = sessionDates[idx];
+          const isStandardDate = /^\d{1,2}\/\d{1,2}$/.test(rawDate);
+          const finalTestDate = isStandardDate 
+            ? `2026-${rawDate.replace('/', '-')}` 
+            : `2026-${selectedMonth}-01`;
+
+          upsertGrades.push({
             student_id: student.id,
             test_name: `[${selectedCategory}] ${selectedMonth}월 ${idx + 1}회차`,
             score: parseInt(score),
-            test_date: `2026-${sessionDates[idx].replace('/', '-')}`,
+            test_date: finalTestDate,
             max_score: maxScore,
           });
         }
       });
     });
 
-    const { error } = await supabase.from('grades').upsert(upsertData, { onConflict: 'student_id, test_name' });
-    if (error) alert('저장 실패: ' + error.message);
-    else alert(`저장되었습니다! ✅`);
+    // 2. 설명 데이터 준비
+    const descriptionData = {
+      class_id: selectedClassId,
+      category: selectedCategory,
+      description: subjectDescription
+    };
+
+    // 3. 병렬 저장
+    const [gradeRes, descRes] = await Promise.all([
+      supabase.from('grades').upsert(upsertGrades, { onConflict: 'student_id, test_name' }),
+      supabase.from('subject_descriptions').upsert(descriptionData, { onConflict: 'class_id, category' })
+    ]);
+
+    if (gradeRes.error || descRes.error) alert('저장 실패: ' + (gradeRes.error?.message || descRes.error?.message));
+    else alert(`성적과 설명이 모두 저장되었습니다! ✅`);
     setLoading(false);
   };
 
   return (
     <div className="max-w-[98%] mx-auto py-10 px-4">
-      <div className="flex flex-wrap items-end mb-8 bg-white p-8 rounded-[2.5rem] shadow-sm border border-indigo-50 gap-8">
+      {/* 필터 영역 */}
+      <div className="flex flex-wrap items-end mb-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-indigo-50 gap-8">
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-3xl font-black text-indigo-900 mb-1 tracking-tight italic">성적 입력 매니저</h1>
           <p className="text-indigo-400 font-bold text-xs uppercase tracking-widest">Attendance & Performance</p>
@@ -159,13 +202,38 @@ export default function GradeInputPage() {
         </div>
       </div>
 
+      {/* 과목 설명란 섹션 (사이즈 확대) */}
+      {selectedClassId && (
+        <div className="mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-[2px] rounded-[2.5rem] shadow-lg">
+            <div className="bg-white rounded-[2.4rem] p-8 flex items-start gap-6">
+              <div className="bg-indigo-100 text-indigo-600 w-16 h-16 rounded-3xl flex items-center justify-center text-3xl shadow-inner shrink-0">
+                📚
+              </div>
+              <div className="flex-1">
+                <h3 className="text-s font-black text-indigo-400 uppercase tracking-widest mb-3 ml-1">학습 과제 설명</h3>
+                <textarea 
+                  rows={5}
+                  value={subjectDescription}
+                  onChange={(e) => setSubjectDescription(e.target.value)}
+                  placeholder={`이번 달 학습 목표를 입력하세요.
+1. 교재 1~3단원 핵심 문법 정리
+2. 주차별 단어 200개 암기 및 테스트
+3. 서술형 대비 문장 구조 파악 훈련`}
+                  className="w-full text-lg font-bold text-gray-700 outline-none placeholder:text-gray-300 bg-indigo-50/20 rounded-2xl p-4 border-2 border-transparent focus:border-indigo-100 transition-all resize-none leading-relaxed"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedClassId ? (
         <div className="bg-white rounded-[3rem] shadow-2xl border border-indigo-50 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse table-auto">
               <thead>
                 <tr className="bg-indigo-600 text-white">
-                  {/* 이름 셀 고정 및 너비 확보 */}
                   <th className="py-8 px-8 text-left font-black sticky left-0 bg-indigo-600 z-20 text-xl border-b-4 border-indigo-700 min-w-[160px] whitespace-nowrap shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                     이름
                   </th>
@@ -176,7 +244,7 @@ export default function GradeInputPage() {
                         type="text" 
                         value={date} 
                         onChange={(e) => handleDateChange(i, e.target.value)}
-                        className="bg-indigo-500/50 text-[13px] font-bold text-white text-center w-20 rounded-lg outline-none border border-indigo-400 focus:bg-white focus:text-indigo-600 transition-all"
+                        className="bg-indigo-500/50 text-[13px] font-bold text-white text-center w-20 rounded-lg outline-none border border-indigo-400 focus:bg-white focus:text-indigo-600 transition-all px-1"
                       />
                     </th>
                   ))}
@@ -189,7 +257,6 @@ export default function GradeInputPage() {
                   const average = validScores.length > 0 ? (validScores.reduce((a: number, b: number) => a + b, 0) / validScores.length).toFixed(1) : '-';
                   return (
                     <tr key={student.id} className="hover:bg-indigo-50/20 group transition-colors">
-                      {/* 이름 셀 고정 및 글자 잘림 방지 */}
                       <td className="py-6 px-8 font-black text-indigo-900 sticky left-0 bg-white border-r border-gray-50 text-lg group-hover:bg-indigo-50 transition-all min-w-[160px] whitespace-nowrap z-10 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
                         {student.name}
                       </td>
@@ -215,7 +282,7 @@ export default function GradeInputPage() {
             </table>
           </div>
           <div className="p-10 flex flex-col md:flex-row justify-between items-center bg-white border-t border-indigo-50 gap-6">
-              <p className="text-indigo-400 font-bold italic text-sm">* 수업 요일에 맞춰 날짜가 자동 생성되었습니다. 공휴일은 날짜를 직접 클릭해 수정하세요.</p>
+              <p className="text-indigo-400 font-bold italic text-sm">* 수업 요일에 맞춰 날짜가 자동 생성되었습니다. 한글 입력(예: 보강, 공휴일)도 가능합니다.</p>
               <button onClick={handleSave} className="bg-indigo-600 text-white px-24 py-6 rounded-[2rem] font-black text-2xl shadow-xl hover:bg-indigo-700 transition-all active:scale-95">저장하기 ✨</button>
           </div>
         </div>
