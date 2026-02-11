@@ -11,9 +11,7 @@ export default function GradeInputPage() {
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   
-  // 과목 설명 상태
   const [subjectDescription, setSubjectDescription] = useState('');
-  
   const [sessionDates, setSessionDates] = useState<string[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +24,6 @@ export default function GradeInputPage() {
     fetchClasses();
   }, []);
 
-  // 설명 데이터 불러오기 함수 (클래스 + 과목 기준)
   const fetchDescription = async (classId: string, category: string) => {
     const { data } = await supabase
       .from('subject_descriptions')
@@ -35,11 +32,7 @@ export default function GradeInputPage() {
       .eq('category', category)
       .maybeSingle();
 
-    if (data) {
-      setSubjectDescription(data.description);
-    } else {
-      setSubjectDescription('');
-    }
+    setSubjectDescription(data?.description || '');
   };
 
   useEffect(() => {
@@ -49,7 +42,8 @@ export default function GradeInputPage() {
     if (currentClass) {
       const cats = currentClass.test_categories?.length > 0 ? currentClass.test_categories : ['단어', '듣기', '본시험'];
       setDynamicCategories(cats);
-      if (!selectedCategory) setSelectedCategory(cats[0]);
+      const targetCategory = selectedCategory || cats[0];
+      if (!selectedCategory) setSelectedCategory(targetCategory);
 
       const activeDays: number[] = [];
       if (currentClass.sun) activeDays.push(0);
@@ -61,26 +55,23 @@ export default function GradeInputPage() {
       if (currentClass.sat) activeDays.push(6);
 
       const targetDays = activeDays.length > 0 ? activeDays : [1, 3, 5];
-
       const year = 2026;
-      const dates: string[] = [];
+      const defaultDates: string[] = [];
       const lastDay = new Date(year, selectedMonth, 0).getDate();
 
       for (let d = 1; d <= lastDay; d++) {
         const dateObj = new Date(year, selectedMonth - 1, d);
         if (targetDays.includes(dateObj.getDay())) {
-          dates.push(`${selectedMonth}/${d}`);
+          defaultDates.push(`${selectedMonth}/${d}`);
         }
       }
 
-      setSessionDates(dates); 
-      fetchData(selectedClassId, selectedMonth, selectedCategory, dates);
-      // 설명 로드 추가
-      fetchDescription(selectedClassId, selectedCategory || cats[0]);
+      fetchData(selectedClassId, selectedMonth, targetCategory, defaultDates);
+      fetchDescription(selectedClassId, targetCategory);
     }
   }, [selectedClassId, selectedMonth, selectedCategory, classList]);
 
-  const fetchData = async (classId: string, month: number, category: string, dates: string[]) => {
+  const fetchData = async (classId: string, month: number, category: string, defaultDates: string[]) => {
     setLoading(true);
     const currentClassObj = classList.find(c => c.id.toString() === classId);
     const targetClassName = currentClassObj?.class_name;
@@ -91,16 +82,36 @@ export default function GradeInputPage() {
 
     if (studentData) {
       const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+      
+      // 날짜 복원 로직 개선
+      const restoredDates = [...defaultDates];
 
       const formatted = sortedStudents.map(student => {
-        const scores = Array(dates.length).fill('');
-        dates.forEach((date, i) => {
+        const scores = Array(defaultDates.length).fill('');
+        defaultDates.forEach((_, i) => {
           const testName = `[${category}] ${month}월 ${i + 1}회차`;
           const found = gradeData?.find(g => g.student_id === student.id && g.test_name === testName);
-          if (found) scores[i] = found.score.toString();
+          
+          if (found) {
+            scores[i] = found.score.toString();
+            
+            if (found.test_date) {
+              const dateParts = found.test_date.split('-');
+              const lastPart = dateParts[dateParts.length - 1]; // '설날' 또는 '12'
+
+              // 한글이면 그대로, 숫자면 '월/일' 형식으로 복원
+              if (isNaN(Number(lastPart))) {
+                restoredDates[i] = lastPart; 
+              } else {
+                restoredDates[i] = `${month}/${lastPart}`;
+              }
+            }
+          }
         });
         return { ...student, scores };
       });
+
+      setSessionDates(restoredDates);
       setStudents(formatted);
     }
     setLoading(false);
@@ -127,43 +138,40 @@ export default function GradeInputPage() {
     if (!confirm(`${selectedMonth}월 [${selectedCategory}] 성적과 설명을 저장하시겠습니까?`)) return;
     setLoading(true);
     
-    // 1. 성적 데이터 준비
     const upsertGrades: any[] = [];
     students.forEach(student => {
       student.scores.forEach((score: string, idx: number) => {
         if (score !== '') {
           const rawDate = sessionDates[idx];
-          const isStandardDate = /^\d{1,2}\/\d{1,2}$/.test(rawDate);
-          const finalTestDate = isStandardDate 
+          // 저장 시 형식을 '2026-월-값'으로 통일
+          const formattedDate = rawDate.includes('/') 
             ? `2026-${rawDate.replace('/', '-')}` 
-            : `2026-${selectedMonth}-01`;
+            : `2026-${selectedMonth}-${rawDate}`;
 
           upsertGrades.push({
             student_id: student.id,
             test_name: `[${selectedCategory}] ${selectedMonth}월 ${idx + 1}회차`,
             score: parseInt(score),
-            test_date: finalTestDate,
+            test_date: formattedDate,
             max_score: maxScore,
           });
         }
       });
     });
 
-    // 2. 설명 데이터 준비
     const descriptionData = {
       class_id: selectedClassId,
       category: selectedCategory,
       description: subjectDescription
     };
 
-    // 3. 병렬 저장
     const [gradeRes, descRes] = await Promise.all([
       supabase.from('grades').upsert(upsertGrades, { onConflict: 'student_id, test_name' }),
       supabase.from('subject_descriptions').upsert(descriptionData, { onConflict: 'class_id, category' })
     ]);
 
     if (gradeRes.error || descRes.error) alert('저장 실패: ' + (gradeRes.error?.message || descRes.error?.message));
-    else alert(`성적과 설명이 모두 저장되었습니다! ✅`);
+    else alert(`저장되었습니다! ✅`);
     setLoading(false);
   };
 
@@ -202,7 +210,7 @@ export default function GradeInputPage() {
         </div>
       </div>
 
-      {/* 과목 설명란 섹션 (사이즈 확대) */}
+      {/* 과목 설명란 섹션 */}
       {selectedClassId && (
         <div className="mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-[2px] rounded-[2.5rem] shadow-lg">
@@ -216,10 +224,7 @@ export default function GradeInputPage() {
                   rows={5}
                   value={subjectDescription}
                   onChange={(e) => setSubjectDescription(e.target.value)}
-                  placeholder={`이번 달 학습 목표를 입력하세요.
-1. 교재 1~3단원 핵심 문법 정리
-2. 주차별 단어 200개 암기 및 테스트
-3. 서술형 대비 문장 구조 파악 훈련`}
+                  placeholder={`이번 달 학습 목표를 입력하세요.\n1. 교재 1~3단원 핵심 문법 정리\n2. 주차별 단어 200개 암기 및 테스트\n3. 서술형 대비 문장 구조 파악 훈련`}
                   className="w-full text-lg font-bold text-gray-700 outline-none placeholder:text-gray-300 bg-indigo-50/20 rounded-2xl p-4 border-2 border-transparent focus:border-indigo-100 transition-all resize-none leading-relaxed"
                 />
               </div>
