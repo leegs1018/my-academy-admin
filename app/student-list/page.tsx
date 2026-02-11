@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
-import * as XLSX from 'xlsx'; // 엑셀 추출용 라이브러리
+import { utils, writeFile } from 'xlsx';
 
 export default function StudentListPage() {
   const router = useRouter();
@@ -28,9 +28,24 @@ export default function StudentListPage() {
     fetchClasses();
   }, []);
 
+  // 데이터를 가져올 때 상태 명칭을 정리하는 함수
+  const cleanStatus = (status: string) => {
+    if (!status) return '재원';
+    // '재학', '재학중' -> '재원'으로 변경
+    if (status.includes('재학')) return '재원';
+    // '휴원중', '퇴원중' 등 '중'자 제거
+    return status.replace('중', ''); 
+  };
+
   const fetchStudents = async () => {
     const { data } = await supabase.from('students').select('*').order('name', { ascending: true });
-    if (data) setStudents(data);
+    if (data) {
+      const cleanedData = data.map(s => ({
+        ...s,
+        status: cleanStatus(s.status)
+      }));
+      setStudents(cleanedData);
+    }
   };
 
   const fetchClasses = async () => {
@@ -38,7 +53,6 @@ export default function StudentListPage() {
     if (data) setClassList(data);
   };
 
-  // 엑셀 다운로드 함수
   const downloadExcel = () => {
     if (filteredStudents.length === 0) {
       alert("다운로드할 데이터가 없습니다.");
@@ -47,7 +61,7 @@ export default function StudentListPage() {
 
     const excelData = filteredStudents.map(s => ({
       이름: s.name,
-      상태: s.status || '재학중',
+      상태: s.status, 
       학교: s.school_name || '-',
       학교급: s.school_level || '-',
       학년: s.grade_level || '-',
@@ -59,10 +73,10 @@ export default function StudentListPage() {
       입학일: s.admission_date || '-'
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "학생명단");
-    XLSX.writeFile(workbook, `학원_학생명단_${new Date().toLocaleDateString()}.xlsx`);
+    const worksheet = utils.json_to_sheet(excelData);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, "학생명단");
+    writeFile(workbook, `학원_학생명단_${new Date().toLocaleDateString()}.xlsx`);
   };
 
   const existingSchoolLevels = Array.from(new Set(students.map(s => s.school_level).filter(Boolean)))
@@ -116,7 +130,7 @@ export default function StudentListPage() {
     setEditingStudent({ 
       ...student, 
       memoArray, 
-      status: student.status || '재학중', 
+      status: student.status, 
       caution_level: student.caution_level || 0, 
       grade_year: student.grade_year || '',
       isPhoneSame: student.student_phone === student.parent_phone 
@@ -167,19 +181,16 @@ export default function StudentListPage() {
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 pb-20 font-sans bg-gray-50/30 min-h-screen text-gray-800">
       
- {/* 헤더 영역 */}
+      {/* 헤더 영역 */}
       <div className="flex justify-between items-center border-b-4 border-indigo-100 pb-6">
         <h1 className="text-3xl font-black text-indigo-700 tracking-tight">📋 학생 통합 명부</h1>
         <div className="flex gap-3">
-          {/* 1. 학생 등록 버튼 (먼저) */}
           <button 
             onClick={() => router.push('/registration')} 
             className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl hover:bg-blue-700 font-black shadow-lg transition-all active:scale-95"
           >
             학생 등록 ➕
           </button>
-
-          {/* 2. 엑셀 저장 버튼 (그 다음) */}
           <button 
             onClick={downloadExcel} 
             className="bg-emerald-50 text-emerald-600 px-6 py-2.5 rounded-2xl hover:bg-emerald-600 hover:text-white font-black shadow-md transition-all border border-emerald-100 flex items-center gap-2"
@@ -189,37 +200,84 @@ export default function StudentListPage() {
         </div>
       </div>
 
-      {/* 필터 영역 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 bg-white p-5 rounded-3xl shadow-sm border border-gray-100 font-bold text-sm">
-        <input className="border-2 p-3 rounded-2xl focus:border-indigo-500 outline-none bg-gray-50/50" placeholder="이름/연락처 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        
-        <select className="border-2 p-3 rounded-2xl bg-indigo-50/50 font-black text-indigo-600 outline-none" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">✅ 모든 상태</option>
-          <option value="재학중">재학중</option><option value="휴원중">휴원중</option><option value="퇴원중">퇴원중</option>
-        </select>
+     {/* 필터 영역 - 순서: 이름/연락처 -> 모든상태 -> 모든클래스 -> 모든학교 -> 학교레벨 -> 학년 -> 초기화 */}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 bg-white p-5 rounded-3xl shadow-sm border border-gray-100 font-bold text-sm">
+  
+  {/* 1. 이름/연락처 검색 */}
+  <input 
+    className="border-2 p-3 rounded-2xl focus:border-indigo-500 outline-none bg-gray-50/50" 
+    placeholder="이름/연락처 검색..." 
+    value={searchTerm} 
+    onChange={(e) => setSearchTerm(e.target.value)} 
+  />
+  
+  {/* 2. 모든 상태 */}
+  <select 
+    className="border-2 p-3 rounded-2xl bg-indigo-50/50 font-black text-indigo-600 outline-none" 
+    value={filterStatus} 
+    onChange={(e) => setFilterStatus(e.target.value)}
+  >
+    <option value="">✅ 모든 상태</option>
+    <option value="재원">재원</option>
+    <option value="휴원">휴원</option>
+    <option value="퇴원">퇴원</option>
+  </select>
 
-        <select className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none" value={filterSchool} onChange={(e) => setFilterSchool(e.target.value)}>
-          <option value="">🏫 모든 학교</option>
-          {schoolList.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
-        </select>
+  {/* 3. 모든 클래스 */}
+  <select 
+    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none" 
+    value={filterClass} 
+    onChange={(e) => setFilterClass(e.target.value)}
+  >
+    <option value="">📖 모든 클래스</option>
+    {classList.map((c, i) => <option key={i} value={c.class_name}>{c.class_name}</option>)}
+  </select>
 
-        <select className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none text-blue-600 font-black" value={filterSchoolLevel} onChange={(e) => { setFilterSchoolLevel(e.target.value); setFilterGradeLevel(''); }}>
-          <option value="">🎓 학교레벨 전체</option>
-          {existingSchoolLevels.map(sl => <option key={sl} value={sl as string}>{sl as string}</option>)}
-        </select>
+  {/* 4. 모든 학교 */}
+  <select 
+    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none" 
+    value={filterSchool} 
+    onChange={(e) => setFilterSchool(e.target.value)}
+  >
+    <option value="">🏫 모든 학교</option>
+    {schoolList.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+  </select>
 
-        <select className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none text-blue-600 font-black" value={filterGradeLevel} onChange={(e) => setFilterGradeLevel(e.target.value)}>
-          <option value="">📅 학년 전체</option>
-          {filterSchoolLevel && getGradeOptions(filterSchoolLevel).map(gl => <option key={gl} value={gl}>{gl}</option>)}
-        </select>
+  {/* 5. 학교 레벨 */}
+  <select 
+    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none text-blue-600 font-black" 
+    value={filterSchoolLevel} 
+    onChange={(e) => { setFilterSchoolLevel(e.target.value); setFilterGradeLevel(''); }}
+  >
+    <option value="">🎓 학교레벨 전체</option>
+    {existingSchoolLevels.map(sl => <option key={sl} value={sl as string}>{sl as string}</option>)}
+  </select>
 
-        <select className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none" value={filterClass} onChange={(e) => setFilterClass(e.target.value)}>
-          <option value="">📖 모든 클래스 </option>
-          {classList.map((c, i) => <option key={i} value={c.class_name}>{c.class_name}</option>)}
-        </select>
+  {/* 6. 학년 */}
+  <select 
+    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none text-blue-600 font-black" 
+    value={filterGradeLevel} 
+    onChange={(e) => setFilterGradeLevel(e.target.value)}
+  >
+    <option value="">📅 학년 전체</option>
+    {filterSchoolLevel && getGradeOptions(filterSchoolLevel).map(gl => <option key={gl} value={gl}>{gl}</option>)}
+  </select>
 
-        <button onClick={() => {setSearchTerm(''); setFilterClass(''); setFilterSchool(''); setFilterStatus(''); setFilterSchoolLevel(''); setFilterGradeLevel('');}} className="bg-gray-800 text-white py-3 rounded-2xl hover:bg-black transition-all font-black">초기화</button>
-      </div>
+  {/* 7. 초기화 버튼 */}
+  <button 
+    onClick={() => {
+      setSearchTerm(''); 
+      setFilterStatus(''); 
+      setFilterClass(''); 
+      setFilterSchool(''); 
+      setFilterSchoolLevel(''); 
+      setFilterGradeLevel('');
+    }} 
+    className="bg-gray-800 text-white py-3 rounded-2xl hover:bg-black transition-all font-black"
+  >
+    초기화
+  </button>
+</div>
 
       {/* 명단 테이블 */}
       <div className="bg-white rounded-[2rem] shadow-xl border border-gray-100 overflow-hidden">
@@ -243,7 +301,13 @@ export default function StudentListPage() {
                   <span onClick={() => openEditModal(s)} className="font-black text-indigo-600 text-lg cursor-pointer hover:underline underline-offset-4 decoration-2">{s.name}</span>
                 </td>
                 <td className="p-5">
-                  <span className={`px-3 py-1.5 rounded-full text-[11px] font-black border ${s.status === '휴원중' ? 'bg-orange-50 text-orange-600 border-orange-100' : s.status === '퇴원중' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>{s.status || '재학중'}</span>
+                  <span className={`px-3 py-1.5 rounded-full text-[11px] font-black border ${
+                    s.status === '휴원' ? 'bg-orange-50 text-orange-600 border-orange-100' : 
+                    s.status === '퇴원' ? 'bg-red-50 text-red-600 border-red-100' : 
+                    'bg-emerald-50 text-emerald-600 border-emerald-100'
+                  }`}>
+                    {s.status}
+                  </span>
                 </td>
                 <td className="p-5 text-left">
                   <div className="font-bold text-gray-700">{s.school_name || '-'}</div>
@@ -274,7 +338,7 @@ export default function StudentListPage() {
         </table>
       </div>
 
-      {/* 수정 모달 영역 (이전과 동일하여 생략 가능하지만 완전성을 위해 포함) */}
+      {/* 수정 모달 영역 */}
       {isEditModalOpen && editingStudent && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl max-h-[95vh] flex flex-col overflow-hidden border border-white/20">
@@ -292,17 +356,19 @@ export default function StudentListPage() {
                     <label className="text-xs font-black text-gray-400 ml-1">학생 상태</label>
                     <select className="w-full border-2 p-3.5 rounded-2xl font-black bg-white text-indigo-600 outline-none" 
                       value={editingStudent.status} onChange={e => setEditingStudent({...editingStudent, status: e.target.value})}>
-                      <option value="재학중">재학중</option><option value="휴원중">휴원중</option><option value="퇴원중">퇴원중</option>
+                      <option value="재원">재원</option>
+                      <option value="휴원">휴원</option>
+                      <option value="퇴원">퇴원</option>
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">비고(주의 단계)</label>
+                    <label className="text-xs font-black text-gray-400 ml-1">비고</label>
                     <select className="w-full border-2 p-3.5 rounded-2xl font-black bg-white text-orange-600 outline-none" 
                       value={editingStudent.caution_level} onChange={e => setEditingStudent({...editingStudent, caution_level: Number(e.target.value)})}>
-                      <option value={0}>🥚 일반 (0단계)</option>
-                      <option value={1}>🐤 주의 (1단계)</option>
-                      <option value={2}>🐤🐤 경계 (2단계)</option>
-                      <option value={3}>🐤🐤🐤 집중관리 (3단계)</option>
+                      <option value={0}>🥚</option>
+                      <option value={1}>🐤</option>
+                      <option value={2}>🐤🐤</option>
+                      <option value={3}>🐤🐤🐤</option>
                     </select>
                   </div>
                 </div>
