@@ -186,7 +186,7 @@ export default function StudentListPage() {
         <h1 className="text-3xl font-black text-indigo-700 tracking-tight">📋 학생 통합 명부</h1>
         <div className="flex gap-3">
           <button 
-            onClick={() => router.push('admin/student/registration')} 
+            onClick={() => router.push('/admin/student')} 
             className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl hover:bg-blue-700 font-black shadow-lg transition-all active:scale-95"
           >
             학생 등록 ➕
