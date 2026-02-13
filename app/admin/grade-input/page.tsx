@@ -154,10 +154,10 @@ export default function GradeInputPage() {
   // 회차 삭제
   const handleDeleteSession = (idx: number) => {
     if (!confirm(`${idx + 1}회차 정보를 삭제하시겠습니까?`)) return;
-    setSessionDates(prev => prev.filter((_, i) => i !== idx));
+    setSessionDates(prev => prev.filter((_: any, i: number) => i !== idx));
     setStudents(prev => prev.map(student => ({
       ...student,
-      scores: student.scores.filter((_, i) => i !== idx)
+      scores: student.scores.filter((_: any, i: number) => i !== idx)
     })));
   };
 
