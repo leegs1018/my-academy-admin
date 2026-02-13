@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { href: '/admin/grade-input', label: '성적 입력', icon: '✍️', color: 'hover:bg-indigo-50' }, // 추가
     { href: '/admin/report', label: '성적표 분석', icon: '📈', color: 'hover:bg-indigo-50' }, // 추가
     { href: '/admin/student-list', label: '학생 통합 명부', icon: '📋' },
-    { href: '/admin/attendance', label: '출석 체크', icon: '✅', color: 'hover:bg-green-50' },
+    { href: '/admin/attendance', label: '일정 및 출석관리', icon: '✅', color: 'hover:bg-green-50' },
     { href: '/admin/notices', label: '공지사항', icon: '📢', color: 'hover:bg-yellow-50' },
   ];
 

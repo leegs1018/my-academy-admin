@@ -1,0 +1,42 @@
+/* 달력 전체 디자인 */
+.react-calendar {
+  width: 100% !important;
+  border: none !important;
+  font-family: 'Pretendard', sans-serif;
+}
+
+/* 개별 날짜 칸 */
+.react-calendar__tile {
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  position: relative;
+}
+
+/* 오늘 날짜 강조 */
+.react-calendar__tile--now {
+  background: #f0fdf4 !important;
+  color: #16a34a !important;
+  border-radius: 12px;
+}
+
+/* 선택된 날짜 강조 */
+.react-calendar__tile--active {
+  background: #16a34a !important;
+  color: white !important;
+  border-radius: 12px;
+}
+
+/* 메모가 있는 날짜의 점 */
+.dot {
+  height: 6px;
+  width: 6px;
+  background-color: #16a34a;
+  border-radius: 50%;
+  display: inline-block;
+  position: absolute;
+  bottom: 8px;
+}

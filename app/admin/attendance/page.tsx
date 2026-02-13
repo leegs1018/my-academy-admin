@@ -2,153 +2,226 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import './calendar-custom.css';
 
 export default function AttendancePage() {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('sv-SE'));
   const [classList, setClassList] = useState<any[]>([]);
-  const [selectedClass, setSelectedClass] = useState('');
-  const [students, setStudents] = useState<any[]>([]);
+  const [selectedClass, setSelectedClass] = useState(''); // 선택된 클래스
+  const [allStudents, setAllStudents] = useState<any[]>([]); // ✅ 전체 학생 데이터
   const [attendanceMap, setAttendanceMap] = useState<any>({});
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [noteInput, setNoteInput] = useState('');
+  const [allNotes, setAllNotes] = useState<any[]>([]);
 
   useEffect(() => {
     fetchClasses();
+    fetchAllNotes();
+    fetchAllStudents(); // ✅ 초기 로드시 모든 학생 정보를 미리 가져옴
   }, []);
 
   useEffect(() => {
-    if (selectedClass) {
-      fetchStudentsAndAttendance();
-    }
+    fetchAttendance(); // 날짜나 클래스가 바뀌면 출석 데이터 갱신
+    fetchDateNote(selectedDate);
   }, [selectedClass, selectedDate]);
+
+  const onDateChange = (newDate: any) => {
+    const dateStr = newDate.toLocaleDateString('sv-SE');
+    setDate(newDate);
+    setSelectedDate(dateStr);
+  };
 
   const fetchClasses = async () => {
     const { data } = await supabase.from('classes').select('class_name').order('class_name');
     if (data) setClassList(data);
   };
 
-  const fetchStudentsAndAttendance = async () => {
-    // 1. 해당 클래스 학생들 가져오기
-    const { data: studentData } = await supabase
-      .from('students')
-      .select('id, name, class_name')
-      .eq('class_name', selectedClass);
-    
-    // 2. 해당 날짜의 출석 기록 가져오기
-    const { data: attendanceData } = await supabase
-      .from('attendance')
-      .select('*')
-      .eq('attendance_date', selectedDate)
-      .eq('class_name', selectedClass);
+  const fetchAllStudents = async () => {
+    const { data } = await supabase.from('students').select('id, name, class_name').order('name');
+    if (data) setAllStudents(data);
+  };
 
-    if (studentData) setStudents(studentData);
+  const fetchAllNotes = async () => {
+    const { data } = await supabase.from('calendar_notes').select('note_date');
+    if (data) setAllNotes(data.map(n => n.note_date));
+  };
 
-    // 기록을 맵 형태로 변환 {studentId: status}
+  const fetchDateNote = async (dateStr: string) => {
+    const { data } = await supabase.from('calendar_notes').select('content').eq('note_date', dateStr).single();
+    setNoteInput(data ? data.content : '');
+  };
+
+  const fetchAttendance = async () => {
+    let query = supabase.from('attendance').select('*').eq('attendance_date', selectedDate);
+    if (selectedClass) query = query.eq('class_name', selectedClass);
+
+    const { data: attendanceData } = await query;
     const map: any = {};
-    attendanceData?.forEach(record => {
-      map[record.student_id] = record.status;
-    });
+    attendanceData?.forEach(record => { map[record.student_id] = record.status; });
     setAttendanceMap(map);
   };
 
   const handleAttendance = async (student: any, status: string) => {
     const currentStatus = attendanceMap[student.id];
-
     if (currentStatus === status) {
-      // 이미 같은 상태면 기록 삭제 (취소)
-      await supabase.from('attendance').delete()
-        .eq('student_id', student.id)
-        .eq('attendance_date', selectedDate);
-      
-      const newMap = { ...attendanceMap };
-      delete newMap[student.id];
-      setAttendanceMap(newMap);
+      await supabase.from('attendance').delete().eq('student_id', student.id).eq('attendance_date', selectedDate);
+      const newMap = { ...attendanceMap }; delete newMap[student.id]; setAttendanceMap(newMap);
     } else {
-      // 새로운 상태 저장 (업데이트 또는 삽입)
-      const { error } = await supabase.from('attendance').upsert({
-        student_id: student.id,
-        student_name: student.name,
-        class_name: student.class_name,
-        status: status,
-        attendance_date: selectedDate
+      await supabase.from('attendance').upsert({ 
+        student_id: student.id, 
+        student_name: student.name, 
+        class_name: student.class_name, 
+        status, 
+        attendance_date: selectedDate 
       }, { onConflict: 'student_id, attendance_date' });
-
-      if (!error) {
-        setAttendanceMap({ ...attendanceMap, [student.id]: status });
-      }
+      setAttendanceMap({ ...attendanceMap, [student.id]: status });
     }
   };
 
+  // ✅ [검색 로직 핵심]
+  // 1. 클래스가 선택되었다면 해당 클래스 학생만, 아니면 전체 학생 대상
+  // 2. 그 후 검색어(searchTerm)와 매칭되는 학생 필터링
+ // ✅ 검색 로직 수정 (null 값 방어 처리)
+const displayedStudents = allStudents.filter(s => {
+  // s.class_name이 null일 경우 빈 문자열로 처리
+  const className = s.class_name || '';
+  const studentName = s.name || '';
+  
+  const matchesClass = selectedClass ? className === selectedClass : true;
+  const matchesSearch = 
+    studentName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    className.toLowerCase().includes(searchTerm.toLowerCase());
+    
+  return matchesClass && matchesSearch;
+});
+ const filteredClasses = classList.filter(c => {
+  // c.class_name이 null일 경우 빈 문자열로 처리
+  const className = c.class_name || '';
+  return className.toLowerCase().includes(searchTerm.toLowerCase());
+});
+
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b-4 border-green-100 pb-6">
-        <h1 className="text-3xl font-black text-green-700">✅ 출석 체크</h1>
-        <div className="flex gap-2">
-          <input 
-            type="date" 
-            className="border-2 p-2 rounded-xl font-bold text-gray-700 outline-none focus:border-green-500"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 pb-20 font-sans text-gray-900">
+      <div className="flex justify-between items-center border-b-4 border-green-100 pb-6">
+        <h1 className="text-3xl font-black text-green-700">✅ 출석 및 일정 관리</h1>
+        <div className="text-right">
+          <p className="text-sm text-gray-400 font-bold uppercase tracking-wider">Selected Date</p>
+          <p className="text-xl font-black text-green-600">{selectedDate}</p>
         </div>
       </div>
 
-      {/* 클래스 선택 탭 */}
-      <div className="flex flex-wrap gap-2">
-        {classList.map((c) => (
-          <button
-            key={c.class_name}
-            onClick={() => setSelectedClass(c.class_name)}
-            className={`px-4 py-2 rounded-full font-black text-sm transition-all shadow-sm ${
-              selectedClass === c.class_name 
-              ? 'bg-green-600 text-white scale-105' 
-              : 'bg-white text-gray-500 border hover:bg-green-50'
-            }`}
-          >
-            {c.class_name}
-          </button>
-        ))}
-      </div>
-
-      {/* 출석 체크 리스트 */}
-      <div className="bg-white rounded-3xl shadow-xl border overflow-hidden">
-        {selectedClass ? (
-          <div className="divide-y divide-gray-100">
-            <div className="bg-gray-50 p-4 flex justify-between items-center font-black text-gray-400 text-xs uppercase">
-              <span>학생 이름</span>
-              <span className="mr-20">출석 상태 선택</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* 왼쪽 영역: 달력 및 메모 */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white p-4 rounded-3xl shadow-xl border border-gray-100 sticky top-6">
+            <Calendar 
+              onChange={onDateChange} 
+              value={date} 
+              calendarType="gregory" 
+              locale="ko-KR" 
+              formatDay={(l, d) => d.getDate().toString()}
+              tileContent={({ date }) => allNotes.includes(date.toLocaleDateString('sv-SE')) ? <div className="dot"></div> : null} 
+            />
+            
+            <div className="mt-6 p-5 bg-green-50 rounded-2xl border-2 border-green-100 space-y-3">
+              <p className="font-black text-green-800 flex items-center gap-2">📝 {selectedDate} 메모</p>
+              <input type="text" placeholder="일정 입력..." className="w-full p-3 rounded-xl border-2 border-white focus:border-green-500 outline-none font-bold shadow-sm" value={noteInput} onChange={(e) => setNoteInput(e.target.value)} />
+              <button 
+  onClick={async () => {
+    const { error } = await supabase
+      .from('calendar_notes')
+      .upsert({ note_date: selectedDate, content: noteInput }, { onConflict: 'note_date' });
+    
+    if (!error) {
+      fetchAllNotes();
+      alert('저장되었습니다.');
+    } else {
+      alert('저장 중 오류가 발생했습니다.');
+    }
+  }} 
+  className="w-full bg-green-700 text-white py-3 rounded-xl font-black hover:bg-green-800 transition-all shadow-md"
+>
+  저장하기
+</button>
             </div>
-            {students.map((student) => (
-              <div key={student.id} className="p-5 flex flex-col sm:flex-row justify-between items-center gap-4 hover:bg-green-50/30 transition-colors">
-                <div className="font-black text-xl text-gray-800">{student.name}</div>
-                
-                <div className="flex gap-2">
-                  {['등원', '결석', '조퇴'].map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => handleAttendance(student, status)}
-                      className={`px-5 py-2.5 rounded-xl font-black text-sm transition-all border-2 ${
-                        attendanceMap[student.id] === status
-                        ? status === '등원' ? 'bg-green-600 border-green-600 text-white shadow-lg' :
-                          status === '결석' ? 'bg-red-500 border-red-500 text-white shadow-lg' :
-                          'bg-orange-400 border-orange-400 text-white shadow-lg'
-                        : 'bg-white border-gray-100 text-gray-400 hover:border-gray-300'
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          </div>
+        </div>
+
+        {/* 오른쪽 영역: 검색 및 출석부 */}
+        <div className="lg:col-span-8 space-y-6">
+          <div className="relative">
+            <span className="absolute inset-y-0 left-4 flex items-center text-gray-400">🔍</span>
+            <input 
+              type="text"
+              placeholder="클래스명 또는 학생 이름을 검색하세요..."
+              className="w-full pl-12 pr-4 py-4 rounded-2xl border-2 border-gray-100 focus:border-green-500 outline-none font-bold text-lg shadow-sm transition-all bg-white"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={() => setSelectedClass('')}
+              className={`px-5 py-2 rounded-full font-black text-sm transition-all shadow-sm ${!selectedClass ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border'}`}
+            >
+              전체보기
+            </button>
+            {filteredClasses.map((c) => (
+              <button 
+                key={c.class_name} 
+                onClick={() => setSelectedClass(c.class_name)}
+                className={`px-5 py-2 rounded-full font-black text-sm transition-all shadow-sm ${selectedClass === c.class_name ? 'bg-green-600 text-white' : 'bg-white text-gray-500 border hover:bg-green-50'}`}
+              >
+                {c.class_name}
+              </button>
             ))}
-            {students.length === 0 && (
-              <div className="p-20 text-center text-gray-400 font-bold">이 클래스에 등록된 학생이 없습니다.</div>
-            )}
           </div>
-        ) : (
-          <div className="p-20 text-center text-gray-400 space-y-3">
-            <div className="text-5xl">👈</div>
-            <p className="font-black text-xl">출석을 체크할 클래스를 상단에서 선택해 주세요.</p>
+
+          <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden min-h-[500px]">
+            <div className="divide-y divide-gray-100">
+              <div className="bg-gray-50/50 p-4 flex justify-between font-black text-gray-400 text-xs uppercase tracking-widest">
+                <span>학생 이름 ({displayedStudents.length}명)</span>
+                <span className="mr-10">출석 상태 선택</span>
+              </div>
+              
+              {displayedStudents.map((student) => (
+                <div key={student.id} className="p-5 flex justify-between items-center hover:bg-green-50/30 transition-colors">
+                  <div>
+                    <div className="font-black text-xl text-gray-800">{student.name}</div>
+                    <div className="text-xs text-gray-400 font-bold uppercase">{student.class_name}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    {['등원', '결석', '조퇴'].map((status) => (
+                      <button 
+                        key={status} 
+                        onClick={() => handleAttendance(student, status)}
+                        className={`px-5 py-2.5 rounded-xl font-black text-sm transition-all border-2 ${
+                          attendanceMap[student.id] === status 
+                          ? (status === '등원' ? 'bg-green-600 border-green-600 text-white' : status === '결석' ? 'bg-red-500 border-red-500 text-white' : 'bg-orange-400 border-orange-400 text-white') 
+                          : 'bg-white border-gray-100 text-gray-300 hover:border-gray-300'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {(displayedStudents.length === 0) && (
+                <div className="p-20 text-center text-gray-400 font-bold">
+                  {searchTerm ? "검색 결과가 없습니다." : "학생 정보를 불러오는 중이거나 등록된 학생이 없습니다."}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
