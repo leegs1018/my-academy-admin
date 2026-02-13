@@ -54,7 +54,6 @@ export default function AttendancePage() {
     setNoteInput(data ? data.content : '');
   };
 
-  // ✅ 일정 삭제 핸들러
   const handleDeleteNote = async () => {
     if (!confirm('이 날의 일정을 완전히 삭제하시겠습니까?')) return;
     
@@ -65,12 +64,11 @@ export default function AttendancePage() {
 
     if (!error) {
       setNoteInput('');
-      fetchAllNotes(); // 달력 점 표시 갱신
+      fetchAllNotes();
       alert('삭제되었습니다.');
     }
   };
 
-  // ✅ 일정 저장 핸들러
   const handleSaveNote = async () => {
     if (!noteInput.trim()) return alert('내용을 입력해주세요.');
     
@@ -79,7 +77,7 @@ export default function AttendancePage() {
       .upsert({ note_date: selectedDate, content: noteInput }, { onConflict: 'note_date' });
     
     if (!error) {
-      fetchAllNotes(); // 달력 점 표시 갱신
+      fetchAllNotes();
       alert('저장되었습니다.');
     }
   };
@@ -172,34 +170,12 @@ export default function AttendancePage() {
                   저장하기
                 </button>
               </div>
-
-            {/* ✅ 도움말 영역: 글자 크기 확대 및 색상 변경 */}
-<div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-sm">
-  <p className="text-sm font-black text-gray-900 mb-2 flex items-center gap-1">
-    💡 자동 회차 제외 규칙
-  </p>
-  <ul className="space-y-1.5">
-    <li className="text-sm text-gray-800 leading-relaxed">
-      <strong className="text-green-700">공통 휴무:</strong> 
-      <span className="ml-1 font-medium">설날, 추석, 휴무, 방학, 공휴일</span>
-    </li>
-    <li className="text-sm text-gray-800 leading-relaxed">
-      <strong className="text-green-700">특정 반 휴강:</strong> 
-      <span className="ml-1 font-medium">[반이름] + 휴강 <span className="text-gray-400 text-xs">(ex: 파이썬A 휴강)</span></span>
-    </li>
-  </ul>
-  <p className="mt-2 text-[10px] text-gray-400 font-medium">
-    * 위 단어가 포함된 날은 성적 입력 회차에서 자동 제외됩니다.
-  </p>
-</div>
             </div>
           </div>
         </div>
 
-        {/* 오른쪽 영역: 출석부 (기존 유지) */}
+        {/* 오른쪽 영역: 출석부 */}
         <div className="lg:col-span-8 space-y-6">
-          {/* ... 검색창 및 출석 리스트 (기존 코드와 동일) ... */}
-          {/* (지면 관계상 검색 및 리스트 부분은 유지되는 것으로 간주합니다) */}
           <div className="relative">
              <span className="absolute inset-y-0 left-4 flex items-center text-gray-400">🔍</span>
              <input 

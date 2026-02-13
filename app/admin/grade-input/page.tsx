@@ -53,42 +53,29 @@ export default function GradeInputPage() {
     setSubjectDescription(data?.description || '');
   };
 
-  // 날짜 포맷팅 헬퍼 (MM.DD)
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
     const parts = dateStr.split('-');
     return parts.length === 3 ? `${parts[1]}.${parts[2]}` : dateStr;
   };
 
-  // 데이터 가져오기 (정규 수업일 계산 및 성적 매칭)
+  // fetchData: 자동 회차 제외 로직 삭제 버전
   const fetchData = async (classId: string, month: number, category: string, targetDays: number[]) => {
     setLoading(true);
     try {
       const year = 2026;
       const currentClassObj = classList.find(c => c.id.toString() === classId);
       const targetClassName = currentClassObj?.class_name || "";
-
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const lastDayOfMonth = new Date(year, month, 0).getDate();
-      const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDayOfMonth}`;
-
-      const { data: calendarNotes } = await supabase.from('calendar_notes').select('*').gte('note_date', startDate).lte('note_date', endDate);
 
       let actualSessions: {label: string, fullDate: string}[] = [];
       for (let d = 1; d <= lastDayOfMonth; d++) {
         const dateObj = new Date(year, month - 1, d);
         const fullDate = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        const note = calendarNotes?.find(n => n.note_date === fullDate);
-        const cleanNote = (note?.content || "").replace(/\s/g, "");
-
-        const isCommonHoliday = ["설날", "설연휴", "추석", "휴무", "방학", "공휴일"].some(kw => cleanNote.includes(kw));
-        const isClassHoliday = cleanNote.includes(targetClassName.replace(/\s/g, "")) && cleanNote.includes("휴강");
-
-        if (targetDays.includes(dateObj.getDay()) && !isCommonHoliday && !isClassHoliday) {
+        if (targetDays.includes(dateObj.getDay())) {
           actualSessions.push({ label: formatShortDate(fullDate), fullDate });
         }
       }
-
       actualSessions.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
       const { data: studentData } = await supabase.from('students').select('*').eq('class_name', targetClassName);
@@ -96,18 +83,14 @@ export default function GradeInputPage() {
 
       if (studentData) {
         const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-        const currentCategoryGrades = allGradeData?.filter(g => g.test_name.startsWith(`[${category}]`));
-        if (currentCategoryGrades?.length) {
-          const savedMax = currentCategoryGrades.find(g => g.max_score !== null)?.max_score;
-          if (savedMax) setMaxScore(savedMax);
-        }
-
         const formatted = sortedStudents.map(student => {
           const scores = Array(actualSessions.length).fill('');
           actualSessions.forEach((session, i) => {
             const testName = `[${category}] ${month}월 ${i + 1}회차`;
             const found = allGradeData?.find(g => g.student_id === student.id && g.test_name === testName);
-            if (found) scores[i] = found.score?.toString() || '';
+            if (found) {
+              scores[i] = (found.score === 0 || found.score === null) ? '' : found.score.toString();
+            }
           });
           return { ...student, scores };
         });
@@ -117,87 +100,71 @@ export default function GradeInputPage() {
     } finally { setLoading(false); }
   };
 
-  // 회차 날짜 업데이트 및 재정렬
   const updateSessionDate = (idx: number, newFullDate: string) => {
     const updatedSessions = [...sessionDates];
     updatedSessions[idx] = { label: formatShortDate(newFullDate), fullDate: newFullDate };
-
-    const sortedWithIndex = updatedSessions
-      .map((s, i) => ({ ...s, originalIdx: i }))
-      .sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-
+    const sortedWithIndex = updatedSessions.map((s, i) => ({ ...s, originalIdx: i })).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
     setStudents(prev => prev.map(student => ({
       ...student,
       scores: sortedWithIndex.map(item => student.scores[item.originalIdx])
     })));
-
     setSessionDates(sortedWithIndex.map(({label, fullDate}) => ({label, fullDate})));
   };
 
-  // 회차 추가
-  const handleAddSession = () => {
-    const today = new Date();
-    const defaultDate = `2026-${String(selectedMonth).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const newSession = { label: formatShortDate(defaultDate), fullDate: defaultDate };
-
-    const newList = [...sessionDates, newSession].sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-    const insertIdx = newList.findIndex(s => s === newSession);
-
-    setStudents(prev => prev.map(student => {
-      const newScores = [...student.scores];
-      newScores.splice(insertIdx, 0, '');
-      return { ...student, scores: newScores };
-    }));
-    setSessionDates(newList);
-  };
-
-  // 회차 삭제
-  const handleDeleteSession = (idx: number) => {
-    if (!confirm(`${idx + 1}회차 정보를 삭제하시겠습니까?`)) return;
-    setSessionDates(prev => prev.filter((_: any, i: number) => i !== idx));
-    setStudents(prev => prev.map(student => ({
-      ...student,
-      scores: student.scores.filter((_: any, i: number) => i !== idx)
-    })));
-  };
-
-  // 점수 입력 핸들러
   const handleScoreChange = (studentId: string, idx: number, value: string) => {
     if (value === '') {
       setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: s.scores.map((v:any, i:number) => i === idx ? '' : v) } : s));
       return;
     }
     const num = Number(value);
-    if (num < 0 || num > maxScore) return;
+    if (num <= 0 || num > maxScore) return; 
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: s.scores.map((v:any, i:number) => i === idx ? value : v) } : s));
   };
 
-  // 저장 로직
-  const handleSave = async () => {
-    if (!selectedCategory) return alert("과목 선택 필수!");
-    setLoading(true);
-    const upsertGrades: any[] = [];
-    sessionDates.forEach((session, idx) => {
-      students.forEach(student => {
-        const score = student.scores[idx];
-        if (score !== '') {
-          upsertGrades.push({
-            student_id: student.id,
-            test_name: `[${selectedCategory}] ${selectedMonth}월 ${idx + 1}회차`,
-            score: parseInt(score),
-            test_date: session.fullDate,
-            max_score: maxScore,
-          });
-        }
+ const handleSave = async () => {
+  if (!selectedCategory) return alert("과목 선택 필수!");
+  setLoading(true);
+
+  const upsertGrades: any[] = [];
+  sessionDates.forEach((session, idx) => {
+    students.forEach(student => {
+      const score = student.scores[idx];
+      
+      // ✅ 수정: score가 빈 문자열('')이면 0으로 치환하여 저장하거나, 
+      // 필요에 따라 null을 보냅니다. 여기서는 0으로 처리하겠습니다.
+      upsertGrades.push({
+        student_id: student.id,
+        test_name: `[${selectedCategory}] ${selectedMonth}월 ${idx + 1}회차`,
+        score: score === '' ? 0 : parseInt(score), // 빈 값이면 0점으로 업데이트
+        test_date: session.fullDate,
+        max_score: maxScore,
       });
     });
+  });
 
-    try {
-      if (upsertGrades.length > 0) await supabase.from('grades').upsert(upsertGrades, { onConflict: 'student_id, test_name' });
-      await supabase.from('subject_descriptions').upsert({ class_id: selectedClassId, category: selectedCategory, description: subjectDescription }, { onConflict: 'class_id, category' });
-      alert(`데이터가 안전하게 저장되었습니다! ✅`);
-    } finally { setLoading(false); }
-  };
+  try {
+    if (upsertGrades.length > 0) {
+      const { error } = await supabase
+        .from('grades')
+        .upsert(upsertGrades, { onConflict: 'student_id, test_name' });
+      
+      if (error) throw error;
+    }
+    
+    await supabase.from('subject_descriptions').upsert({ 
+      class_id: selectedClassId, 
+      category: selectedCategory, 
+      description: subjectDescription 
+    }, { onConflict: 'class_id, category' });
+
+    alert(`데이터가 안전하게 저장되었습니다! ✅`);
+  } catch (err) {
+    console.error(err);
+    alert("저장 중 오류가 발생했습니다.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="max-w-[98%] mx-auto py-10 px-4 font-sans tracking-tight bg-slate-50 min-h-screen">
@@ -223,21 +190,17 @@ export default function GradeInputPage() {
             <span className="text-[9px] font-black text-amber-500 uppercase">Max Score</span>
             <input type="number" value={maxScore} onChange={(e) => setMaxScore(Number(e.target.value))} className="w-12 bg-transparent font-black text-amber-600 text-center outline-none text-sm" />
           </div>
-          <button onClick={handleAddSession} disabled={!selectedCategory} className="bg-amber-500 text-white px-5 py-2.5 rounded-xl font-black shadow-md hover:bg-amber-600 transition-all active:scale-95 disabled:opacity-30 text-sm">
-            + 회차 추가
-          </button>
+          {/* ✅ 회차 추가 버튼 삭제됨 */}
         </div>
       </div>
 
       {selectedClassId && selectedCategory ? (
         <>
-          {/* 2. 과제 설명 영역 */}
           <div className="mb-6 bg-white rounded-[2rem] p-6 shadow-sm border border-indigo-50">
             <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-2 ml-1">Learning Description [{selectedCategory}]</h3>
             <textarea rows={2} value={subjectDescription} onChange={(e) => setSubjectDescription(e.target.value)} className="w-full text-base font-bold text-gray-700 outline-none bg-indigo-50/10 rounded-xl p-4 border-2 border-transparent focus:border-indigo-100 transition-all resize-none" placeholder="학습 목표를 입력하세요..." />
           </div>
 
-          {/* 3. 성적 입력 테이블 영역 */}
           <div className="bg-white rounded-[2.5rem] shadow-xl border border-indigo-50 overflow-hidden">
             <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full border-collapse table-fixed">
@@ -245,31 +208,36 @@ export default function GradeInputPage() {
                   <tr className="bg-indigo-600 text-white">
                     <th className="w-[130px] py-5 px-4 text-left font-black sticky left-0 bg-indigo-600 z-30 text-base border-b-4 border-indigo-700 shadow-md">이름</th>
                     {sessionDates.map((session, i) => (
-                      <th key={i} className="w-[105px] py-4 px-1 text-center border-l border-indigo-500/30 border-b-4 border-indigo-700 relative group">
-                        <div className="text-lg font-black leading-none mb-1">{i+1}회</div>
-                        <div className="relative inline-flex items-center justify-center">
-                          <label className="bg-indigo-500/50 hover:bg-indigo-400 text-white text-[11px] font-black py-0.5 px-2 rounded-full cursor-pointer transition-all">
-                            {session.label}
-                            <input 
-                              type="date" 
-                              value={session.fullDate} 
-                              onChange={(e) => updateSessionDate(i, e.target.value)}
-                              className="absolute opacity-0 inset-0 w-full h-full cursor-pointer"
-                            />
-                          </label>
-                          <button 
-                            onClick={() => handleDeleteSession(i)}
-                            className="absolute -right-6 top-1/2 -translate-y-1/2 w-4 h-4 bg-rose-500 text-white rounded-full text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
-                          >✕</button>
-                        </div>
-                      </th>
+                   <th key={i} className="w-[105px] py-4 px-1 text-center border-l border-indigo-500/30 border-b-4 border-indigo-700 relative group">
+  <div className="text-lg font-black leading-none mb-1">{i+1}회</div>
+  <div className="flex justify-center items-center">
+    <button 
+      type="button"
+      onClick={(e) => {
+        const inputEl = e.currentTarget.querySelector('input');
+        if (inputEl && (inputEl as any).showPicker) {
+          (inputEl as any).showPicker();
+        }
+      }}
+      className="relative flex items-center justify-center bg-indigo-500/50 hover:bg-indigo-400 text-white text-[11px] font-black w-[72px] h-[24px] rounded-full cursor-pointer transition-all"
+    >
+      {session.label}
+      <input 
+        type="date" 
+        value={session.fullDate} 
+        onChange={(e) => updateSessionDate(i, e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+      />
+    </button>
+  </div>
+</th>
                     ))}
                     <th className="w-[110px] py-5 px-4 font-black text-center border-l border-indigo-500/30 bg-indigo-800 border-b-4 border-indigo-900 text-base shadow-inner">평균</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {students.map((student) => {
-                    const validScores = student.scores.filter((s: any) => s !== '').map(Number);
+                    const validScores = student.scores.filter((s: any) => s !== '' && s !== '0').map(Number);
                     const avg = validScores.length > 0 ? (validScores.reduce((a: number, b: number) => a + b, 0) / validScores.length).toFixed(1) : '-';
                     return (
                       <tr key={student.id} className="hover:bg-indigo-50/30 transition-colors">
@@ -294,7 +262,7 @@ export default function GradeInputPage() {
                   <tr>
                     <td className="py-4 px-4 font-black text-indigo-400 sticky left-0 bg-gray-50 z-20 text-[10px] uppercase italic border-r border-gray-100">Class Avg</td>
                     {sessionDates.map((_, idx) => {
-                      const sessionScores = students.map(s => s.scores[idx]).filter(score => score !== '').map(Number);
+                      const sessionScores = students.map(s => s.scores[idx]).filter(score => score !== '' && score !== '0').map(Number);
                       const sessionAvg = sessionScores.length > 0 ? (sessionScores.reduce((a, b) => a + b, 0) / sessionScores.length).toFixed(1) : '-';
                       return (
                         <td key={idx} className="py-4 px-1 text-center border-l border-gray-100 font-black text-base text-indigo-500 font-sans">{sessionAvg}</td>
@@ -302,7 +270,7 @@ export default function GradeInputPage() {
                     })}
                     <td className="bg-indigo-100/30 border-l border-gray-100 font-black text-center text-indigo-600 text-base">
                       {(() => {
-                        const allScores = students.flatMap(s => s.scores).filter(sc => sc !== '').map(Number);
+                        const allScores = students.flatMap(s => s.scores).filter(sc => sc !== '' && sc !== '0').map(Number);
                         return allScores.length > 0 ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1) : '-';
                       })()}
                     </td>
@@ -311,7 +279,6 @@ export default function GradeInputPage() {
               </table>
             </div>
             
-            {/* 4. 하단 저장바 (안내문구 포함) */}
             <div className="p-8 flex justify-between items-center bg-white border-t border-indigo-50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-xl shadow-inner">🎯</div>
@@ -343,7 +310,6 @@ export default function GradeInputPage() {
         </div>
       )}
 
-      {/* 커스텀 스크롤바 스타일 */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { height: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
