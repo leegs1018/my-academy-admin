@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, Cell
+  Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
 export default function AdminReportPage() {
@@ -17,8 +17,10 @@ export default function AdminReportPage() {
   const [teacherComment, setTeacherComment] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
   const [maxSessions, setMaxSessions] = useState(0); 
+  const [masterDates, setMasterDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // 1. 초기 로딩: 학생 목록
   useEffect(() => {
     const fetchStudents = async () => {
       const { data } = await supabase.from('students').select('*').order('name', { ascending: true });
@@ -29,19 +31,27 @@ export default function AdminReportPage() {
 
   const classList = ['전체 클래스', ...Array.from(new Set(students.map(s => s.class_name).filter(Boolean)))];
 
+  // 2. 리포트 데이터 가져오기 및 정렬 로직
   const fetchReportData = useCallback(async () => {
     if (!selectedStudent) return;
     setLoading(true);
     try {
       const monthNum = selectedMonth.replace('월', '');
+      
+      // ✅ [설정] 주당 수업 횟수에 따른 최대 회차 제한 (보통 8회)
+      // 만약 주 3회 수업 클래스가 있다면 이 값을 12로 유동적으로 조절하거나 
+      // 안전하게 8~10 정도로 고정할 수 있습니다.
+      const LIMIT_SESSIONS = 8; 
+
+      // 내 성적 데이터
       const { data: grades } = await supabase
         .from('grades')
         .select('*')
         .eq('student_id', selectedStudent.id)
         .filter('test_name', 'ilike', `% ${monthNum}월%`)
-        .filter('test_date', 'ilike', `${selectedYear}%`)
-        .order('test_date', { ascending: true });
+        .filter('test_date', 'ilike', `${selectedYear}%`);
 
+      // 비교용 전체 성적 데이터
       const { data: allGrades } = await supabase
         .from('grades')
         .select('test_name, score')
@@ -50,29 +60,55 @@ export default function AdminReportPage() {
 
       const subjects = Array.from(new Set(grades?.map(g => g.test_name.split(']')[0].replace('[', ''))));
       
+      const allDatesMap: { [key: number]: string } = {};
+      grades?.forEach(g => {
+        const sessionMatch = g.test_name.match(/(\d+)회차/);
+        if (sessionMatch && g.test_date) {
+          const sNum = parseInt(sessionMatch[1]);
+          if (sNum <= LIMIT_SESSIONS) { // 제한 범위 내 날짜만 수집
+            allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
+          }
+        }
+      });
+
       let tempMax = 0;
       const processedData = subjects.map(sub => {
         const subGrades = grades?.filter(g => g.test_name.startsWith(`[${sub}]`)) || [];
-        if (subGrades.length > tempMax) tempMax = subGrades.length;
+        const sessionDataMap: { [key: number]: any } = {};
 
-        const sessions = subGrades.map((g, idx) => {
-          const testName = g.test_name;
-          const sameTestGrades = allGrades?.filter(ag => ag.test_name === testName) || [];
-          const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => !isNaN(s));
-          const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
-          const formattedDate = g.test_date ? g.test_date.substring(5).replace('-', '/') : '';
+        subGrades.forEach(g => {
+          const sessionMatch = g.test_name.match(/(\d+)회차/);
+          if (sessionMatch) {
+            const sNum = parseInt(sessionMatch[1]);
+            
+            // ✅ [수정] 9회차 등 제한 범위를 벗어나는 데이터는 무시
+            if (sNum <= LIMIT_SESSIONS) {
+              if (sNum > tempMax) tempMax = sNum;
 
-          return { 
-            session: `${idx + 1}회`, 
-            date: formattedDate,
-            score: Number(g.score) || 0, 
-            average: Number(avg.toFixed(1)), 
-            max: g.max_score || 100 
-          };
+              const sameTestGrades = allGrades?.filter(ag => ag.test_name === g.test_name) || [];
+              const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => !isNaN(s));
+              const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
+
+              sessionDataMap[sNum] = {
+                session: `${sNum}회차`,
+                score: Number(g.score) || 0,
+                average: Number(avg.toFixed(1)),
+                max: g.max_score || 100
+              };
+            }
+          }
         });
 
-        const myAvg = sessions.length > 0 ? (sessions.reduce((a, b) => a + b.score, 0) / sessions.length) : 0;
-        const classTotalAvg = sessions.length > 0 ? (sessions.reduce((a, b) => a + b.average, 0) / sessions.length) : 0;
+        const sessions = Array.from({ length: tempMax }, (_, i) => {
+          const sNum = i + 1;
+          return sessionDataMap[sNum] || { session: `${sNum}회차`, score: 0, average: 0, max: 100 };
+        });
+
+        const myScores = sessions.map(s => s.score).filter(s => s > 0);
+        const myAvg = myScores.length > 0 ? (myScores.reduce((a, b) => a + b, 0) / myScores.length) : 0;
+        
+        const classAvgs = sessions.map(s => s.average).filter(s => s > 0);
+        const classTotalAvg = classAvgs.length > 0 ? (classAvgs.reduce((a, b) => a + b, 0) / classAvgs.length) : 0;
 
         return { 
           subject: sub, 
@@ -84,6 +120,9 @@ export default function AdminReportPage() {
         };
       });
 
+      const masterDatesArray = Array.from({ length: tempMax }, (_, i) => allDatesMap[i + 1] || '-');
+      
+      setMasterDates(masterDatesArray);
       setMaxSessions(tempMax); 
       setReportData(processedData);
     } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -101,31 +140,20 @@ export default function AdminReportPage() {
             <h1 className="text-3xl font-black text-indigo-900 tracking-tighter uppercase font-sans">📊 Report Manager</h1>
             <button onClick={handlePrint} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">리포트 발행 (PDF)</button>
         </div>
-        
         <div className="space-y-6">
             <div className="flex flex-wrap md:flex-nowrap gap-4">
-                <div className="w-full md:w-1/2 space-y-2">
-                    <input type="text" placeholder="학생 성함 검색..." className="w-full p-4 border-2 rounded-2xl bg-gray-50 font-bold focus:border-indigo-500 outline-none" value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} />
-                </div>
-                <div className="w-full md:w-1/2">
-                    <select className="w-full p-4 border-2 rounded-2xl font-bold bg-white text-gray-700 focus:border-indigo-500 outline-none" value={classFilter} onChange={(e)=>setClassFilter(e.target.value)}>
-                        {classList.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                    </select>
-                </div>
+                <input type="text" placeholder="학생 성함 검색..." className="w-full md:w-1/2 p-4 border-2 rounded-2xl bg-gray-50 font-bold focus:border-indigo-500 outline-none" value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} />
+                <select className="w-full md:w-1/2 p-4 border-2 rounded-2xl font-bold bg-white text-gray-700 focus:border-indigo-500 outline-none" value={classFilter} onChange={(e)=>setClassFilter(e.target.value)}>
+                    {classList.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+                </select>
             </div>
-
             <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex-grow">
-                    <div className="h-40 overflow-y-auto border-2 border-gray-100 rounded-2xl p-2 bg-white grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {students
-                          .filter(s => s.name.includes(searchTerm))
-                          .filter(s => classFilter === '전체 클래스' || s.class_name === classFilter)
-                          .map(s=>(
-                            <div key={s.id} onClick={()=>setSelectedStudent(s)} className={`p-3 rounded-xl cursor-pointer font-bold text-center transition-all border ${selectedStudent?.id === s.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-md':'bg-white text-gray-600 border-gray-100 hover:border-indigo-200 hover:bg-indigo-50'}`}>
-                                {s.name} <span className="block text-[10px] opacity-60 font-normal">{s.class_name}</span>
-                            </div>
-                        ))}
-                    </div>
+                <div className="flex-grow h-40 overflow-y-auto border-2 border-gray-100 rounded-2xl p-2 bg-white grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {students.filter(s => s.name.includes(searchTerm) && (classFilter === '전체 클래스' || s.class_name === classFilter)).map(s=>(
+                        <div key={s.id} onClick={()=>setSelectedStudent(s)} className={`p-3 rounded-xl cursor-pointer font-bold text-center transition-all border ${selectedStudent?.id === s.id ? 'bg-indigo-600 text-white shadow-md':'bg-white text-gray-600 border-gray-100 hover:bg-indigo-50'}`}>
+                            {s.name} <span className="block text-[10px] opacity-60">{s.class_name}</span>
+                        </div>
+                    ))}
                 </div>
                 <div className="w-full md:w-80 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -136,7 +164,7 @@ export default function AdminReportPage() {
                             {[...Array(12)].map((_,i)=><option key={i+1} value={`${i+1}월`}>{i+1}월</option>)}
                         </select>
                     </div>
-                    <textarea className="w-full p-5 border-2 rounded-[2rem] h-28 bg-gray-50 font-bold text-indigo-900 focus:border-indigo-500 outline-none" placeholder="담당 선생님 피드백..." value={teacherComment} onChange={(e)=>setTeacherComment(e.target.value)} />
+                    <textarea className="w-full p-5 border-2 rounded-[2rem] h-28 bg-gray-50 font-bold text-indigo-900 outline-none" placeholder="담당 선생님 피드백..." value={teacherComment} onChange={(e)=>setTeacherComment(e.target.value)} />
                 </div>
             </div>
         </div>
@@ -146,140 +174,120 @@ export default function AdminReportPage() {
         <div className="report-container mx-auto">
           {/* [PAGE 01] */}
           <div className="report-page shadow-2xl bg-white mb-10 print:shadow-none print:m-0">
-            <div className="mb-6">
-              {/* ✅ 헤더 정렬 수정: items-center로 중앙 맞춤 및 행 높이 통일 */}
-              <div className="flex justify-between items-center mb-8 border-b-2 border-indigo-100 pb-8">
-                <div className="flex flex-col justify-center h-14">
-                  <h2 className="text-[34px] font-black text-gray-900 tracking-tighter leading-none mb-2">
-                    STUDENT REPORT <span className="text-indigo-600">{selectedMonth}</span>
-                  </h2>
-                  <p className="text-gray-500 font-bold uppercase tracking-widest text-[18px] leading-none">개별 맞춤 성적 분석 리포트</p>
-                </div>
-                
-                <div className="flex items-center gap-4 h-14">
-                  <div className="flex flex-col items-end justify-center h-full">
-                    <span className="text-base font-black text-indigo-900 leading-none tracking-widest mb-3">LJY English Institute</span>
-                    <span className="text-xl font-black text-indigo-900 leading-none tracking-tighter">이주영 영어학원</span>
-                  </div>
-                  <div className="w-1 h-full bg-indigo-600"></div>
-                </div>
+            <div className="flex justify-between items-center mb-8 border-b-2 border-indigo-100 pb-8">
+              <div className="flex flex-col justify-center">
+                <h2 className="text-[34px] font-black text-gray-900 tracking-tighter leading-none mb-2 uppercase">Student Report <span className="text-indigo-600">{selectedMonth}</span></h2>
+                <p className="text-gray-500 font-bold uppercase tracking-widest text-[18px]">개별 맞춤 성적 분석 리포트</p>
               </div>
-              
-              <div className="bg-indigo-50 border-2 border-indigo-100 px-10 py-7 rounded-none flex items-center justify-between">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-4xl font-black text-indigo-900">{selectedStudent.name}</span>
-                  <span className="text-lg font-bold text-indigo-400">학생</span>
+              <div className="flex items-center gap-4 h-14 text-right">
+                {/* 1. Montserrat(현대적) 또는 Playfair Display(우아함) 스타일 추천 */}
+<div className="flex flex-col justify-center">
+  <span className="text-[24px] font-bold text-indigo-900 tracking-tighter leading-none mb-2 ">
+    LJY English Institute
+  </span>
+  <span className="text-xl font-black text-indigo-900 leading-none">
+    이주영 영어학원
+  </span>
+</div>
+                <div className="w-1 h-full bg-indigo-600"></div>
+              </div>
+            </div>
+            
+            <div className="bg-indigo-50 border-2 border-indigo-100 px-10 py-7 mb-8 rounded-none flex items-center justify-between">
+              <div className="flex items-baseline gap-3">
+                <span className="text-4xl font-black text-indigo-900">{selectedStudent.name}</span>
+                <span className="text-lg font-bold text-indigo-400">학생</span>
+              </div>
+              <div className="flex items-center gap-10">
+                <div className="text-right border-r-2 border-indigo-100 pr-10">
+                  <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">School / Grade</p>
+                  <p className="text-md font-black text-indigo-900">{selectedStudent.school_name} · {selectedStudent.grade_level}</p>
                 </div>
-                <div className="flex items-center gap-10">
-                  <div className="text-right border-r-2 border-indigo-100 pr-10">
-                    <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">School / Grade</p>
-                    <p className="text-md font-black text-indigo-900">{selectedStudent.school_name} <span className="text-indigo-400 mx-1">·</span> {selectedStudent.grade_level}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">Class Name</p>
-                    <p className="text-md font-black text-indigo-600">{selectedStudent.class_name || '수강 클래스'}</p>
-                  </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">Class Name</p>
+                  <p className="text-md font-black text-indigo-600">{selectedStudent.class_name}</p>
                 </div>
               </div>
             </div>
 
-            {/* 01. 성적 요약 */}
             <div className="mb-8">
               <h3 className="text-xl font-black mb-6 flex items-center gap-3">
                 <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans shadow-lg">01</span>
                 <span className="uppercase text-indigo-900 tracking-tight">월별 성적 요약</span>
               </h3>
-              <div className="w-full">
-                <table className="w-full border-collapse border-t-2 border-indigo-900 table-fixed text-[11px]">
-                  <thead>
-  <tr className="bg-indigo-50">
-    {/* ✅ 평가 항목 / 회차 칸: flex를 사용해 양끝 정렬 */}
-    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-0 relative">
-      <div className="flex flex-col justify-between h-[56px] p-2 relative z-10">
-        {/* 오른쪽 상단 정렬 */}
-        <div className="self-end text-indigo-900 text-[12px] font-bold">
-          회차 (날짜)
-        </div>
-        {/* 왼쪽 하단 정렬 */}
-        <div className="self-start text-indigo-900 text-[12px] font-bold">
-          평가 항목
-        </div>
-      </div>
-      {/* 대각선 선 (옵션: 싫으시면 이 svg만 삭제) */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-20">
-        <line x1="0" y1="0" x2="100%" y2="100%" stroke="#4f46e5" strokeWidth="1" />
-      </svg>
-    </th>
-
-    {/* 회차 숫자 영역 (1회, 2회...) */}
-    {[...Array(maxSessions)].map((_, i) => (
-      <th key={i} className="py-1 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black" style={{ width: `${60 / maxSessions}%` }}>
-        {i + 1}회
-      </th>
-    ))}
-    
-    <th rowSpan={2} className="py-2 px-2 font-black border-b-2 border-indigo-900 bg-indigo-900 text-[15px] text-white text-center w-[20%]">
-      본인 평균 / 만점
-    </th>
-  </tr>
-
-  <tr className="bg-white">
-    {/* 날짜 영역 (02/13...) */}
-    {[...Array(maxSessions)].map((_, i) => (
-      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">
-        {reportData[0]?.sessions[i]?.date || '-'}
-      </th>
-    ))}
-  </tr>
-</thead>
-                  <tbody>
-                    {reportData.map((data, i) => (
-                      <tr key={i} className="border-b border-indigo-100">
-                        <td className="py-2 px-2 text-center font-black bg-indigo-50/30 text-[13px] border-r border-indigo-100 truncate">{data.subject}</td>
-                        {[...Array(maxSessions)].map((_, idx) => (
-                          <td key={idx} className="py-2 border-r border-indigo-100 text-center font-black text-[15px]">{data.sessions[idx]?.score ?? <span className="text-gray-200">-</span>}</td>
-                        ))}
-                        <td className="py-2 bg-indigo-50/40 text-center font-black">
-                          <span className="text-indigo-900 text-[20px]" > {data.avgScore}</span>
-                          <span className="text-gray-400 mx-1 text-[10px]">/</span>
-                          <span className="text-gray-500 text-[15px]">{data.maxStandard}</span>
-                        </td>
-                      </tr>
+              <table className="w-full border-collapse border-t-2 border-indigo-900 table-fixed text-[11px]">
+                <thead>
+                  <tr className="bg-indigo-50">
+                    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-2 relative">
+                       <div className="flex flex-col justify-between h-[50px]">
+                         <span className="self-end text-indigo-900 font-bold">회차(날짜)</span>
+                         <span className="self-start text-indigo-900 font-bold">평가항목</span>
+                       </div>
+                    </th>
+                    {[...Array(maxSessions)].map((_, i) => (
+                      <th key={i} className="py-2 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black">
+                        {i + 1}회
+                      </th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                    <th rowSpan={2} className="py-2 px-2 font-black border-b-2 border-indigo-900 bg-indigo-900 text-[15px] text-white text-center w-[20%]">평균 / 만점</th>
+                  </tr>
+                  <tr className="bg-white">
+                    {[...Array(maxSessions)].map((_, i) => (
+                      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">
+                        {masterDates[i] || '-'}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportData.map((data, i) => (
+                    <tr key={i} className="border-b border-indigo-100">
+                      <td className="py-3 px-2 text-center font-black bg-indigo-50/30 text-[13px] border-r border-indigo-100">{data.subject}</td>
+                      {[...Array(maxSessions)].map((_, idx) => (
+                        <td key={idx} className="py-3 border-r border-indigo-100 text-center font-black text-[16px]">
+                          {data.sessions[idx]?.score > 0 ? data.sessions[idx].score : <span className="text-gray-200">-</span>}
+                        </td>
+                      ))}
+                      <td className="py-3 bg-indigo-50/40 text-center font-black">
+                        <span className="text-indigo-900 text-[20px]">{data.avgScore}</span>
+                        <span className="text-gray-400 mx-1 text-[10px]">/</span>
+                        <span className="text-gray-500 text-[14px]">{data.maxStandard}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            {/* 02. 분석 테이블 */}
             <div className="mb-4">
                 <h3 className="text-xl font-black mb-6 flex items-center gap-3">
                   <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans shadow-lg">02</span>
                   <span className="uppercase text-indigo-900 tracking-tight">반 평균 대비 성적 분석</span>
                 </h3>
-                <div className="bg-white rounded-none overflow-hidden border-2 border-indigo-100 shadow-sm">
+                <div className="border-2 border-indigo-100 rounded-none overflow-hidden">
                   <table className="w-full text-center border-collapse">
                     <thead>
-                      <tr className="bg-indigo-50/50 text-indigo-400 font-black text-xs uppercase tracking-widest border-b border-indigo-100 font-sans">
-                        <th className="py-3">평가 항목</th>
-                        <th className="py-3">내 점수</th>
-                        <th className="py-3">반 평균</th>
-                        <th className="py-3">편차</th>
+                      <tr className="bg-indigo-50/50 text-indigo-400 font-black text-xs uppercase tracking-widest border-b border-indigo-100">
+                        <th className="py-4">평가 항목</th>
+                        <th className="py-4">내 점수</th>
+                        <th className="py-4">반 평균</th>
+                        <th className="py-4">편차</th>
                       </tr>
                     </thead>
-                    <tbody className="font-bold text-black">
+                    <tbody className="font-bold text-black text-lg">
                       {reportData.map((data, i) => (
                         <tr key={i} className="border-b border-indigo-50 last:border-0">
-                          <td className="py-3 text-gray-600">{data.subject}</td>
-                          <td className="py-3 text-2xl text-black font-sans">{data.avgScore}<span className="text-sm ml-0.5">점</span></td>
-                          <td className="py-3 text-xl text-gray-400 font-sans">{data.totalClassAvg}<span className="text-sm ml-0.5">점</span></td>
-        <td className={`py-2 text-2xl font-sans ${Number(data.deviation) === 0 ? 'text-black' : Number(data.deviation) > 0 ? 'text-black' : 'text-rose-500'}`}>
-  {(() => {
-    const devNum = Number(data.deviation);
-    if (devNum === 0) return '0'; // 0일 때는 기호 없이 '0'만 출력
-    if (devNum > 0) return `+${data.deviation}`; // 양수일 때만 +
-    return data.deviation; // 음수일 때는 자동으로 -가 붙어서 나옴
-  })()}
+                          <td className="py-4 text-gray-600">{data.subject}</td>
+                          <td className="py-4 text-2xl font-sans">{data.avgScore}점</td>
+                          <td className="py-4 text-xl text-gray-400 font-sans">{data.totalClassAvg}점</td>
+<td className={`py-4 text-2xl font-sans ${
+  Number(data.deviation) > 0 
+    ? 'text-rose-500'   // 0 초과: 빨간색
+    : Number(data.deviation) < 0 
+      ? 'text-blue-600' // 0 미만: 파란색
+      : 'text-gray-400' // 0일 때: 회색
+}`}>
+  {Number(data.deviation) > 0 ? `+${data.deviation}` : data.deviation}
 </td>
                         </tr>
                       ))}
@@ -287,51 +295,44 @@ export default function AdminReportPage() {
                   </table>
                 </div>
             </div>
-
-          
           </div>
           
           {/* [PAGE 02] */}
-          <div className="report-page shadow-2xl bg-white print:shadow-none print:m-0 page-break-before font-sans">
-              <h3 className="text-xl font-black mb-8 flex items-center gap-3">
-                <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm shadow-lg shadow-indigo-200 font-sans">03</span>
-                <span className="uppercase text-indigo-900 tracking-tight">시험별 성적 분석</span>
-              </h3>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="report-page shadow-2xl bg-white print:shadow-none print:m-0 page-break-before">
+            <h3 className="text-xl font-black mb-8 flex items-center gap-3">
+              <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm shadow-lg font-sans">03</span>
+              <span className="uppercase text-indigo-900 tracking-tight">시험별 성적 추이 분석</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-6 mb-10">
               {reportData.map((data, i) => (
-                <div key={i} className={`chart-box bg-white p-5 border border-indigo-50 relative ${i === 4 ? "col-span-2 h-[220px]" : "h-[230px]"}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-black text-lg text-indigo-900 border-l-4 border-indigo-600 pl-4">{data.subject}</h4>
-                  </div>
+                <div key={i} className="chart-box bg-white p-6 border border-indigo-50 h-[280px]">
+                  <h4 className="font-black text-lg text-indigo-900 border-l-4 border-indigo-600 pl-4 mb-4">{data.subject}</h4>
                   <div className="w-full h-[80%]">
-                    <ResponsiveContainer width="100%" height="100%" id="print-chart-container">
-                      <BarChart data={data.sessions} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                        <defs><filter id="none"><feGaussianBlur stdDeviation="0" /></filter></defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data.sessions} margin={{ top: 10, right: 10, left: -30, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="session" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
                         <YAxis domain={[0, data.maxStandard]} axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
-                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{display: 'none'}} />
-                        <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{ backgroundColor: 'transparent' }} />
-                        <Bar dataKey="score" name="내 점수" fill="#4f46e5" radius={[3, 3, 0, 0]} barSize={i === 4 ? 35 : 18} />
-                        <Bar dataKey="average" name="반 평균" fill="#e2e8f0" radius={[3, 3, 0, 0]} barSize={i === 4 ? 35 : 18} />
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" iconType="circle" />
+                        <Bar dataKey="score" name="내 점수" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={20} />
+                        <Bar dataKey="average" name="반 평균" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={20} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
               ))}
             </div>
-              
-              <div className="mt-auto bg-gray-50 rounded-none p-12 relative border-t-4 border-indigo-600 min-h-[260px] flex flex-col justify-center overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-100/50 rounded-full -mr-16 -mt-16"></div>
-                <h4 className="text-2xl font-black mb-6 flex items-center gap-4 uppercase tracking-tighter text-indigo-900 relative z-10">
-                  <span className="w-2 h-7 bg-indigo-600 rounded-full"></span>
-                  담당 선생님 피드백
-                </h4>
-                <div className="w-full h-[1px] bg-indigo-200 mb-8 relative z-10"></div>
-                <p className="text-black leading-[2.2] whitespace-pre-wrap font-bold text-xl tracking-wide relative z-10">
-                  {teacherComment || '이번 달 학습 성취도를 종합한 결과, 전반적으로 안정적인 흐름을 보이고 있습니다. 개별 취약 포인트에 대한 집중 관리를 통해 더 높은 성장을 이룰 수 있도록 지도하겠습니다.'}
-                </p>
-              </div>
+            
+            <div className="mt-auto bg-gray-50 p-12 relative border-t-4 border-indigo-600 min-h-[300px]">
+              <h4 className="text-2xl font-black mb-6 flex items-center gap-4 uppercase text-indigo-900">
+                <span className="w-2 h-7 bg-indigo-600 rounded-full"></span>담당 선생님 피드백
+              </h4>
+              <div className="w-full h-[1px] bg-indigo-200 mb-8"></div>
+              <p className="text-black leading-[2.2] whitespace-pre-wrap font-bold text-xl">
+                {teacherComment || '이번 달 학습 성취도를 종합한 결과, 전반적으로 안정적인 흐름을 보이고 있습니다. 개별 취약 포인트에 대한 집중 관리를 통해 더 높은 성장을 이룰 수 있도록 지도하겠습니다.'}
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -341,31 +342,12 @@ export default function AdminReportPage() {
           body * { visibility: hidden; }
           .report-container, .report-container * { visibility: visible; }
           .report-container { position: absolute; left: 0; top: 0; width: 210mm; }
-          input, select, textarea, button { display: none !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body { margin: 0; padding: 0; background: white; }
-          .recharts-default-legend { background: transparent !important; border: none !important; }
-          .recharts-legend-item-text { vertical-align: middle !important; }
-          button, [class*="hamburger"], [class*="menu"] { display: none !important; visibility: hidden !important; }
-          .report-page { height: 296mm; padding: 10mm 15mm !important; }
+          .report-page { height: 296mm; padding: 10mm 15mm !important; page-break-after: always; }
           @page { size: A4; margin: 0; }
         }
-
         .report-container { width: 210mm; }
-        .report-page {
-          width: 210mm; 
-          min-height: 297mm; 
-          padding: 10mm 15mm 10mm 15mm !important;
-          display: flex; 
-          flex-direction: column; 
-          box-sizing: border-box; 
-          position: relative;
-          background-color: white;
-          page-break-after: always;
-        }
-
-        table tr { page-break-inside: avoid; }
-        h3 { page-break-after: avoid; }
+        .report-page { width: 210mm; min-height: 297mm; padding: 10mm 15mm !important; display: flex; flex-direction: column; background-color: white; }
       `}</style>
     </div>
   );

@@ -15,7 +15,6 @@ export default function GradeInputPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 1. 초기 로딩: 클래스 목록
   useEffect(() => {
     async function fetchClasses() {
       const { data } = await supabase.from('classes').select('*').order('class_name');
@@ -24,7 +23,6 @@ export default function GradeInputPage() {
     fetchClasses();
   }, []);
 
-  // 2. 필터 변경 시 데이터 로드
   useEffect(() => {
     if (!selectedClassId || classList.length === 0) {
       setStudents([]); setSessionDates([]); setSubjectDescription(''); return;
@@ -42,11 +40,19 @@ export default function GradeInputPage() {
         if (currentClass.thu) activeDays.push(4);
         if (currentClass.fri) activeDays.push(5);
         if (currentClass.sat) activeDays.push(6);
+        
         fetchData(selectedClassId, selectedMonth, selectedCategory, activeDays.length > 0 ? activeDays : [1,3,5]);
         fetchDescription(selectedClassId, selectedCategory);
+        fetchMaxScore(selectedMonth, selectedCategory);
       }
     }
   }, [selectedClassId, selectedMonth, selectedCategory, classList]);
+
+  const fetchMaxScore = async (month: number, cat: string) => {
+    const { data } = await supabase.from('grades').select('max_score').filter('test_name', 'ilike', `[${cat}] ${month}월%`).limit(1).maybeSingle();
+    if (data?.max_score) setMaxScore(data.max_score);
+    else setMaxScore(100);
+  };
 
   const fetchDescription = async (id: string, cat: string) => {
     const { data } = await supabase.from('subject_descriptions').select('description').eq('class_id', id).eq('category', cat).maybeSingle();
@@ -59,7 +65,6 @@ export default function GradeInputPage() {
     return parts.length === 3 ? `${parts[1]}.${parts[2]}` : dateStr;
   };
 
-  // fetchData: 자동 회차 제외 로직 삭제 버전
   const fetchData = async (classId: string, month: number, category: string, targetDays: number[]) => {
     setLoading(true);
     try {
@@ -78,8 +83,14 @@ export default function GradeInputPage() {
       }
       actualSessions.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
+      const sessionLimit = targetDays.length * 4;
+      if (actualSessions.length > sessionLimit) {
+        actualSessions = actualSessions.slice(0, sessionLimit);
+      }
+
       const { data: studentData } = await supabase.from('students').select('*').eq('class_name', targetClassName);
-      const { data: allGradeData } = await supabase.from('grades').select('*').filter('test_name', 'ilike', `% ${month}월%`);
+      // ✅ [중요] 해당 월/과목의 데이터를 가져올 때 날짜 정보도 포함해서 가져오도록 필터링
+      const { data: allGradeData } = await supabase.from('grades').select('*').filter('test_name', 'ilike', `[${category}] ${month}월%`);
 
       if (studentData) {
         const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
@@ -90,10 +101,17 @@ export default function GradeInputPage() {
             const found = allGradeData?.find(g => g.student_id === student.id && g.test_name === testName);
             if (found) {
               scores[i] = (found.score === 0 || found.score === null) ? '' : found.score.toString();
+              // 저장되어 있던 날짜가 있다면 session 날짜를 업데이트 (선택 사항: 원하시면 유지)
+              if (found.test_date) {
+                actualSessions[i].fullDate = found.test_date;
+                actualSessions[i].label = formatShortDate(found.test_date);
+              }
             }
           });
           return { ...student, scores };
         });
+        // 날짜 다시 한번 정렬
+        actualSessions.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
         setSessionDates(actualSessions);
         setStudents(formatted);
       }
@@ -103,12 +121,16 @@ export default function GradeInputPage() {
   const updateSessionDate = (idx: number, newFullDate: string) => {
     const updatedSessions = [...sessionDates];
     updatedSessions[idx] = { label: formatShortDate(newFullDate), fullDate: newFullDate };
-    const sortedWithIndex = updatedSessions.map((s, i) => ({ ...s, originalIdx: i })).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+    
+    const indexedSessions = updatedSessions.map((s, i) => ({ ...s, oldIdx: i }));
+    indexedSessions.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+    
     setStudents(prev => prev.map(student => ({
       ...student,
-      scores: sortedWithIndex.map(item => student.scores[item.originalIdx])
+      scores: indexedSessions.map(item => student.scores[item.oldIdx])
     })));
-    setSessionDates(sortedWithIndex.map(({label, fullDate}) => ({label, fullDate})));
+    
+    setSessionDates(indexedSessions.map(({label, fullDate}) => ({label, fullDate})));
   };
 
   const handleScoreChange = (studentId: string, idx: number, value: string) => {
@@ -117,58 +139,49 @@ export default function GradeInputPage() {
       return;
     }
     const num = Number(value);
-    if (num <= 0 || num > maxScore) return; 
+    if (num < 0 || num > maxScore) return; 
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: s.scores.map((v:any, i:number) => i === idx ? value : v) } : s));
   };
 
- const handleSave = async () => {
-  if (!selectedCategory) return alert("과목 선택 필수!");
-  setLoading(true);
+  // ✅ [수정] 날짜 데이터가 DB에 확실히 반영되도록 upsert 필드 강화
+  const handleSave = async () => {
+    if (!selectedCategory) return alert("과목 선택 필수!");
+    setLoading(true);
 
-  const upsertGrades: any[] = [];
-  sessionDates.forEach((session, idx) => {
-    students.forEach(student => {
-      const score = student.scores[idx];
-      
-      // ✅ 수정: score가 빈 문자열('')이면 0으로 치환하여 저장하거나, 
-      // 필요에 따라 null을 보냅니다. 여기서는 0으로 처리하겠습니다.
-      upsertGrades.push({
-        student_id: student.id,
-        test_name: `[${selectedCategory}] ${selectedMonth}월 ${idx + 1}회차`,
-        score: score === '' ? 0 : parseInt(score), // 빈 값이면 0점으로 업데이트
-        test_date: session.fullDate,
-        max_score: maxScore,
+    const upsertGrades: any[] = [];
+    sessionDates.forEach((session, idx) => {
+      students.forEach(student => {
+        const score = student.scores[idx];
+        upsertGrades.push({
+          student_id: student.id,
+          test_name: `[${selectedCategory}] ${selectedMonth}월 ${idx + 1}회차`,
+          score: score === '' ? 0 : parseInt(score),
+          test_date: session.fullDate, // 👈 이 날짜가 정렬된 상태의 fullDate입니다.
+          max_score: maxScore,
+        });
       });
     });
-  });
 
-  try {
-    if (upsertGrades.length > 0) {
-      const { error } = await supabase
-        .from('grades')
-        .upsert(upsertGrades, { onConflict: 'student_id, test_name' });
-      
-      if (error) throw error;
-    }
-    
-    await supabase.from('subject_descriptions').upsert({ 
-      class_id: selectedClassId, 
-      category: selectedCategory, 
-      description: subjectDescription 
-    }, { onConflict: 'class_id, category' });
-
-    alert(`데이터가 안전하게 저장되었습니다! ✅`);
-  } catch (err) {
-    console.error(err);
-    alert("저장 중 오류가 발생했습니다.");
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      if (upsertGrades.length > 0) {
+        // onConflict에 student_id와 test_name이 걸려있으므로, 
+        // 같은 회차 이름이라면 바뀐 test_date가 덮어씌워집니다.
+        const { error } = await supabase.from('grades').upsert(upsertGrades, { onConflict: 'student_id, test_name' });
+        if (error) throw error;
+      }
+      await supabase.from('subject_descriptions').upsert({ 
+        class_id: selectedClassId, category: selectedCategory, description: subjectDescription 
+      }, { onConflict: 'class_id, category' });
+      alert(`정렬된 날짜와 성적이 모두 반영되었습니다! ✅`);
+    } catch (err) {
+      console.error(err);
+      alert("저장 중 오류 발생");
+    } finally { setLoading(false); }
+  };
 
   return (
     <div className="max-w-[98%] mx-auto py-10 px-4 font-sans tracking-tight bg-slate-50 min-h-screen">
-      {/* 1. 상단 컨트롤 바 */}
+      {/* 상단 컨트롤 (기존 코드 유지) */}
       <div className="flex flex-wrap items-end mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-50 gap-4">
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-2xl font-black text-indigo-900 mb-1 italic">성적 입력 매니저</h1>
@@ -190,7 +203,6 @@ export default function GradeInputPage() {
             <span className="text-[9px] font-black text-amber-500 uppercase">Max Score</span>
             <input type="number" value={maxScore} onChange={(e) => setMaxScore(Number(e.target.value))} className="w-12 bg-transparent font-black text-amber-600 text-center outline-none text-sm" />
           </div>
-          {/* ✅ 회차 추가 버튼 삭제됨 */}
         </div>
       </div>
 
@@ -208,29 +220,15 @@ export default function GradeInputPage() {
                   <tr className="bg-indigo-600 text-white">
                     <th className="w-[130px] py-5 px-4 text-left font-black sticky left-0 bg-indigo-600 z-30 text-base border-b-4 border-indigo-700 shadow-md">이름</th>
                     {sessionDates.map((session, i) => (
-                   <th key={i} className="w-[105px] py-4 px-1 text-center border-l border-indigo-500/30 border-b-4 border-indigo-700 relative group">
-  <div className="text-lg font-black leading-none mb-1">{i+1}회</div>
-  <div className="flex justify-center items-center">
-    <button 
-      type="button"
-      onClick={(e) => {
-        const inputEl = e.currentTarget.querySelector('input');
-        if (inputEl && (inputEl as any).showPicker) {
-          (inputEl as any).showPicker();
-        }
-      }}
-      className="relative flex items-center justify-center bg-indigo-500/50 hover:bg-indigo-400 text-white text-[11px] font-black w-[72px] h-[24px] rounded-full cursor-pointer transition-all"
-    >
-      {session.label}
-      <input 
-        type="date" 
-        value={session.fullDate} 
-        onChange={(e) => updateSessionDate(i, e.target.value)}
-        className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
-      />
-    </button>
-  </div>
-</th>
+                      <th key={i} className="w-[105px] py-4 px-1 text-center border-l border-indigo-500/30 border-b-4 border-indigo-700 relative group">
+                        <div className="text-lg font-black leading-none mb-1">{i+1}회</div>
+                        <div className="flex justify-center items-center">
+                          <button type="button" onClick={(e) => (e.currentTarget.querySelector('input') as any)?.showPicker()} className="relative flex items-center justify-center bg-indigo-500/50 hover:bg-indigo-400 text-white text-[11px] font-black w-[72px] h-[24px] rounded-full cursor-pointer transition-all">
+                            {session.label}
+                            <input type="date" value={session.fullDate} onChange={(e) => updateSessionDate(i, e.target.value)} className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" />
+                          </button>
+                        </div>
+                      </th>
                     ))}
                     <th className="w-[110px] py-5 px-4 font-black text-center border-l border-indigo-500/30 bg-indigo-800 border-b-4 border-indigo-900 text-base shadow-inner">평균</th>
                   </tr>
@@ -244,13 +242,7 @@ export default function GradeInputPage() {
                         <td className="py-3 px-4 font-black text-indigo-900 sticky left-0 bg-white border-r border-gray-50 text-sm z-20 whitespace-nowrap shadow-sm">{student.name}</td>
                         {student.scores.map((score: string, idx: number) => (
                           <td key={idx} className="py-2 px-1 border-l border-gray-50">
-                            <input 
-                              type="number" 
-                              value={score} 
-                              onChange={(e) => handleScoreChange(student.id, idx, e.target.value)} 
-                              className="w-full border-2 border-transparent focus:border-indigo-400 focus:bg-white rounded-xl py-2.5 text-center font-black text-lg text-indigo-700 outline-none bg-gray-50/50 transition-all"
-                              placeholder="-" 
-                            />
+                            <input type="number" value={score} onChange={(e) => handleScoreChange(student.id, idx, e.target.value)} className="w-full border-2 border-transparent focus:border-indigo-400 focus:bg-white rounded-xl py-2.5 text-center font-black text-lg text-indigo-700 outline-none bg-gray-50/50 transition-all" placeholder="-" />
                           </td>
                         ))}
                         <td className="py-3 px-2 text-center font-black text-indigo-600 bg-indigo-50/30 text-lg italic border-l border-gray-100">{avg}</td>
@@ -258,6 +250,7 @@ export default function GradeInputPage() {
                     );
                   })}
                 </tbody>
+                {/* tfoot 부분 유지 */}
                 <tfoot className="bg-gray-50/80 border-t-2 border-indigo-100">
                   <tr>
                     <td className="py-4 px-4 font-black text-indigo-400 sticky left-0 bg-gray-50 z-20 text-[10px] uppercase italic border-r border-gray-100">Class Avg</td>
@@ -278,43 +271,33 @@ export default function GradeInputPage() {
                 </tfoot>
               </table>
             </div>
-            
             <div className="p-8 flex justify-between items-center bg-white border-t border-indigo-50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-xl shadow-inner">🎯</div>
-                  <div>
-                    <p className="text-indigo-400 font-bold text-[9px] uppercase tracking-widest leading-none mb-1 italic">Status Report</p>
-                    <p className="text-base font-black text-indigo-900">
-                      <span className="text-rose-500">[{selectedCategory}]</span> 최대 점수: 
-                      <span className="text-amber-600 ml-1 underline decoration-amber-200 decoration-2 underline-offset-4">{maxScore}점</span>
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-xl shadow-inner">🎯</div>
+                <div>
+                  <p className="text-indigo-400 font-bold text-[9px] uppercase tracking-widest leading-none mb-1 italic">Status Report</p>
+                  <p className="text-base font-black text-indigo-900">
+                    <span className="text-rose-500">[{selectedCategory}]</span> 최대 점수: 
+                    <span className="text-amber-600 ml-1 underline decoration-amber-200 decoration-2 underline-offset-4">{maxScore}점</span>
+                  </p>
                 </div>
-
-                <button 
-                  onClick={handleSave} 
-                  disabled={loading} 
-                  className="bg-indigo-600 text-white px-12 py-4 rounded-[1.5rem] font-black text-xl shadow-lg hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95 disabled:bg-gray-300 disabled:translate-y-0"
-                >
-                  {loading ? "저장 중..." : "성적 저장하기 ✨"}
-                </button>
+              </div>
+              <button onClick={handleSave} disabled={loading} className="bg-indigo-600 text-white px-12 py-4 rounded-[1.5rem] font-black text-xl shadow-lg hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95 disabled:bg-gray-300">
+                {loading ? "저장 중..." : "성적 저장하기 ✨"}
+              </button>
             </div>
           </div>
         </>
       ) : (
         <div className="text-center py-52 bg-white rounded-[3rem] border-4 border-dashed border-indigo-100 flex flex-col items-center justify-center">
-            <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6 animate-bounce">
-              <span className="text-4xl">📂</span>
-            </div>
-            <p className="text-2xl font-black text-indigo-200 italic uppercase tracking-tighter">Please Select Class & Subject</p>
+          <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6 animate-bounce"><span className="text-4xl">📂</span></div>
+          <p className="text-2xl font-black text-indigo-200 italic uppercase tracking-tighter">Please Select Class & Subject</p>
         </div>
       )}
-
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { height: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; border: 2px solid #f8fafc; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
         input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       `}</style>
     </div>
