@@ -268,7 +268,27 @@ export default function AdminReportPage() {
 
             <h1 className="text-3xl font-black text-indigo-900 tracking-tighter uppercase">📊 Report Manager</h1>
 
-            <button onClick={() => window.print()} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">리포트 발행 (PDF)</button>
+            <button 
+  onClick={() => {
+    // 1. 현재 날짜나 선택된 월에서 '월' 글자만 추출 (예: "2월")
+    const fileName = `${selectedStudent?.name || '학생'}_${selectedYear}년_${selectedMonth}_성적표`;
+    
+    // 2. 브라우저 탭의 제목을 임시로 변경 (이것이 PDF 파일명이 됩니다)
+    const originalTitle = document.title;
+    document.title = fileName;
+    
+    // 3. 인쇄창 실행
+    window.print();
+    
+    // 4. 인쇄창이 닫힌 후 다시 원래 제목으로 복구 (약간의 지연 필요)
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 1000);
+  }} 
+  className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all"
+>
+  리포트 발행 (PDF)
+</button>
 
         </div>
 
