@@ -19,7 +19,7 @@ export default function AdminReportPage() {
   const [maxSessions, setMaxSessions] = useState(0); 
   const [masterDates, setMasterDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // 저장 상태 관리
+  const [isSaving, setIsSaving] = useState(false);
 
   // 1. 학생 목록 가져오기
   useEffect(() => {
@@ -32,54 +32,41 @@ export default function AdminReportPage() {
 
   const classList = ['전체 클래스', ...Array.from(new Set(students.map(s => s.class_name).filter(Boolean)))];
 
-  // 2. 피드백 불러오기 로직
+  // 2. 피드백 불러오기
   const fetchFeedback = useCallback(async () => {
     if (!selectedStudent) return;
-    
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('teacher_feedbacks')
       .select('content')
       .eq('student_id', selectedStudent.id)
       .eq('year', selectedYear)
       .eq('month', selectedMonth)
-      .maybeSingle(); // 데이터가 없어도 에러를 내지 않음
+      .maybeSingle();
 
-    if (data) {
-      setTeacherComment(data.content);
-    } else {
-      setTeacherComment(''); 
-    }
+    setTeacherComment(data?.content || '');
   }, [selectedStudent, selectedYear, selectedMonth]);
 
-  // 3. 피드백 저장 로직
+  // 3. 피드백 저장
   const saveFeedback = async () => {
-    if (!selectedStudent) {
-      alert('학생을 먼저 선택해주세요.');
-      return;
-    }
+    if (!selectedStudent) return alert('학생을 먼저 선택해주세요.');
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('teacher_feedbacks')
-        .upsert({
-          student_id: selectedStudent.id,
-          year: selectedYear,
-          month: selectedMonth,
-          content: teacherComment,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'student_id,year,month' });
-
+      const { error } = await supabase.from('teacher_feedbacks').upsert({
+        student_id: selectedStudent.id,
+        year: selectedYear,
+        month: selectedMonth,
+        content: teacherComment,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'student_id,year,month' });
       if (error) throw error;
-      alert('피드백이 안전하게 저장되었습니다.');
+      alert('피드백이 저장되었습니다.');
     } catch (err) {
       console.error(err);
-      alert('저장 중 오류가 발생했습니다.');
-    } finally {
-      setIsSaving(false);
-    }
+      alert('저장 중 오류 발생');
+    } finally { setIsSaving(false); }
   };
 
-  // 4. 성적 데이터 분석 로직
+  // 4. [수정됨] 성적 데이터 분석 로직 (반 평균 로직 강화)
   const fetchReportData = useCallback(async () => {
     if (!selectedStudent) return;
     setLoading(true);
@@ -87,35 +74,46 @@ export default function AdminReportPage() {
       const monthNum = selectedMonth.replace('월', '');
       const LIMIT_SESSIONS = 8; 
 
-      const { data: grades } = await supabase
+      // 해당 학생의 클래스 동기들을 찾아서 그 학생들의 성적만 비교 대상으로 삼음
+      const { data: classmates } = await supabase
+        .from('students')
+        .select('id')
+        .eq('class_name', selectedStudent.class_name);
+      
+      const classmateIds = classmates?.map(c => c.id) || [];
+
+      // 1) 선택된 학생의 성적
+      const { data: myGrades } = await supabase
         .from('grades')
         .select('*')
         .eq('student_id', selectedStudent.id)
         .filter('test_name', 'ilike', `% ${monthNum}월%`)
         .filter('test_date', 'ilike', `${selectedYear}%`);
 
-      const { data: allGrades } = await supabase
+      // 2) 같은 반 학생들의 전체 성적 (반 평균 계산용)
+      const { data: classGrades } = await supabase
         .from('grades')
         .select('test_name, score')
+        .in('student_id', classmateIds)
         .filter('test_name', 'ilike', `% ${monthNum}월%`)
         .filter('test_date', 'ilike', `${selectedYear}%`);
 
-      const subjects = Array.from(new Set(grades?.map(g => g.test_name.split(']')[0].replace('[', ''))));
+      const subjects = Array.from(new Set(myGrades?.map(g => g.test_name.split(']')[0].replace('[', ''))));
       
       const allDatesMap: { [key: number]: string } = {};
-      grades?.forEach(g => {
+      myGrades?.forEach(g => {
         const sessionMatch = g.test_name.match(/(\d+)회차/);
         if (sessionMatch && g.test_date) {
           const sNum = parseInt(sessionMatch[1]);
           if (sNum <= LIMIT_SESSIONS) {
-            allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
+            allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/'); // mm/dd 형식
           }
         }
       });
 
       let tempMax = 0;
       const processedData = subjects.map(sub => {
-        const subGrades = grades?.filter(g => g.test_name.startsWith(`[${sub}]`)) || [];
+        const subGrades = myGrades?.filter(g => g.test_name.startsWith(`[${sub}]`)) || [];
         const sessionDataMap: { [key: number]: any } = {};
 
         subGrades.forEach(g => {
@@ -124,12 +122,14 @@ export default function AdminReportPage() {
             const sNum = parseInt(sessionMatch[1]);
             if (sNum <= LIMIT_SESSIONS) {
               if (sNum > tempMax) tempMax = sNum;
-              const sameTestGrades = allGrades?.filter(ag => ag.test_name === g.test_name) || [];
-              const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => !isNaN(s));
+              
+              // [반 평균 계산 로직 개선]
+              const sameTestClassGrades = classGrades?.filter(cg => cg.test_name.trim() === g.test_name.trim()) || [];
+              const validScores = sameTestClassGrades.map(sg => Number(sg.score)).filter(s => s > 0);
               const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
 
               sessionDataMap[sNum] = {
-                session: `${sNum}회차`,
+                session: `${sNum}회`,
                 score: Number(g.score) || 0,
                 average: Number(avg.toFixed(1)),
                 max: g.max_score || 100
@@ -140,7 +140,7 @@ export default function AdminReportPage() {
 
         const sessions = Array.from({ length: tempMax }, (_, i) => {
           const sNum = i + 1;
-          return sessionDataMap[sNum] || { session: `${sNum}회차`, score: 0, average: 0, max: 100 };
+          return sessionDataMap[sNum] || { session: `${sNum}회`, score: 0, average: 0, max: 100 };
         });
 
         const myScores = sessions.map(s => s.score).filter(s => s > 0);
@@ -164,7 +164,6 @@ export default function AdminReportPage() {
     } catch (err) { console.error(err); } finally { setLoading(false); }
   }, [selectedStudent, selectedYear, selectedMonth]);
 
-  // 데이터 로딩 트리거 (성적 & 피드백)
   useEffect(() => { 
     fetchReportData(); 
     fetchFeedback();
@@ -174,10 +173,10 @@ export default function AdminReportPage() {
 
   return (
     <div className="p-6 bg-gray-100 min-h-screen pb-20 font-sans tracking-tight">
-      {/* [관리 도구 영역] - 인쇄 시 숨김 */}
+      {/* 관리 도구 영역 */}
       <div className="max-w-[1100px] mx-auto bg-white p-8 rounded-[2.5rem] shadow-sm mb-10 print:hidden border border-indigo-50">
         <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-black text-indigo-900 tracking-tighter uppercase font-sans">📊 Report Manager</h1>
+            <h1 className="text-3xl font-black text-indigo-900 tracking-tighter uppercase">📊 Report Manager</h1>
             <button onClick={handlePrint} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">리포트 발행 (PDF)</button>
         </div>
         <div className="space-y-6">
@@ -204,12 +203,10 @@ export default function AdminReportPage() {
                             {[...Array(12)].map((_,i)=><option key={i+1} value={`${i+1}월`}>{i+1}월</option>)}
                         </select>
                     </div>
-                    <div className="flex flex-col gap-2">
-                        <textarea className="w-full p-5 border-2 rounded-[2rem] h-28 bg-gray-50 font-bold text-indigo-900 outline-none focus:border-indigo-500" placeholder="해당 학생의 이번 달 피드백을 입력하세요..." value={teacherComment} onChange={(e)=>setTeacherComment(e.target.value)} />
-                        <button onClick={saveFeedback} disabled={isSaving} className={`py-3 rounded-xl font-black text-white transition-all ${isSaving ? 'bg-gray-400' : 'bg-indigo-500 hover:bg-indigo-600 shadow-lg'}`}>
-                          {isSaving ? '저장 중...' : '피드백 저장하기'}
-                        </button>
-                    </div>
+                    <textarea className="w-full p-5 border-2 rounded-[2rem] h-28 bg-gray-50 font-bold text-indigo-900 outline-none focus:border-indigo-500" placeholder="피드백 입력..." value={teacherComment} onChange={(e)=>setTeacherComment(e.target.value)} />
+                    <button onClick={saveFeedback} disabled={isSaving} className={`w-full py-3 rounded-xl font-black text-white transition-all ${isSaving ? 'bg-gray-400' : 'bg-indigo-500 hover:bg-indigo-600 shadow-lg'}`}>
+                        {isSaving ? '저장 중...' : '피드백 저장하기'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -217,10 +214,10 @@ export default function AdminReportPage() {
 
       {selectedStudent && !loading && (
         <div className="report-container mx-auto">
-          {/* [PAGE 01] */}
+          {/* PAGE 01 */}
           <div className="report-page shadow-2xl bg-white mb-10 print:shadow-none print:m-0">
             <div className="flex justify-between items-center mb-8 border-b-2 border-indigo-100 pb-8">
-              <div className="flex flex-col justify-center">
+              <div className="flex flex-col">
                 <h2 className="text-[34px] font-black text-gray-900 tracking-tighter leading-none mb-2 uppercase">Student Report <span className="text-indigo-600">{selectedMonth}</span></h2>
                 <p className="text-gray-500 font-bold uppercase tracking-widest text-[18px]">개별 맞춤 성적 분석 리포트</p>
               </div>
@@ -253,7 +250,7 @@ export default function AdminReportPage() {
             <div className="mb-8">
               <h3 className="text-xl font-black mb-6 flex items-center gap-3">
                 <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans shadow-lg">01</span>
-                <span className="uppercase text-indigo-900 tracking-tight">월별 성적 요약</span>
+                <span className="uppercase text-indigo-900 tracking-tight font-sans">월별 성적 요약</span>
               </h3>
               <table className="w-full border-collapse border-t-2 border-indigo-900 table-fixed text-[11px]">
                 <thead>
@@ -286,9 +283,9 @@ export default function AdminReportPage() {
                         </td>
                       ))}
                       <td className="py-3 bg-indigo-50/40 text-center font-black">
-                        <span className="text-indigo-900 text-[20px]">{data.avgScore}</span>
+                        <span className="text-indigo-900 text-[20px] font-sans">{data.avgScore}</span>
                         <span className="text-gray-400 mx-1 text-[10px]">/</span>
-                        <span className="text-gray-500 text-[14px]">{data.maxStandard}</span>
+                        <span className="text-gray-500 text-[14px] font-sans">{data.maxStandard}</span>
                       </td>
                     </tr>
                   ))}
@@ -296,43 +293,43 @@ export default function AdminReportPage() {
               </table>
             </div>
 
-            <div className="mb-4">
-                <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-                  <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans shadow-lg">02</span>
-                  <span className="uppercase text-indigo-900 tracking-tight">반 평균 대비 성적 분석</span>
-                </h3>
-                <div className="border-2 border-indigo-100 rounded-none overflow-hidden">
-                  <table className="w-full text-center border-collapse">
-                    <thead>
-                      <tr className="bg-indigo-50/50 text-indigo-400 font-black text-xs uppercase tracking-widest border-b border-indigo-100">
-                        <th className="py-4">평가 항목</th>
-                        <th className="py-4">내 점수</th>
-                        <th className="py-4">반 평균</th>
-                        <th className="py-4">편차</th>
+            <div>
+              <h3 className="text-xl font-black mb-6 flex items-center gap-3">
+                <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans shadow-lg">02</span>
+                <span className="uppercase text-indigo-900 tracking-tight font-sans">반 평균 대비 성적 분석</span>
+              </h3>
+              <div className="border-2 border-indigo-100">
+                <table className="w-full text-center border-collapse">
+                  <thead>
+                    <tr className="bg-indigo-50/50 text-indigo-400 font-black text-xs uppercase tracking-widest border-b border-indigo-100">
+                      <th className="py-4">평가 항목</th>
+                      <th className="py-4">내 점수</th>
+                      <th className="py-4">반 평균</th>
+                      <th className="py-4">편차</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-bold text-black text-lg font-sans">
+                    {reportData.map((data, i) => (
+                      <tr key={i} className="border-b border-indigo-50 last:border-0">
+                        <td className="py-4 text-gray-600 font-sans font-black">{data.subject}</td>
+                        <td className="py-4 text-2xl">{data.avgScore}점</td>
+                        <td className="py-4 text-xl text-gray-400">{data.totalClassAvg}점</td>
+                        <td className={`py-4 text-2xl ${Number(data.deviation) > 0 ? 'text-rose-500' : Number(data.deviation) < 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                          {Number(data.deviation) > 0 ? `+${data.deviation}` : data.deviation}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="font-bold text-black text-lg">
-                      {reportData.map((data, i) => (
-                        <tr key={i} className="border-b border-indigo-50 last:border-0">
-                          <td className="py-4 text-gray-600">{data.subject}</td>
-                          <td className="py-4 text-2xl font-sans">{data.avgScore}점</td>
-                          <td className="py-4 text-xl text-gray-400 font-sans">{data.totalClassAvg}점</td>
-                          <td className={`py-4 text-2xl font-sans ${Number(data.deviation) > 0 ? 'text-rose-500' : Number(data.deviation) < 0 ? 'text-blue-600' : 'text-gray-400'}`}>
-                            {Number(data.deviation) > 0 ? `+${data.deviation}` : data.deviation}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           
-          {/* [PAGE 02] */}
+          {/* PAGE 02 */}
           <div className="report-page shadow-2xl bg-white print:shadow-none print:m-0">
             <h3 className="text-xl font-black mb-8 flex items-center gap-3">
               <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm shadow-lg font-sans">03</span>
-              <span className="uppercase text-indigo-900 tracking-tight">시험별 성적 추이 분석</span>
+              <span className="uppercase text-indigo-900 tracking-tight font-sans">시험별 성적 추이 분석</span>
             </h3>
             <div className="grid grid-cols-2 gap-6 mb-10">
               {reportData.map((data, i) => (
@@ -386,7 +383,6 @@ export default function AdminReportPage() {
             background: white !important; 
             box-sizing: border-box; 
           }
-          .chart-box, .mt-auto, h3 { page-break-inside: avoid; break-inside: avoid; }
           @page { size: A4; margin: 0; }
         }
         .report-container { width: 210mm; }
