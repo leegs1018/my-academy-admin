@@ -19,8 +19,9 @@ export default function AdminReportPage() {
   const [maxSessions, setMaxSessions] = useState(0); 
   const [masterDates, setMasterDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // 저장 상태 관리
 
-  // 1. 초기 로딩: 학생 목록
+  // 1. 학생 목록 가져오기
   useEffect(() => {
     const fetchStudents = async () => {
       const { data } = await supabase.from('students').select('*').order('name', { ascending: true });
@@ -31,19 +32,61 @@ export default function AdminReportPage() {
 
   const classList = ['전체 클래스', ...Array.from(new Set(students.map(s => s.class_name).filter(Boolean)))];
 
-  // 2. 리포트 데이터 가져오기 및 정렬 로직
+  // 2. 피드백 불러오기 로직
+  const fetchFeedback = useCallback(async () => {
+    if (!selectedStudent) return;
+    
+    const { data, error } = await supabase
+      .from('teacher_feedbacks')
+      .select('content')
+      .eq('student_id', selectedStudent.id)
+      .eq('year', selectedYear)
+      .eq('month', selectedMonth)
+      .maybeSingle(); // 데이터가 없어도 에러를 내지 않음
+
+    if (data) {
+      setTeacherComment(data.content);
+    } else {
+      setTeacherComment(''); 
+    }
+  }, [selectedStudent, selectedYear, selectedMonth]);
+
+  // 3. 피드백 저장 로직
+  const saveFeedback = async () => {
+    if (!selectedStudent) {
+      alert('학생을 먼저 선택해주세요.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('teacher_feedbacks')
+        .upsert({
+          student_id: selectedStudent.id,
+          year: selectedYear,
+          month: selectedMonth,
+          content: teacherComment,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'student_id,year,month' });
+
+      if (error) throw error;
+      alert('피드백이 안전하게 저장되었습니다.');
+    } catch (err) {
+      console.error(err);
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 4. 성적 데이터 분석 로직
   const fetchReportData = useCallback(async () => {
     if (!selectedStudent) return;
     setLoading(true);
     try {
       const monthNum = selectedMonth.replace('월', '');
-      
-      // ✅ [설정] 주당 수업 횟수에 따른 최대 회차 제한 (보통 8회)
-      // 만약 주 3회 수업 클래스가 있다면 이 값을 12로 유동적으로 조절하거나 
-      // 안전하게 8~10 정도로 고정할 수 있습니다.
       const LIMIT_SESSIONS = 8; 
 
-      // 내 성적 데이터
       const { data: grades } = await supabase
         .from('grades')
         .select('*')
@@ -51,7 +94,6 @@ export default function AdminReportPage() {
         .filter('test_name', 'ilike', `% ${monthNum}월%`)
         .filter('test_date', 'ilike', `${selectedYear}%`);
 
-      // 비교용 전체 성적 데이터
       const { data: allGrades } = await supabase
         .from('grades')
         .select('test_name, score')
@@ -65,7 +107,7 @@ export default function AdminReportPage() {
         const sessionMatch = g.test_name.match(/(\d+)회차/);
         if (sessionMatch && g.test_date) {
           const sNum = parseInt(sessionMatch[1]);
-          if (sNum <= LIMIT_SESSIONS) { // 제한 범위 내 날짜만 수집
+          if (sNum <= LIMIT_SESSIONS) {
             allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
           }
         }
@@ -80,11 +122,8 @@ export default function AdminReportPage() {
           const sessionMatch = g.test_name.match(/(\d+)회차/);
           if (sessionMatch) {
             const sNum = parseInt(sessionMatch[1]);
-            
-            // ✅ [수정] 9회차 등 제한 범위를 벗어나는 데이터는 무시
             if (sNum <= LIMIT_SESSIONS) {
               if (sNum > tempMax) tempMax = sNum;
-
               const sameTestGrades = allGrades?.filter(ag => ag.test_name === g.test_name) || [];
               const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => !isNaN(s));
               const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
@@ -106,7 +145,6 @@ export default function AdminReportPage() {
 
         const myScores = sessions.map(s => s.score).filter(s => s > 0);
         const myAvg = myScores.length > 0 ? (myScores.reduce((a, b) => a + b, 0) / myScores.length) : 0;
-        
         const classAvgs = sessions.map(s => s.average).filter(s => s > 0);
         const classTotalAvg = classAvgs.length > 0 ? (classAvgs.reduce((a, b) => a + b, 0) / classAvgs.length) : 0;
 
@@ -120,21 +158,23 @@ export default function AdminReportPage() {
         };
       });
 
-      const masterDatesArray = Array.from({ length: tempMax }, (_, i) => allDatesMap[i + 1] || '-');
-      
-      setMasterDates(masterDatesArray);
+      setMasterDates(Array.from({ length: tempMax }, (_, i) => allDatesMap[i + 1] || '-'));
       setMaxSessions(tempMax); 
       setReportData(processedData);
     } catch (err) { console.error(err); } finally { setLoading(false); }
   }, [selectedStudent, selectedYear, selectedMonth]);
 
-  useEffect(() => { fetchReportData(); }, [fetchReportData]);
+  // 데이터 로딩 트리거 (성적 & 피드백)
+  useEffect(() => { 
+    fetchReportData(); 
+    fetchFeedback();
+  }, [fetchReportData, fetchFeedback]);
 
   const handlePrint = () => { window.print(); };
 
   return (
     <div className="p-6 bg-gray-100 min-h-screen pb-20 font-sans tracking-tight">
-      {/* 관리 도구 영역 */}
+      {/* [관리 도구 영역] - 인쇄 시 숨김 */}
       <div className="max-w-[1100px] mx-auto bg-white p-8 rounded-[2.5rem] shadow-sm mb-10 print:hidden border border-indigo-50">
         <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-black text-indigo-900 tracking-tighter uppercase font-sans">📊 Report Manager</h1>
@@ -148,7 +188,7 @@ export default function AdminReportPage() {
                 </select>
             </div>
             <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex-grow h-40 overflow-y-auto border-2 border-gray-100 rounded-2xl p-2 bg-white grid grid-cols-2 md:grid-cols-3 gap-2">
+                <div className="flex-grow h-44 overflow-y-auto border-2 border-gray-100 rounded-2xl p-2 bg-white grid grid-cols-2 md:grid-cols-3 gap-2">
                     {students.filter(s => s.name.includes(searchTerm) && (classFilter === '전체 클래스' || s.class_name === classFilter)).map(s=>(
                         <div key={s.id} onClick={()=>setSelectedStudent(s)} className={`p-3 rounded-xl cursor-pointer font-bold text-center transition-all border ${selectedStudent?.id === s.id ? 'bg-indigo-600 text-white shadow-md':'bg-white text-gray-600 border-gray-100 hover:bg-indigo-50'}`}>
                             {s.name} <span className="block text-[10px] opacity-60">{s.class_name}</span>
@@ -164,7 +204,12 @@ export default function AdminReportPage() {
                             {[...Array(12)].map((_,i)=><option key={i+1} value={`${i+1}월`}>{i+1}월</option>)}
                         </select>
                     </div>
-                    <textarea className="w-full p-5 border-2 rounded-[2rem] h-28 bg-gray-50 font-bold text-indigo-900 outline-none" placeholder="담당 선생님 피드백..." value={teacherComment} onChange={(e)=>setTeacherComment(e.target.value)} />
+                    <div className="flex flex-col gap-2">
+                        <textarea className="w-full p-5 border-2 rounded-[2rem] h-28 bg-gray-50 font-bold text-indigo-900 outline-none focus:border-indigo-500" placeholder="해당 학생의 이번 달 피드백을 입력하세요..." value={teacherComment} onChange={(e)=>setTeacherComment(e.target.value)} />
+                        <button onClick={saveFeedback} disabled={isSaving} className={`py-3 rounded-xl font-black text-white transition-all ${isSaving ? 'bg-gray-400' : 'bg-indigo-500 hover:bg-indigo-600 shadow-lg'}`}>
+                          {isSaving ? '저장 중...' : '피드백 저장하기'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -180,20 +225,15 @@ export default function AdminReportPage() {
                 <p className="text-gray-500 font-bold uppercase tracking-widest text-[18px]">개별 맞춤 성적 분석 리포트</p>
               </div>
               <div className="flex items-center gap-4 h-14 text-right">
-                {/* 1. Montserrat(현대적) 또는 Playfair Display(우아함) 스타일 추천 */}
-<div className="flex flex-col justify-center">
-  <span className="text-[24px] font-bold text-indigo-900 tracking-tighter leading-none mb-2 ">
-    LJY English Institute
-  </span>
-  <span className="text-xl font-black text-indigo-900 leading-none">
-    이주영 영어학원
-  </span>
-</div>
+                <div className="flex flex-col justify-center">
+                  <span className="text-[24px] font-bold text-indigo-900 tracking-tighter leading-none mb-2">LJY English Institute</span>
+                  <span className="text-xl font-black text-indigo-900 leading-none">이주영 영어학원</span>
+                </div>
                 <div className="w-1 h-full bg-indigo-600"></div>
               </div>
             </div>
             
-            <div className="bg-indigo-50 border-2 border-indigo-100 px-10 py-7 mb-8 rounded-none flex items-center justify-between">
+            <div className="bg-indigo-50 border-2 border-indigo-100 px-10 py-7 mb-8 flex items-center justify-between">
               <div className="flex items-baseline gap-3">
                 <span className="text-4xl font-black text-indigo-900">{selectedStudent.name}</span>
                 <span className="text-lg font-bold text-indigo-400">학생</span>
@@ -218,24 +258,21 @@ export default function AdminReportPage() {
               <table className="w-full border-collapse border-t-2 border-indigo-900 table-fixed text-[11px]">
                 <thead>
                   <tr className="bg-indigo-50">
-                    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-2 relative">
-                       <div className="flex flex-col justify-between h-[50px]">
-                         <span className="self-end text-indigo-900 font-bold">회차(날짜)</span>
-                         <span className="self-start text-indigo-900 font-bold">평가항목</span>
-                       </div>
+                    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-0 relative overflow-hidden bg-indigo-50/50">
+                      <div className="absolute inset-0" style={{background: 'linear-gradient(to top right, transparent calc(50% - 0.5px), #c7d2fe 50%, transparent calc(50% + 0.5px))'}}></div>
+                      <div className="relative h-[60px] w-full">
+                        <span className="absolute top-2 right-2 text-indigo-900 font-bold text-[10px]">회차 (날짜)</span>
+                        <span className="absolute bottom-2 left-2 text-indigo-900 font-bold text-[10px]">평가 항목</span>
+                      </div>
                     </th>
                     {[...Array(maxSessions)].map((_, i) => (
-                      <th key={i} className="py-2 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black">
-                        {i + 1}회
-                      </th>
+                      <th key={i} className="py-2 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black">{i + 1}회</th>
                     ))}
                     <th rowSpan={2} className="py-2 px-2 font-black border-b-2 border-indigo-900 bg-indigo-900 text-[15px] text-white text-center w-[20%]">평균 / 만점</th>
                   </tr>
                   <tr className="bg-white">
                     {[...Array(maxSessions)].map((_, i) => (
-                      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">
-                        {masterDates[i] || '-'}
-                      </th>
+                      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">{masterDates[i] || '-'}</th>
                     ))}
                   </tr>
                 </thead>
@@ -280,15 +317,9 @@ export default function AdminReportPage() {
                           <td className="py-4 text-gray-600">{data.subject}</td>
                           <td className="py-4 text-2xl font-sans">{data.avgScore}점</td>
                           <td className="py-4 text-xl text-gray-400 font-sans">{data.totalClassAvg}점</td>
-<td className={`py-4 text-2xl font-sans ${
-  Number(data.deviation) > 0 
-    ? 'text-rose-500'   // 0 초과: 빨간색
-    : Number(data.deviation) < 0 
-      ? 'text-blue-600' // 0 미만: 파란색
-      : 'text-gray-400' // 0일 때: 회색
-}`}>
-  {Number(data.deviation) > 0 ? `+${data.deviation}` : data.deviation}
-</td>
+                          <td className={`py-4 text-2xl font-sans ${Number(data.deviation) > 0 ? 'text-rose-500' : Number(data.deviation) < 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {Number(data.deviation) > 0 ? `+${data.deviation}` : data.deviation}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -298,7 +329,7 @@ export default function AdminReportPage() {
           </div>
           
           {/* [PAGE 02] */}
-          <div className="report-page shadow-2xl bg-white print:shadow-none print:m-0 page-break-before">
+          <div className="report-page shadow-2xl bg-white print:shadow-none print:m-0">
             <h3 className="text-xl font-black mb-8 flex items-center gap-3">
               <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm shadow-lg font-sans">03</span>
               <span className="uppercase text-indigo-900 tracking-tight">시험별 성적 추이 분석</span>
@@ -316,7 +347,7 @@ export default function AdminReportPage() {
                         <Tooltip />
                         <Legend verticalAlign="bottom" iconType="circle" />
                         <Bar dataKey="score" name="내 점수" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={20} />
-                        <Bar dataKey="average" name="반 평균" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={20} />
+                        <Bar dataKey="average" name="반 평균" fill="#a5a8ac" radius={[4, 4, 0, 0]} barSize={20} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -330,7 +361,7 @@ export default function AdminReportPage() {
               </h4>
               <div className="w-full h-[1px] bg-indigo-200 mb-8"></div>
               <p className="text-black leading-[2.2] whitespace-pre-wrap font-bold text-xl">
-                {teacherComment || '이번 달 학습 성취도를 종합한 결과, 전반적으로 안정적인 흐름을 보이고 있습니다. 개별 취약 포인트에 대한 집중 관리를 통해 더 높은 성장을 이룰 수 있도록 지도하겠습니다.'}
+                {teacherComment || '이번 달 학습 성취도를 종합한 결과, 전반적으로 안정적인 흐름을 보이고 있습니다.'}
               </p>
             </div>
           </div>
@@ -339,15 +370,27 @@ export default function AdminReportPage() {
 
       <style jsx global>{`
         @media print {
+          html, body { margin: 0; padding: 0; width: 210mm; height: 100%; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           body * { visibility: hidden; }
           .report-container, .report-container * { visibility: visible; }
-          .report-container { position: absolute; left: 0; top: 0; width: 210mm; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          .report-page { height: 296mm; padding: 10mm 15mm !important; page-break-after: always; }
+          .report-container { position: absolute; left: 0; top: 0; width: 210mm; margin: 0 !important; padding: 0 !important; }
+          .report-page { 
+            width: 210mm; 
+            height: 296mm; 
+            padding: 20mm 15mm !important; 
+            margin: 0 !important; 
+            page-break-after: always; 
+            page-break-inside: avoid; 
+            display: flex; 
+            flex-direction: column; 
+            background: white !important; 
+            box-sizing: border-box; 
+          }
+          .chart-box, .mt-auto, h3 { page-break-inside: avoid; break-inside: avoid; }
           @page { size: A4; margin: 0; }
         }
         .report-container { width: 210mm; }
-        .report-page { width: 210mm; min-height: 297mm; padding: 10mm 15mm !important; display: flex; flex-direction: column; background-color: white; }
+        .report-page { width: 210mm; min-height: 297mm; padding: 20mm 15mm !important; display: flex; flex-direction: column; background-color: white; box-shadow: 0 0 20px rgba(0,0,0,0.1); margin-bottom: 20px; }
       `}</style>
     </div>
   );
