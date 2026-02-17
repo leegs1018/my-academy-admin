@@ -250,6 +250,38 @@ export default function AdminReportPage() {
 
   }, [selectedStudent, selectedYear, selectedMonth, classListData]);
 
+  const handleIndividualBulkPrint = async () => {
+  const filteredStudents = students.filter(s => 
+    (classFilter === '전체 클래스' || s.class_name === classFilter)
+  );
+
+  if (filteredStudents.length === 0) return alert('출력할 학생이 없습니다.');
+  if (!confirm(`${classFilter} 학생 ${filteredStudents.length}명의 리포트를 각각 저장하시겠습니까?\n(인쇄창이 여러 번 나타납니다.)`)) return;
+
+  for (const student of filteredStudents) {
+    // 1. 학생 선택 (상태 업데이트)
+    setSelectedStudent(student);
+    
+    // 2. 데이터가 로드되고 UI가 그려질 때까지 대기
+    // (useEffect가 fetchReportData를 실행하므로 로딩이 끝날 때까지 기다려야 합니다)
+    await new Promise((resolve) => setTimeout(resolve, 1500)); 
+
+    // 3. 파일명 설정
+    const fileName = `${student.name}_${selectedYear}년_${selectedMonth}_성적표`;
+    const originalTitle = document.title;
+    document.title = fileName;
+
+    // 4. 인쇄창 실행 (인쇄창이 닫힐 때까지 스크립트가 일시 중지됨)
+    window.print();
+
+    // 5. 제목 복구 및 다음 학생을 위한 짧은 휴식
+    document.title = originalTitle;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  
+  alert('모든 학생의 리포트 처리가 완료되었습니다.');
+};
+
 
 
   useEffect(() => { fetchReportData(); fetchFeedback(); }, [fetchReportData, fetchFeedback]);
@@ -264,33 +296,40 @@ export default function AdminReportPage() {
 
       <div className="max-w-[1100px] mx-auto bg-white p-8 rounded-[2.5rem] shadow-sm mb-10 print:hidden border border-indigo-50">
 
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
 
             <h1 className="text-3xl font-black text-indigo-900 tracking-tighter uppercase">📊 Report Manager</h1>
+          {/* 버튼 그룹: 오른쪽 정렬 및 적당한 간격(gap-4) */}
+          <div className="flex items-center gap-4">
+            <button 
+               onClick={handleIndividualBulkPrint}
+               className="bg-orange-500 text-white px-6 py-4 rounded-2xl font-black shadow-lg hover:bg-orange-600 transition-all flex items-center gap-2 text-sm">
+              <span>🖨️</span> {classFilter} 개별 일괄 저장
+            </button>
 
             <button 
-  onClick={() => {
-    // 1. 현재 날짜나 선택된 월에서 '월' 글자만 추출 (예: "2월")
-    const fileName = `${selectedStudent?.name || '학생'}_${selectedYear}년_${selectedMonth}_성적표`;
+              onClick={() => {
+              // 1. 현재 날짜나 선택된 월에서 '월' 글자만 추출 (예: "2월")
+              const fileName = `${selectedStudent?.name || '학생'}_${selectedYear}년_${selectedMonth}_성적표`;
     
-    // 2. 브라우저 탭의 제목을 임시로 변경 (이것이 PDF 파일명이 됩니다)
-    const originalTitle = document.title;
-    document.title = fileName;
+              // 2. 브라우저 탭의 제목을 임시로 변경 (이것이 PDF 파일명이 됩니다)
+              const originalTitle = document.title;
+              document.title = fileName;
+              
+                // 3. 인쇄창 실행
+                window.print();
     
-    // 3. 인쇄창 실행
-    window.print();
-    
-    // 4. 인쇄창이 닫힌 후 다시 원래 제목으로 복구 (약간의 지연 필요)
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 1000);
-  }} 
-  className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all"
->
-  리포트 발행 (PDF)
-</button>
-
-        </div>
+                // 4. 인쇄창이 닫힌 후 다시 원래 제목으로 복구 (약간의 지연 필요)
+                setTimeout(() => {
+                  document.title = originalTitle;
+                }, 1000);
+              }} 
+              className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2 text-sm">
+              리포트 발행 (PDF)
+            </button>
+            </div>
+          </div>     
+        
 
         <div className="space-y-6">
 
