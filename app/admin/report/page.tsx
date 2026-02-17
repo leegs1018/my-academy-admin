@@ -544,35 +544,70 @@ export default function AdminReportPage() {
 
 
 
-         {/* 2페이지 카드 그리드 부분 */}
-<div className="grid grid-cols-3 gap-6 mb-10">
-  {/* 나의 종합 평균 */}
-  <div className="bg-[#f0f4ff] rounded-[2rem] p-8 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
-    <p className="text-indigo-600 font-black text-sm mb-4 uppercase tracking-widest">나의 종합 평균</p>
-    <div className="flex items-baseline gap-1">
-      <span className="text-[44px] font-black text-indigo-900 leading-none">62.7</span>
-      <span className="text-xl font-bold text-indigo-900">점</span>
-    </div>
-  </div>
+  
+{/* 2페이지 카드 그리드: 4컬럼 구성 (소수점 반영 버전) */}
+<div className="grid grid-cols-4 gap-4 mb-10">
+  {(() => {
+    // 1. 기본 데이터 계산 로직
+    const subjectCount = reportData.length || 1;
+    
+    // 나의 전체 평균 (모든 과목 avgScore의 평균)
+    const totalMyAvg = reportData.reduce((acc, curr) => acc + Number(curr.avgScore), 0) / subjectCount;
+    
+    // 클래스 전체 평균 (모든 과목 totalClassAvg의 평균)
+    const totalClassAvg = reportData.reduce((acc, curr) => acc + Number(curr.totalClassAvg), 0) / subjectCount;
+    
+    // 종합 만점 기준 (모든 과목 maxStandard의 평균) - 소수점 반영
+    const averageMaxScore = reportData.reduce((acc, curr) => acc + Number(curr.maxStandard), 0) / subjectCount;
+    
+    // 편차 계산
+    const deviation = (totalMyAvg - totalClassAvg).toFixed(1);
 
-  {/* 클래스 평균 (번짐 발생 지점 - shadow-sm 등을 완전히 제거) */}
-  <div className="bg-[#f8f9fa] rounded-[2rem] p-8 flex flex-col items-center justify-center border-2 border-gray-200 shadow-none">
-    <p className="text-gray-500 font-black text-sm mb-4 uppercase tracking-widest">클래스 평균</p>
-    <div className="flex items-baseline gap-1">
-      <span className="text-[44px] font-black text-gray-700 leading-none">51.7</span>
-      <span className="text-xl font-bold text-gray-700">점</span>
-    </div>
-  </div>
+    return (
+      <>
+      {/* 1. 종합 만점 기준 (소수점 반영) */}
+        <div className="bg-slate-50 rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-slate-200 shadow-none">
+          <p className="text-slate-500 font-black text-[13px] mb-3 uppercase tracking-widest">클래스 만점 기준</p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[36px] font-black text-slate-700 leading-none">{averageMaxScore.toFixed(1)}</span>
+            <span className="text-sm font-bold text-slate-700">점</span>
+          </div>
+        </div>
+        {/* 2. 나의 종합 평균 */}
+        <div className="bg-[#f0f4ff] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
+          <p className="text-indigo-600 font-black text-[13px] mb-3 uppercase tracking-widest">나의 평균</p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[36px] font-black text-indigo-900 leading-none">{totalMyAvg.toFixed(1)}</span>
+            <span className="text-sm font-bold text-indigo-900">점</span>
+          </div>
+        </div>
 
-  {/* 평균 대비 */}
-  <div className="bg-[#eefcf4] rounded-[2rem] p-8 flex flex-col items-center justify-center border-2 border-emerald-200 shadow-none">
-    <p className="text-emerald-600 font-black text-sm mb-4 uppercase tracking-widest">평균 대비</p>
-    <div className="flex items-baseline gap-1">
-      <span className="text-[44px] font-black text-emerald-700 leading-none">+11.0</span>
-      <span className="text-xl font-bold text-emerald-700">점</span>
-    </div>
-  </div>
+        {/* 3. 클래스 평균 */}
+        <div className="bg-[#f8f9fa] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-gray-200 shadow-none">
+          <p className="text-gray-500 font-black text-[13px] mb-3 uppercase tracking-widest">클래스 평균</p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[36px] font-black text-gray-700 leading-none">{totalClassAvg.toFixed(1)}</span>
+            <span className="text-sm font-bold text-gray-700">점</span>
+          </div>
+        </div>
+
+        
+
+        {/* 4. 평균 대비 */}
+        <div className="bg-[#eefcf4] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-emerald-200 shadow-none">
+          <p className="text-emerald-600 font-black text-[13px] mb-3 uppercase tracking-widest">평균 대비</p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[36px] font-black text-emerald-700 leading-none">
+              {Number(deviation) > 0 ? `+${deviation}` : deviation}
+            </span>
+            <span className="text-sm font-bold text-emerald-700">점</span>
+          </div>
+        </div>
+      </>
+    );
+  })()}
 </div>
+  
 
 
             {/* 하단 분석 테이블 - 직각형 */}
