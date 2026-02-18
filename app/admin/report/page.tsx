@@ -604,55 +604,59 @@ export default function AdminReportPage() {
 
 
   
-{/* 2페이지 카드 그리드: 4컬럼 구성 (소수점 반영 버전) */}
+{/* 2페이지 카드 그리드: 4컬럼 구성 (100점 만점 환산 버전) */}
 <div className="grid grid-cols-4 gap-4 mb-10">
   {(() => {
-    // 1. 기본 데이터 계산 로직
+    // 1. 환산 로직 정의
     const subjectCount = reportData.length || 1;
     
-    // 나의 전체 평균 (모든 과목 avgScore의 평균)
-    const totalMyAvg = reportData.reduce((acc, curr) => acc + Number(curr.avgScore), 0) / subjectCount;
+    // 각 과목의 (점수 / 만점 * 100)을 계산하여 평균을 냄
+    const totalMyAvgConverted = reportData.reduce((acc, curr) => {
+      const myScore = Number(curr.avgScore);
+      const maxScore = Number(curr.maxStandard) || 100;
+      return acc + (myScore / maxScore * 100);
+    }, 0) / subjectCount;
     
-    // 클래스 전체 평균 (모든 과목 totalClassAvg의 평균)
-    const totalClassAvg = reportData.reduce((acc, curr) => acc + Number(curr.totalClassAvg), 0) / subjectCount;
+    // 각 과목의 (클래스점수 / 만점 * 100)을 계산하여 평균을 냄
+    const totalClassAvgConverted = reportData.reduce((acc, curr) => {
+      const classScore = Number(curr.totalClassAvg);
+      const maxScore = Number(curr.maxStandard) || 100;
+      return acc + (classScore / maxScore * 100);
+    }, 0) / subjectCount;
     
-    // 종합 만점 기준 (모든 과목 maxStandard의 평균) - 소수점 반영
-    const averageMaxScore = reportData.reduce((acc, curr) => acc + Number(curr.maxStandard), 0) / subjectCount;
-    
-    // 편차 계산
-    const deviation = (totalMyAvg - totalClassAvg).toFixed(1);
+    // 편차 계산 (환산 점수 기준)
+    const deviation = (totalMyAvgConverted - totalClassAvgConverted).toFixed(1);
 
     return (
       <>
-      {/* 1. 종합 만점 기준 (소수점 반영) */}
+        {/* 1. 클래스 만점 기준 (환산이므로 항상 100) */}
         <div className="bg-slate-50 rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-slate-200 shadow-none">
-          <p className="text-slate-500 font-black text-[13px] mb-3 uppercase tracking-widest">클래스 만점 기준</p>
+          <p className="text-slate-500 font-black text-[13px] mb-3 uppercase tracking-widest">환산 만점 기준</p>
           <div className="flex items-baseline gap-1">
-            <span className="text-[36px] font-black text-slate-700 leading-none">{averageMaxScore.toFixed(1)}</span>
+            <span className="text-[36px] font-black text-slate-700 leading-none">100.0</span>
             <span className="text-sm font-bold text-slate-700">점</span>
           </div>
         </div>
-        {/* 2. 나의 종합 평균 */}
+
+        {/* 2. 나의 환산 평균 */}
         <div className="bg-[#f0f4ff] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
-          <p className="text-indigo-600 font-black text-[13px] mb-3 uppercase tracking-widest">나의 평균</p>
+          <p className="text-indigo-600 font-black text-[13px] mb-3 uppercase tracking-widest">나의 환산 평균</p>
           <div className="flex items-baseline gap-1">
-            <span className="text-[36px] font-black text-indigo-900 leading-none">{totalMyAvg.toFixed(1)}</span>
+            <span className="text-[36px] font-black text-indigo-900 leading-none">{totalMyAvgConverted.toFixed(1)}</span>
             <span className="text-sm font-bold text-indigo-900">점</span>
           </div>
         </div>
 
-        {/* 3. 클래스 평균 */}
+        {/* 3. 클래스 환산 평균 */}
         <div className="bg-[#f8f9fa] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-gray-200 shadow-none">
-          <p className="text-gray-500 font-black text-[13px] mb-3 uppercase tracking-widest">클래스 평균</p>
+          <p className="text-gray-500 font-black text-[13px] mb-3 uppercase tracking-widest">클래스 환산 평균</p>
           <div className="flex items-baseline gap-1">
-            <span className="text-[36px] font-black text-gray-700 leading-none">{totalClassAvg.toFixed(1)}</span>
+            <span className="text-[36px] font-black text-gray-700 leading-none">{totalClassAvgConverted.toFixed(1)}</span>
             <span className="text-sm font-bold text-gray-700">점</span>
           </div>
         </div>
 
-        
-
-        {/* 4. 평균 대비 */}
+        {/* 4. 평균 대비 (환산 기준) */}
         <div className="bg-[#eefcf4] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-emerald-200 shadow-none">
           <p className="text-emerald-600 font-black text-[13px] mb-3 uppercase tracking-widest">평균 대비</p>
           <div className="flex items-baseline gap-1">
@@ -757,8 +761,8 @@ export default function AdminReportPage() {
               tick={{fontSize: 10, fill: '#cbd5e1'}}
             />
             <Tooltip cursor={false} contentStyle={{ display: 'none' }} />
-            <Bar dataKey="score" fill="#4f46e5" barSize={18} />
-            <Bar dataKey="average" fill="#8f97a0" barSize={18} />
+            <Bar dataKey="score" fill="#4f46e5" barSize={18} radius={[4,4,0,0]}/>
+            <Bar dataKey="average" fill="#8f97a0" barSize={18} radius={[4,4,0,0]}/>
           </BarChart>
         </ResponsiveContainer>
       </div>
