@@ -3,18 +3,28 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
+/**
+ * 1. 날짜 포맷 함수: fetchData 내에서 안전하게 호출할 수 있도록 외부에 배치
+ */
+const formatShortDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  return parts.length === 3 ? `${parts[1]}/${parts[2]}` : dateStr;
+};
+
 export default function GradeInputPage() {
   const [classList, setClassList] = useState<any[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [maxScore, setMaxScore] = useState(100);
   const [dynamicCategories, setDynamicCategories] = useState<any[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState(''); 
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [subjectDescription, setSubjectDescription] = useState('');
   const [sessionDates, setSessionDates] = useState<{label: string, fullDate: string}[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // 초기 클래스 목록 로드
   useEffect(() => {
     async function fetchClasses() {
       const { data } = await supabase.from('classes').select('*').order('class_name');
@@ -23,6 +33,7 @@ export default function GradeInputPage() {
     fetchClasses();
   }, []);
 
+  // 클래스, 월, 과목이 바뀔 때마다 데이터 로드
   useEffect(() => {
     if (!selectedClassId || classList.length === 0) {
       setStudents([]); setSessionDates([]); setSubjectDescription(''); return;
@@ -46,25 +57,52 @@ export default function GradeInputPage() {
         
         const currentCat = cats.find((c: any) => c.id === selectedCategoryId);
         
+        // Max Score와 성적 데이터 불러오기
+        fetchMaxScore(selectedCategoryId);
         fetchData(selectedClassId, selectedMonth, selectedCategoryId, currentCat?.name || '', activeDays);
         setSubjectDescription(currentCat?.description || '');
-        fetchMaxScore(selectedMonth, selectedCategoryId);
       }
     }
   }, [selectedClassId, selectedMonth, selectedCategoryId, classList]);
 
-  const fetchMaxScore = async (month: number, catId: string) => {
-    const { data } = await supabase.from('grades').select('max_score').eq('subject_id', catId).filter('test_name', 'ilike', `% ${month}월%`).limit(1).maybeSingle();
-    if (data?.max_score) setMaxScore(data.max_score);
-    else setMaxScore(100);
-  };
+  /**
+   * 2. Max Score 불러오기: category_id(UUID/Text)를 기준으로 가장 최신 데이터 1건 조회
+   */
+  const fetchMaxScore = async (catId: string) => {
+  if (!catId) return;
 
-  const formatShortDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    return parts.length === 3 ? `${parts[1]}/${parts[2]}` : dateStr;
-  };
+  // 따옴표 및 공백 제거
+  const cleanId = String(catId).replace(/['"]+/g, '').trim();
 
+  try {
+    const { data, error } = await supabase
+      .from('grades')
+      .select('max_score')
+      .eq('category_id', cleanId)
+      // 🚨 created_at 대신 확실히 존재하는 test_date로 정렬합니다.
+      .order('test_date', { ascending: false }) 
+      .limit(1);
+
+    if (error) {
+      console.error("❌ DB 조회 에러:", error.message);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      console.log("🎯 Max Score 로드 성공:", data[0].max_score);
+      setMaxScore(data[0].max_score);
+    } else {
+      console.log("⚠️ 해당 과목에 저장된 기록이 없어 기본값 100을 사용합니다.");
+      setMaxScore(100);
+    }
+  } catch (err) {
+    console.error("❌ 시스템 에러:", err);
+  }
+};
+
+  /**
+   * 3. 성적 및 학생 데이터 불러오기 (8회차 제한 로직 포함)
+   */
   const fetchData = async (classId: string, month: number, catId: string, catName: string, targetDays: number[]) => {
     setLoading(true);
     try {
@@ -73,6 +111,7 @@ export default function GradeInputPage() {
       const targetClassName = currentClassObj?.class_name || "";
       const lastDayOfMonth = new Date(year, month, 0).getDate();
 
+      // 해당 월의 수업 요일 계산
       let actualSessions: {label: string, fullDate: string}[] = [];
       for (let d = 1; d <= lastDayOfMonth; d++) {
         const dateObj = new Date(year, month - 1, d);
@@ -83,32 +122,27 @@ export default function GradeInputPage() {
       }
       actualSessions.sort((a, b) => a.fullDate.localeCompare(b.fullDate));
 
+      // 🛑 9회차 방지: 주당 수업 일수 * 4주 기준으로 제한 (최대 8회 등)
       const sessionLimit = (targetDays.length > 0 ? targetDays.length : 2) * 4;
       if (actualSessions.length > sessionLimit) {
         actualSessions = actualSessions.slice(0, sessionLimit);
       }
 
       const { data: studentData } = await supabase.from('students').select('*').eq('class_name', targetClassName);
-      
-      // ✅ 중요: test_name 대신 subject_id를 우선하여 데이터 조회
-      const { data: allGradeData } = await supabase
-        .from('grades')
-        .select('*')
-        .eq('subject_id', catId);
+      const { data: allGradeData } = await supabase.from('grades').select('*').eq('category_id', catId);
 
       if (studentData) {
         const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
         const formatted = sortedStudents.map(student => {
           const scores = Array(actualSessions.length).fill('');
           actualSessions.forEach((session, i) => {
-            // ✅ 이름이 바뀌어도 "n월 n회차"라는 패턴만 맞으면 데이터를 가져오도록 매칭 로직 강화
-            const found = allGradeData?.find(g => 
-              g.student_id === student.id && 
+            const found = allGradeData?.find(g =>
+              g.student_id === student.id &&
               g.test_name.includes(`${month}월 ${i + 1}회차`)
             );
-
             if (found) {
               scores[i] = (found.score === 0 || found.score === null) ? '' : found.score.toString();
+              // 저장된 날짜가 있다면 UI 날짜 동기화
               if (found.test_date) {
                 actualSessions[i].fullDate = found.test_date;
                 actualSessions[i].label = formatShortDate(found.test_date);
@@ -120,7 +154,11 @@ export default function GradeInputPage() {
         setSessionDates(actualSessions);
         setStudents(formatted);
       }
-    } finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateSessionDate = (idx: number, newFullDate: string) => {
@@ -136,7 +174,7 @@ export default function GradeInputPage() {
       return;
     }
     const num = Number(value);
-    if (num < 0 || num > maxScore) return; 
+    if (num < 0 || num > maxScore) return;
     setStudents(prev => prev.map(s => s.id === studentId ? { ...s, scores: s.scores.map((v:any, i:number) => i === idx ? value : v) } : s));
   };
 
@@ -146,12 +184,14 @@ export default function GradeInputPage() {
     const currentCat = dynamicCategories.find(c => c.id === selectedCategoryId);
     const catName = currentCat?.name || '과목';
     const upsertGrades: any[] = [];
+    
     sessionDates.forEach((session, idx) => {
       students.forEach(student => {
         const score = student.scores[idx];
         upsertGrades.push({
           student_id: student.id,
-          subject_id: selectedCategoryId, 
+          category_id: selectedCategoryId,
+          class_id: parseInt(selectedClassId),
           test_name: `[${catName}] ${selectedMonth}월 ${idx + 1}회차`,
           score: score === '' ? 0 : parseInt(score),
           test_date: session.fullDate,
@@ -159,21 +199,28 @@ export default function GradeInputPage() {
         });
       });
     });
+
     try {
-      if (upsertGrades.length > 0) {
-        const { error } = await supabase.from('grades').upsert(upsertGrades, { onConflict: 'student_id, test_name' });
-        if (error) throw error;
-      }
+      const { error } = await supabase.from('grades').upsert(upsertGrades, { 
+        onConflict: 'student_id,category_id,test_name' 
+      });
+      if (error) throw error;
       alert(`성적이 성공적으로 저장되었습니다! ✅`);
-    } catch (err) { alert("저장 중 오류 발생"); } finally { setLoading(false); }
+      fetchMaxScore(selectedCategoryId);
+    } catch (err) { 
+      console.error(err);
+      alert("저장 중 오류 발생"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return (
     <div className="max-w-[98%] mx-auto py-10 px-4 font-sans tracking-tight bg-slate-50 min-h-screen">
-      {/* 상단 컨트롤 */}
+      {/* 상단 컨트롤러 */}
       <div className="flex flex-wrap items-end mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-50 gap-4">
         <div className="flex-1 min-w-[200px]">
-          <h1 className="text-2xl font-black text-indigo-900 mb-1 italic">성적 입력 매니저</h1>
+          <h1 className="text-2xl font-black text-indigo-900 mb-1 ">성적 입력 매니저</h1>
           <p className="text-indigo-400 font-bold text-[10px] uppercase tracking-[0.2em]">Academic Records System</p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -197,13 +244,15 @@ export default function GradeInputPage() {
 
       {selectedClassId && selectedCategoryId ? (
         <>
+          {/* 과목 설명 */}
           <div className="mb-6 bg-white rounded-[2rem] p-6 shadow-sm border border-indigo-50">
             <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-2 ml-1">Learning Description</h3>
-            <div className="w-full text-base font-bold text-gray-700 bg-indigo-50/10 rounded-xl p-4 border-2 border-indigo-50 italic">
+            <div className="w-full text-base font-bold text-gray-700 bg-indigo-50/10 rounded-xl p-4 border-2 border-indigo-50">
               {subjectDescription || "클래스 관리 페이지에서 설정을 입력해주세요."}
             </div>
           </div>
 
+          {/* 메인 테이블 */}
           <div className="bg-white rounded-[2.5rem] shadow-xl border border-indigo-50 overflow-hidden">
             <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full border-collapse table-fixed">
@@ -259,7 +308,8 @@ export default function GradeInputPage() {
                 </tfoot>
               </table>
             </div>
-            
+
+            {/* 하단 바 (저장 버튼 및 상태) */}
             <div className="p-8 flex justify-between items-center bg-white border-t border-indigo-50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center text-xl shadow-inner">🎯</div>
@@ -279,6 +329,8 @@ export default function GradeInputPage() {
           <p className="text-2xl font-black text-indigo-200 italic uppercase tracking-tighter">Please Select Class & Subject</p>
         </div>
       )}
+
+      {/* 스타일 커스텀 */}
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { height: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }

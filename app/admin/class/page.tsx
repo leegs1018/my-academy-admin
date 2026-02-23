@@ -14,6 +14,7 @@ export default function ClassPage() {
   const currentYear = new Date().getFullYear();
   const yearOptions = [currentYear - 1, currentYear, currentYear + 1];
 
+  // 새 과목 생성 시 고유 ID 부여 (이 ID는 평생 갑니다)
   const createInitialSubject = (): Subject => ({
     id: crypto.randomUUID(), 
     name: '',
@@ -61,12 +62,14 @@ export default function ClassPage() {
   };
 
   const removeSubjectField = (index: number, isEdit: boolean = false) => {
-    if (isEdit) {
-      const updated = editingClass.test_categories.filter((_: any, i: number) => i !== index);
-      setEditingClass({ ...editingClass, test_categories: updated });
-    } else {
-      const updated = formData.test_categories.filter((_, i) => i !== index);
-      setFormData({ ...formData, test_categories: updated });
+    if (confirm('과목을 삭제하면 해당 과목의 기존 성적 데이터가 리포트에서 제외됩니다. 계속하시겠습니까?')) {
+      if (isEdit) {
+        const updated = editingClass.test_categories.filter((_: any, i: number) => i !== index);
+        setEditingClass({ ...editingClass, test_categories: updated });
+      } else {
+        const updated = formData.test_categories.filter((_, i) => i !== index);
+        setFormData({ ...formData, test_categories: updated });
+      }
     }
   };
 
@@ -129,10 +132,16 @@ export default function ClassPage() {
   const addClass = async () => {
     if (!formData.class_name) return alert('클래스 명칭을 입력하세요');
     const validCategories = formData.test_categories.filter(cat => cat.name.trim() !== '');
+    if (validCategories.length === 0) return alert('최소 하나 이상의 과목을 입력하세요.');
+
     const { error } = await supabase.from('classes').insert([{ ...formData, test_categories: validCategories }]);
     if (!error) {
       alert('클래스 등록 성공!');
-      setFormData({ ...formData, class_name: '', test_categories: [createInitialSubject()], mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false });
+      setFormData({ 
+        class_name: '', teacher_name: '', target_level: '초등', start_time: '14:00', end_time: '16:00', 
+        start_year: currentYear, tuition_fee: 0, test_categories: [createInitialSubject()], 
+        mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false 
+      });
       fetchClasses();
     }
   };
@@ -146,6 +155,7 @@ export default function ClassPage() {
   const updateClass = async () => {
     const { id, created_at, ...rest } = editingClass;
     const validCategories = editingClass.test_categories.filter((cat: any) => cat.name.trim() !== '');
+    
     const { error } = await supabase.from('classes').update({ ...rest, test_categories: validCategories }).eq('id', id);
     if (!error) { alert('수정 완료! ✅'); setIsEditModalOpen(false); fetchClasses(); }
   };
@@ -181,7 +191,7 @@ export default function ClassPage() {
 
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <label className="text-xs font-black text-rose-500 block uppercase tracking-widest">📝 Subjects & IDs</label>
+            <label className="text-xs font-black text-rose-500 block uppercase tracking-widest">📝 Subjects (Auto-ID Sync)</label>
             <button onClick={() => addSubjectField(false)} className="bg-rose-500 text-white w-8 h-8 rounded-full font-black hover:bg-rose-600 shadow-md">+</button>
           </div>
           <div className="space-y-3">
@@ -189,7 +199,7 @@ export default function ClassPage() {
               <div key={cat.id} className="flex gap-3 items-start animate-in slide-in-from-left-2">
                 <div className="flex-[1]">
                   <input className="w-full border-2 p-3.5 rounded-2xl font-bold outline-none focus:border-rose-400 bg-rose-50/10" value={cat.name} onChange={e => handleSubjectChange(index, 'name', e.target.value, false)} placeholder="과목명" />
-                  <p className="text-[8px] text-gray-300 mt-1 ml-2 font-mono">ID: {cat.id.split('-')[0]}...</p>
+                  <p className="text-[8px] text-gray-300 mt-1 ml-2 font-mono">FIXED ID: {cat.id.split('-')[0]}...</p>
                 </div>
                 <div className="flex-[2]">
                   <input className="w-full border-2 p-3.5 rounded-2xl font-bold outline-none focus:border-rose-400 bg-rose-50/10" value={cat.description} onChange={e => handleSubjectChange(index, 'description', e.target.value, false)} placeholder="설명" />
@@ -248,7 +258,7 @@ export default function ClassPage() {
 
             <div className="flex flex-wrap gap-2 mb-6">
               {Array.isArray(c.test_categories) && c.test_categories.map((cat: Subject) => (
-                <span key={cat.id} className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[11px] font-black border border-rose-100">#{cat.name}</span>
+                <span key={cat.id} className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[11px] font-black border border-rose-100" title={cat.id}>#{cat.name}</span>
               ))}
             </div>
 
@@ -267,7 +277,7 @@ export default function ClassPage() {
         ))}
       </div>
 
-      {/* 수정 모달 (누락된 필드 보강됨) */}
+      {/* 수정 모달 */}
       {isEditModalOpen && editingClass && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden border-4 border-indigo-600 animate-in zoom-in-95">
@@ -276,7 +286,6 @@ export default function ClassPage() {
               <button onClick={() => setIsEditModalOpen(false)} className="text-3xl">✕</button>
             </div>
             <div className="p-10 space-y-6 overflow-y-auto max-h-[75vh]">
-              {/* 1. 기본 정보 (클래스명, 선생님) */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-indigo-400 ml-1">CLASS NAME</label>
@@ -288,7 +297,6 @@ export default function ClassPage() {
                 </div>
               </div>
 
-              {/* 2. 레벨 및 수강료 (여기가 빠졌었습니다!) */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-indigo-400 ml-1">TARGET LEVEL</label>
@@ -302,7 +310,6 @@ export default function ClassPage() {
                 </div>
               </div>
 
-              {/* 3. 과목 리스트 */}
               <div className="space-y-3 p-6 bg-rose-50/20 rounded-[2rem] border border-rose-100">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-black text-rose-500 uppercase">Subjects</span>
@@ -311,15 +318,15 @@ export default function ClassPage() {
                 {editingClass.test_categories.map((cat: any, index: number) => (
                   <div key={cat.id} className="flex gap-2 items-start bg-white p-3 rounded-2xl border border-rose-50 shadow-sm">
                     <div className="flex-1">
-                      <input className="w-full border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300" value={cat.name} onChange={e => handleSubjectChange(index, 'name', e.target.value, true)} />
+                      <input className="w-full border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300" value={cat.name} onChange={e => handleSubjectChange(index, 'name', e.target.value, true)} placeholder="과목명" />
+                      <p className="text-[7px] text-gray-300 mt-1 ml-1 font-mono">UUID: {cat.id}</p>
                     </div>
-                    <input className="flex-[2] border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300" value={cat.description} onChange={e => handleSubjectChange(index, 'description', e.target.value, true)} />
+                    <input className="flex-[2] border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300" value={cat.description} onChange={e => handleSubjectChange(index, 'description', e.target.value, true)} placeholder="설명" />
                     <button onClick={() => removeSubjectField(index, true)} className="text-rose-200 p-2">✕</button>
                   </div>
                 ))}
               </div>
 
-              {/* 4. 요일 */}
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-indigo-400 ml-1 uppercase font-black">Days</label>
                 <div className="flex gap-1">
@@ -329,7 +336,6 @@ export default function ClassPage() {
                 </div>
               </div>
 
-              {/* 5. 시간 */}
               <div className="p-6 bg-slate-50 rounded-[2.5rem] flex gap-4 justify-center items-center">
                 <TimePicker label="시작" value={editingClass.start_time} onChange={val => setEditingClass({...editingClass, start_time: val})} />
                 <div className="text-indigo-200 font-black text-2xl hidden md:block pt-4">→</div>

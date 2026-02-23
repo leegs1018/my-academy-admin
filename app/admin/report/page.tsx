@@ -114,141 +114,103 @@ export default function AdminReportPage() {
 
   // 4. 성적 데이터 분석
 
-  const fetchReportData = useCallback(async () => {
+ const fetchReportData = useCallback(async () => {
+  if (!selectedStudent || classListData.length === 0) return;
+  setLoading(true);
+  try {
+    const monthNum = selectedMonth.replace('월', '');
+    const LIMIT_SESSIONS = 8;
+    
+    // 1. 클래스 정보 및 카테고리(과목) 설정 가져오기
+    const currentClassInfo = classListData.find(c => c.class_name === selectedStudent.class_name);
+    const categorySettings = Array.isArray(currentClassInfo?.test_categories) ? currentClassInfo.test_categories : [];
 
-    if (!selectedStudent) return;
+    // 2. 같은 반 학생들 ID 목록 (반 평균 계산용)
+    const { data: classmates } = await supabase.from('students').select('id').eq('class_name', selectedStudent.class_name);
+    const classmateIds = classmates?.map(c => c.id) || [];
 
-    setLoading(true);
+    // 3. 내 성적과 반 성적 한 번에 가져오기 (category_id 활용)
+    const { data: allGrades } = await supabase
+      .from('grades')
+      .select('*')
+      .in('student_id', [selectedStudent.id, ...classmateIds])
+      .filter('test_name', 'ilike', `% ${monthNum}월%`)
+      .filter('test_date', 'gte', `${selectedYear}-${monthNum.padStart(2, '0')}-01`)
+      .filter('test_date', 'lte', `${selectedYear}-${monthNum.padStart(2, '0')}-31`);
 
-    try {
+    if (!allGrades) return;
 
-      const monthNum = selectedMonth.replace('월', '');
-
-      const LIMIT_SESSIONS = 8;
-
-      const currentClassInfo = classListData.find(c => c.class_name === selectedStudent.class_name);
-
-      const categorySettings = Array.isArray(currentClassInfo?.test_categories) ? currentClassInfo.test_categories : [];
-
-      const orderedCategoryNames = categorySettings.map((cat: any) => cat.name);
-
-
-
-      const { data: classmates } = await supabase.from('students').select('id').eq('class_name', selectedStudent.class_name);
-
-      const classmateIds = classmates?.map(c => c.id) || [];
-
-
-
-      const { data: myGrades } = await supabase.from('grades').select('*').eq('student_id', selectedStudent.id)
-
-        .filter('test_name', 'ilike', `% ${monthNum}월%`).filter('test_date', 'ilike', `${selectedYear}%`);
-
-
-
-      const { data: classGrades } = await supabase.from('grades').select('test_name, score').in('student_id', classmateIds)
-
-        .filter('test_name', 'ilike', `% ${monthNum}월%`).filter('test_date', 'ilike', `${selectedYear}%`);
-
-
-
-      const rawSubjects = Array.from(new Set(myGrades?.map(g => g.test_name.split(']')[0].replace('[', ''))));
-
-      const subjects = rawSubjects.sort((a, b) => {
-
-        const indexA = orderedCategoryNames.indexOf(a);
-
-        const indexB = orderedCategoryNames.indexOf(b);
-
-        return (indexA === -1 ? 1 : indexA) - (indexB === -1 ? 1 : indexB);
-
-      });
-
-     
-
+    // 4. 과목별 데이터 가공
+    let globalMaxSessions = 0;
       const allDatesMap: { [key: number]: string } = {};
 
-      myGrades?.forEach(g => {
-
-        const sessionMatch = g.test_name.match(/(\d+)회차/);
-
-        if (sessionMatch && g.test_date) {
-
-          const sNum = parseInt(sessionMatch[1]);
-
-          if (sNum <= LIMIT_SESSIONS) allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
-
-        }
-
-      });
-
-
-
-      let tempMax = 0;
-
-      const processedData = subjects.map(sub => {
-
-        const catSetting = categorySettings.find((c: any) => c.name === sub);
-
-        const description = catSetting?.description || "등록된 학습 설명이 없습니다.";
-
-        const subGrades = myGrades?.filter(g => g.test_name.startsWith(`[${sub}]`)) || [];
+      const processedData = categorySettings.map((cat: any) => {
+        // 내 성적 중 이 카테고리(과목)에 해당하는 것만 필터링
+        const mySubGrades = allGrades.filter(g => g.student_id === selectedStudent.id && g.category_id === cat.id);
+        const classSubGrades = allGrades.filter(g => g.category_id === cat.id);
 
         const sessionDataMap: { [key: number]: any } = {};
+        let localMax = 0;
 
-
-
-        subGrades.forEach(g => {
-
+        // 회차별 데이터 정리
+        mySubGrades.forEach(g => {
           const sessionMatch = g.test_name.match(/(\d+)회차/);
-
           if (sessionMatch) {
-
             const sNum = parseInt(sessionMatch[1]);
-
             if (sNum <= LIMIT_SESSIONS) {
+              if (sNum > localMax) localMax = sNum;
+              if (sNum > globalMaxSessions) globalMaxSessions = sNum;
+              
+              if (g.test_date) allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
 
-              if (sNum > tempMax) tempMax = sNum;
-
-              const sameTestClassGrades = classGrades?.filter(cg => cg.test_name.trim() === g.test_name.trim()) || [];
-
-              const validScores = sameTestClassGrades.map(sg => Number(sg.score)).filter(s => s > 0);
-
+              const sameTestGrades = classSubGrades.filter(cg => cg.test_name === g.test_name);
+              const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => s > 0);
               const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
 
-              sessionDataMap[sNum] = { session: `${sNum}회`, score: Number(g.score) || 0, average: Number(avg.toFixed(1)), max: g.max_score || 100 };
-
+              sessionDataMap[sNum] = {
+                session: `${sNum}회`,
+                score: Number(g.score) || 0,
+                average: Number(avg.toFixed(1)),
+                max: g.max_score || 100
+              };
             }
-
           }
-
         });
 
+        const sessions = Array.from({ length: LIMIT_SESSIONS }, (_, i) => 
+          sessionDataMap[i + 1] || { session: `${i + 1}회`, score: 0, average: 0, max: 100 }
+        );
 
+        const myValidScores = sessions.map(s => s.score).filter(s => s > 0);
+        const myAvg = myValidScores.length > 0 ? myValidScores.reduce((a, b) => a + b, 0) / myValidScores.length : 0;
+        
+        const classValidAvgs = sessions.map(s => s.average).filter(s => s > 0);
+        const classAvg = classValidAvgs.length > 0 ? classValidAvgs.reduce((a, b) => a + b, 0) / classValidAvgs.length : 0;
 
-        const sessions = Array.from({ length: tempMax }, (_, i) => sessionDataMap[i + 1] || { session: `${i + 1}회`, score: 0, average: 0, max: 100 });
+        // ✅ 이 부분이 포인트: DB에 저장된 max_score를 우선적으로 가져옵니다.
+        const dbMaxScore = mySubGrades.length > 0 ? mySubGrades[0].max_score : 100;
 
-        const myAvg = sessions.map(s => s.score).filter(s => s > 0).reduce((a, b, _, arr) => a + (b / arr.length), 0) || 0;
-
-        const classTotalAvg = sessions.map(s => s.average).filter(s => s > 0).reduce((a, b, _, arr) => a + (b / arr.length), 0) || 0;
-
-
-
-        return { subject: sub, description, sessions, avgScore: myAvg.toFixed(1), totalClassAvg: classTotalAvg.toFixed(1), deviation: (myAvg - classTotalAvg).toFixed(1), maxStandard: sessions[0]?.max || 100 };
-
+        return {
+          subject: cat.name,
+          description: cat.description || "등록된 학습 설명이 없습니다.",
+          sessions: sessions, // 차트에서 slice해서 쓸 것이므로 여기선 전체 전달
+          avgScore: myAvg.toFixed(1),
+          totalClassAvg: classAvg.toFixed(1),
+          deviation: (myAvg - classAvg).toFixed(1),
+          maxStandard: cat.max_score || dbMaxScore || 100 
+        };
       });
 
-
-
-      setMasterDates(Array.from({ length: tempMax }, (_, i) => allDatesMap[i + 1] || '-'));
-
-      setMaxSessions(tempMax);
-
+      // 5. 상태 업데이트
+      setMasterDates(Array.from({ length: globalMaxSessions }, (_, i) => allDatesMap[i + 1] || '-'));
+      setMaxSessions(globalMaxSessions);
       setReportData(processedData);
-
-    } catch (err) { console.error(err); } finally { setLoading(false); }
-
-  }, [selectedStudent, selectedYear, selectedMonth, classListData]);
+  } catch (err) {
+    console.error("Report Load Error:", err);
+  } finally {
+    setLoading(false);
+  }
+}, [selectedStudent, selectedYear, selectedMonth, classListData]);
 
   const handleIndividualBulkPrint = async () => {
   const filteredStudents = students.filter(s => 
@@ -481,7 +443,7 @@ export default function AdminReportPage() {
 
             <h3 className="text-xl font-black mb-6 flex items-center gap-3">
               {/* shadow-lg를 지우고 border를 추가합니다 */}
-               <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans border border-indigo-700">01</span>
+               <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-xl font-sans border border-indigo-700">01</span>
               <span className="uppercase text-indigo-900 tracking-tight font-sans text-[26px]">월별 성적 요약</span>
             </h3>
 
@@ -582,7 +544,7 @@ export default function AdminReportPage() {
 
             <h3 className="text-xl font-black mb-8 flex items-center gap-3">
 
-              <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm font-sans shadow-lg">02</span>
+              <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-xl font-sans shadow-lg">02</span>
 
               <span className="uppercase text-indigo-900 tracking-tight font-sans text-[26px]">반 평균 대비 성적 분석</span>
 
@@ -715,7 +677,7 @@ export default function AdminReportPage() {
 {/* PAGE 03: 시험별 성적 추이 분석 */}
 <div className="report-page shadow-2xl bg-white print:shadow-none">
   <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-    <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm shadow-lg font-sans">03</span>
+    <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-xl shadow-lg font-sans">03</span>
     <span className="uppercase text-indigo-900 tracking-tight font-sans text-[26px]">시험별 성적 추이 분석</span>
   </h3>
 
@@ -772,65 +734,53 @@ export default function AdminReportPage() {
 
 
 
-          {/* PAGE 04: 종합 의견 - 배경색 수정됨 (bg-slate-50) */}
+{/* PAGE 04: 종합 의견 */}
+{/* h-[287mm]로 설정하여 브라우저 하단 여백 충돌을 방지합니다. */}
+<div className="report-page shadow-2xl bg-white print:shadow-none flex flex-col h-[287mm] max-h-[287mm] overflow-hidden relative">
+  
+  {/* 상단 제목 (고정 높이) */}
+  <div className="shrink-0">
+    <h3 className="text-xl font-black mb-6 flex items-center gap-3">
+      <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-xl shadow-lg font-sans">04</span>
+      <span className="uppercase text-indigo-900 tracking-tight font-sans text-[26px]">종합 의견</span>
+    </h3>
+  </div>
+  
+  {/* 💡 핵심: flex-1을 주어 글자 양과 상관없이 남은 모든 흰색 공간을 그레이로 덮습니다. */}
+  <div className="flex-1 bg-slate-50 p-12 text-gray-800 shadow-inner relative border-l-[12px] border-indigo-600 flex flex-col min-h-0 mb-20">
+    <div className="absolute top-0 right-0 p-10 opacity-5 font-black text-[120px] text-indigo-900 leading-none">“</div>
+    
+    <h4 className="text-2xl font-black mb-8 text-indigo-900 flex items-center gap-4 shrink-0">이번 달 담당 선생님 의견</h4>
+    <div className="w-full h-[2px] bg-indigo-100 mb-10 shrink-0"></div>
+    
+    {/* 본문 영역: flex-1로 내부 공간을 다 쓰게 함 */}
+    <div className="flex-1 relative z-10 overflow-hidden">
+       <p className={`text-gray-700 whitespace-pre-wrap font-bold break-keep
+         ${teacherComment.length > 600 ? 'text-[15px] leading-[1.6]' : 
+           teacherComment.length > 400 ? 'text-[17px] leading-[1.8]' : 
+           'text-[21px] leading-[2.4]'}
+       `}>
+        {teacherComment || '이번 달 학습 성취도를 종합한 결과, 전반적으로 안정적인 흐름을 보이고 있습니다.'}
+      </p>
+    </div>
 
-          <div className="report-page shadow-2xl bg-white print:shadow-none flex flex-col">
+    <div className="absolute bottom-0 left-0 p-10 opacity-5 font-black text-[120px] text-indigo-900 leading-none w-full text-right">”</div>
+  </div>
 
-            <h3 className="text-xl font-black mb-10 flex items-center gap-3">
-
-              <span className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center text-sm shadow-lg font-sans">04</span>
-
-              <span className="uppercase text-indigo-900 tracking-tight font-sans text-[26px]">종합 의견</span>
-
-            </h3>
-
-           
-
-            <div className="flex-grow bg-slate-50 p-12 text-gray-800 shadow-inner relative overflow-hidden border-l-[12px] border-indigo-600">
-
-              <div className="absolute top-0 right-0 p-10 opacity-10 font-black text-[120px] text-indigo-900 leading-none">“</div>
-
-              <h4 className="text-2xl font-black mb-8 text-indigo-900 flex items-center gap-4">이번 달 담당 선생님 의견</h4>
-
-              <div className="w-full h-[2px] bg-indigo-100 mb-8"></div>
-
-              <p className="text-gray-700 leading-[2.2] whitespace-pre-wrap font-bold text-[21px] relative z-10">
-
-                {teacherComment || '이번 달 학습 성취도를 종합한 결과, 전반적으로 안정적인 흐름을 보이고 있습니다.'}
-
-              </p>
-
-              <div className="absolute bottom-0 left-0 p-10 opacity-10 font-black text-[120px] text-indigo-900 leading-none w-full text-right">”</div>
-
-            </div>
-
-
-
-            <footer className="mt-16 border-t-2 border-indigo-50 pt-8 flex justify-between items-end">
-
-              <div className="flex items-center gap-4">
-
-                <div className="text-left">
-
-                  <p className="text-lg font-black text-indigo-900 leading-none mb-1 tracking-tight">LJY English Institute</p>
-
-                  <p className="text-2xl font-black text-indigo-900 leading-none">이주영 영어학원</p>
-
-                </div>
-
-                <div className="w-[3px] h-10 bg-indigo-600"></div>
-
-              </div>
-
-              <div className="text-right text-gray-300 font-bold text-sm uppercase font-sans">
-
-                {selectedYear}. {selectedMonth} Performance Report
-
-              </div>
-
-            </footer>
-
-          </div>
+  {/* 💡 푸터: absolute로 바닥에 고정하여 배경박스가 밀어내지 못하게 함 */}
+  <footer className="absolute bottom-0 left-[15mm] right-[15mm] py-8 border-t-2 border-indigo-50 flex justify-between items-end bg-white shrink-0">
+    <div className="flex items-center gap-4">
+      <div className="text-left">
+        <p className="text-lg font-black text-indigo-900 leading-none mb-1 tracking-tight">LJY English Institute</p>
+        <p className="text-2xl font-black text-indigo-900 leading-none">이주영 영어학원</p>
+      </div>
+      {/* <div className="w-[3px] h-10 bg-indigo-600"></div> */}
+    </div>
+    <div className="text-right text-gray-300 font-bold text-sm uppercase font-sans">
+      {selectedYear}. {selectedMonth} Performance Report
+    </div>
+  </footer>
+</div>
 
         </div>
 
