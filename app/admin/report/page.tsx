@@ -485,55 +485,40 @@ export default function AdminReportPage() {
               <span className="uppercase text-indigo-900 tracking-tight font-sans text-[26px]">월별 성적 요약</span>
             </h3>
 
-              <table className="w-full border-collapse border-t-2 border-indigo-900 table-fixed text-[11px] mb-6">
+              <table className="w-full border-collapse border-y-2 border-indigo-900 table-fixed text-[11px] mb-6">
 
-  <thead>
+ <thead>
+  {/* 1. 첫 번째 줄: 배경색 bg-indigo-50, 테두리는 위아래 모두 indigo-200으로 통일 */}
+  <tr className="bg-indigo-50"> 
+    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-0 relative overflow-hidden bg-indigo-50/50">
+      <div className="absolute inset-0" style={{background: 'linear-gradient(to top right, transparent calc(50% - 0.5px), #c7d2fe 50%, transparent calc(50% + 0.5px))'}}></div>
+      <div className="relative h-[60px] w-full">
+        <span className="absolute top-2 right-2 text-indigo-900 font-bold text-[10px]">회차 (날짜)</span>
+        <span className="absolute bottom-2 left-2 text-indigo-900 font-bold text-[10px]">평가 항목</span>
+      </div>
+    </th>
+    {[...Array(maxSessions)].map((_, i) => (
+      <th key={i} className="py-2 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black">{i + 1}회</th>
+    ))}
+    {/* ✅ 여기 하단 테두리를 border-indigo-200으로 수정했습니다. (기존 indigo-900) */}
+    <th rowSpan={2} className="py-2 px-2 font-black border-b-2 border-indigo-200 bg-indigo-900 text-[15px] text-white text-center w-[20%]">평균 / 만점</th>
+  </tr>
 
-                  <tr className="bg-indigo-50">
-
-                    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-0 relative overflow-hidden bg-indigo-50/50">
-
-                      <div className="absolute inset-0" style={{background: 'linear-gradient(to top right, transparent calc(50% - 0.5px), #c7d2fe 50%, transparent calc(50% + 0.5px))'}}></div>
-
-                      <div className="relative h-[60px] w-full">
-
-                        <span className="absolute top-2 right-2 text-indigo-900 font-bold text-[10px]">회차 (날짜)</span>
-
-                        <span className="absolute bottom-2 left-2 text-indigo-900 font-bold text-[10px]">평가 항목</span>
-
-                      </div>
-
-                    </th>
-
-                    {[...Array(maxSessions)].map((_, i) => (
-
-                      <th key={i} className="py-2 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black">{i + 1}회</th>
-
-                    ))}
-
-                    <th rowSpan={2} className="py-2 px-2 font-black border-b-2 border-indigo-900 bg-indigo-900 text-[15px] text-white text-center w-[20%]">평균 / 만점</th>
-
-                  </tr>
-
-                  <tr className="bg-white">
-
-                    {[...Array(maxSessions)].map((_, i) => (
-
-                      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">{masterDates[i] || '-'}</th>
-
-                    ))}
-
-                  </tr>
-
-                </thead>
+  {/* 2. 두 번째 줄 */}
+  <tr className="bg-white">
+    {[...Array(maxSessions)].map((_, i) => (
+      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">{masterDates[i] || '-'}</th>
+    ))}
+  </tr>
+</thead>
 
                 <tbody>
 
                   {reportData.map((data, i) => (
 
-                    <tr key={i} className="border-b border-indigo-100">
+                    <tr key={i} className="border-b border-indigo-100 last:border-0">
 
-                      <td className="py-3 px-2 text-center font-black bg-indigo-50/30 text-[13px] border-r border-indigo-100">{data.subject}</td>
+                      <td className="py-3 px-2 text-center font-black bg-indigo-50/50 text-[13px] border-r border-indigo-100 text-indigo-900">{data.subject}</td>
 
                       {[...Array(maxSessions)].map((_, idx) => (
 
@@ -565,22 +550,24 @@ export default function AdminReportPage() {
 
 
 
-              <div className="bg-slate-50 border-y border-slate-200 py-5 px-8 space-y-3">
+             <div className="bg-slate-50 border-y border-slate-200 py-5 px-8 space-y-3">
+                  <h4 className="text-[20px] font-black text-indigo-900 uppercase tracking-[0.2em] mb-2">평가항목 설명</h4>
+                  {reportData.map((data, idx) => (
+                    /* 1. items-center를 추가하여 높이가 달라도 중앙에 맞춥니다. */
+                    <div key={idx} className="flex gap-4 items-center border-b border-slate-100 last:border-0 py-2 last:pb-0">
+                      
+                      {/* 2. py-2를 제거하고 고정 너비와 shrink-0을 설정합니다. */}
+                      <div className="min-w-[100px] shrink-0 bg-indigo-100 text-indigo-700 px-3 py-1.5 text-[14px] font-black text-center">
+                        {data.subject}
+                      </div>
 
-                <h4 className="text-[20px] font-black text-indigo-900 uppercase tracking-[0.2em] mb-2">평가항목 설명</h4>
-
-                {reportData.map((data, idx) => (
-
-                  <div key={idx} className="flex gap-4 items-start border-b border-slate-100 last:border-0 pb-2 last:pb-0">
-
-                    <div className="min-w-[100px] bg-indigo-100 text-indigo-700 px-3 py-2 text-[14px] font-black text-center">{data.subject}</div>
-
-                    <p className="text-[14px] py-2 font-bold text-slate-600 leading-relaxed">{data.description}</p>
-
-                  </div>
-
-                ))}
-
+                      {/* 3. p 태그의 py-2를 제거하여 텍스트가 박스 높이에 영향을 주지 않게 합니다. */}
+                      <p className="text-[14px] font-bold text-slate-600 leading-relaxed flex-1">
+                        {data.description}
+                      </p>
+                      
+                    </div>
+                  ))}
               </div>
 
             </div>
