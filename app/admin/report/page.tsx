@@ -68,7 +68,7 @@ export default function AdminReportPage() {
 
 
 
-  const classNames = ['전체 클래스', ...Array.from(new Set(students.map(s => s.class_name).filter(Boolean)))];
+  const classNames = ['전체 클래스', ...classListData.map(c => c.class_name).filter(Boolean)];
 
 
 
@@ -579,8 +579,8 @@ export default function AdminReportPage() {
     return (
       <>
         {/* 1. 클래스 만점 기준 (환산이므로 항상 100) */}
-        <div className="bg-slate-50 rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-slate-200 shadow-none">
-          <p className="text-slate-500 font-black text-[13px] mb-3 uppercase tracking-widest">환산 만점 기준</p>
+        <div className="bg-slate-50 rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-slate-200 shadow-none">
+          <p className="text-slate-500 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">환산 만점 기준</p>
           <div className="flex items-baseline gap-1">
             <span className="text-[36px] font-black text-slate-700 leading-none">100.0</span>
             <span className="text-sm font-bold text-slate-700">점</span>
@@ -588,8 +588,8 @@ export default function AdminReportPage() {
         </div>
 
         {/* 2. 나의 환산 평균 */}
-        <div className="bg-[#f0f4ff] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
-          <p className="text-indigo-600 font-black text-[13px] mb-3 uppercase tracking-widest">나의 환산 평균</p>
+        <div className="bg-[#f0f4ff] rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
+          <p className="text-indigo-600 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">나의 환산 평균</p>
           <div className="flex items-baseline gap-1">
             <span className="text-[36px] font-black text-indigo-900 leading-none">{totalMyAvgConverted.toFixed(1)}</span>
             <span className="text-sm font-bold text-indigo-900">점</span>
@@ -597,8 +597,8 @@ export default function AdminReportPage() {
         </div>
 
         {/* 3. 클래스 환산 평균 */}
-        <div className="bg-[#f8f9fa] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-gray-200 shadow-none">
-          <p className="text-gray-500 font-black text-[13px] mb-3 uppercase tracking-widest">클래스 환산 평균</p>
+        <div className="bg-[#f8f9fa] rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-gray-200 shadow-none">
+          <p className="text-gray-500 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">클래스 환산 평균</p>
           <div className="flex items-baseline gap-1">
             <span className="text-[36px] font-black text-gray-700 leading-none">{totalClassAvgConverted.toFixed(1)}</span>
             <span className="text-sm font-bold text-gray-700">점</span>
@@ -606,8 +606,8 @@ export default function AdminReportPage() {
         </div>
 
         {/* 4. 평균 대비 (환산 기준) */}
-        <div className="bg-[#eefcf4] rounded-[2rem] p-6 flex flex-col items-center justify-center border-2 border-emerald-200 shadow-none">
-          <p className="text-emerald-600 font-black text-[13px] mb-3 uppercase tracking-widest">평균 대비</p>
+        <div className="bg-[#eefcf4] rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-emerald-200 shadow-none">
+          <p className="text-emerald-600 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">평균 대비</p>
           <div className="flex items-baseline gap-1">
             <span className="text-[36px] font-black text-emerald-700 leading-none">
               {Number(deviation) > 0 ? `+${deviation}` : deviation}
