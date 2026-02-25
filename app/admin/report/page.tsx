@@ -558,6 +558,13 @@ export default function AdminReportPage() {
   {(() => {
     // 1. 환산 로직 정의
     const subjectCount = reportData.length || 1;
+
+    // 각 과목의 (클래스점수 / 만점 * 100)을 계산하여 평균을 냄
+    const totalClassAvgConverted = reportData.reduce((acc, curr) => {
+      const classScore = Number(curr.totalClassAvg);
+      const maxScore = Number(curr.maxStandard) || 100;
+      return acc + (classScore / maxScore * 100);
+    }, 0) / subjectCount;
     
     // 각 과목의 (점수 / 만점 * 100)을 계산하여 평균을 냄
     const totalMyAvgConverted = reportData.reduce((acc, curr) => {
@@ -566,12 +573,7 @@ export default function AdminReportPage() {
       return acc + (myScore / maxScore * 100);
     }, 0) / subjectCount;
     
-    // 각 과목의 (클래스점수 / 만점 * 100)을 계산하여 평균을 냄
-    const totalClassAvgConverted = reportData.reduce((acc, curr) => {
-      const classScore = Number(curr.totalClassAvg);
-      const maxScore = Number(curr.maxStandard) || 100;
-      return acc + (classScore / maxScore * 100);
-    }, 0) / subjectCount;
+    
     
     // 편차 계산 (환산 점수 기준)
     const deviation = (totalMyAvgConverted - totalClassAvgConverted).toFixed(1);
@@ -587,21 +589,21 @@ export default function AdminReportPage() {
           </div>
         </div>
 
-        {/* 2. 나의 환산 평균 */}
-        <div className="bg-[#f0f4ff] rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
-          <p className="text-indigo-600 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">나의 환산 평균</p>
-          <div className="flex items-baseline gap-1">
-            <span className="text-[36px] font-black text-indigo-900 leading-none">{totalMyAvgConverted.toFixed(1)}</span>
-            <span className="text-sm font-bold text-indigo-900">점</span>
-          </div>
-        </div>
-
-        {/* 3. 클래스 환산 평균 */}
+        {/* 2. 클래스 환산 평균 */}
         <div className="bg-[#f8f9fa] rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-gray-200 shadow-none">
           <p className="text-gray-500 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">클래스 환산 평균</p>
           <div className="flex items-baseline gap-1">
             <span className="text-[36px] font-black text-gray-700 leading-none">{totalClassAvgConverted.toFixed(1)}</span>
             <span className="text-sm font-bold text-gray-700">점</span>
+          </div>
+        </div>
+
+            {/* 3. 나의 환산 평균 */}
+        <div className="bg-[#f0f4ff] rounded-[2rem] p-4 flex flex-col items-center justify-center border-2 border-indigo-100 shadow-none">
+          <p className="text-indigo-600 font-black text-[13px] mb-3 whitespace-nowrap uppercase tracking-tighter">나의 환산 평균</p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[36px] font-black text-indigo-900 leading-none">{totalMyAvgConverted.toFixed(1)}</span>
+            <span className="text-sm font-bold text-indigo-900">점</span>
           </div>
         </div>
 
