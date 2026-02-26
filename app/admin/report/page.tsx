@@ -119,17 +119,16 @@ export default function AdminReportPage() {
   setLoading(true);
   try {
     const monthNum = selectedMonth.replace('월', '');
-    const LIMIT_SESSIONS = 8;
     
-    // 1. 클래스 정보 및 카테고리(과목) 설정 가져오기
+    // 1. 클래스 및 카테고리 설정
     const currentClassInfo = classListData.find(c => c.class_name === selectedStudent.class_name);
     const categorySettings = Array.isArray(currentClassInfo?.test_categories) ? currentClassInfo.test_categories : [];
 
-    // 2. 같은 반 학생들 ID 목록 (반 평균 계산용)
+    // 2. 학생들 ID 목록
     const { data: classmates } = await supabase.from('students').select('id').eq('class_name', selectedStudent.class_name);
     const classmateIds = classmates?.map(c => c.id) || [];
 
-    // 3. 내 성적과 반 성적 한 번에 가져오기 (category_id 활용)
+    // 3. 성적 데이터 호출
     const { data: allGrades } = await supabase
       .from('grades')
       .select('*')
@@ -138,73 +137,85 @@ export default function AdminReportPage() {
       .filter('test_date', 'gte', `${selectedYear}-${monthNum.padStart(2, '0')}-01`)
       .filter('test_date', 'lte', `${selectedYear}-${monthNum.padStart(2, '0')}-31`);
 
-    if (!allGrades) return;
+    if (!allGrades || allGrades.length === 0) {
+      setReportData([]);
+      setMaxSessions(0);
+      return;
+    }
 
-    // 4. 과목별 데이터 가공
+    // ✅ [수정 포인트 1] 데이터 중 가장 높은 회차 번호를 찾아 LIMIT 설정
+    let detectedMaxSession = 0;
+    allGrades.forEach(g => {
+      const match = g.test_name.match(/(\d+)회차/);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > detectedMaxSession) detectedMaxSession = num;
+      }
+    });
+
+    // 최소 8회차는 보여주고 싶다면 Math.max(8, detectedMaxSession) 사용 가능
+    const FINAL_LIMIT = detectedMaxSession; 
+
     let globalMaxSessions = 0;
-      const allDatesMap: { [key: number]: string } = {};
+
+    // ✅ 빨간 줄 해결: 타입을 명확히 정의합니다.
+    const allDatesMap: { [key: number]: string } = {};
 
       const processedData = categorySettings.map((cat: any) => {
-        // 내 성적 중 이 카테고리(과목)에 해당하는 것만 필터링
-        const mySubGrades = allGrades.filter(g => g.student_id === selectedStudent.id && g.category_id === cat.id);
-        const classSubGrades = allGrades.filter(g => g.category_id === cat.id);
+      const mySubGrades = allGrades.filter(g => g.student_id === selectedStudent.id && g.category_id === cat.id);
+      const classSubGrades = allGrades.filter(g => g.category_id === cat.id);
 
-        const sessionDataMap: { [key: number]: any } = {};
-        let localMax = 0;
+      // ✅ 빨간 줄 해결: 타입을 명확히 정의합니다.
+  const sessionDataMap: { [key: number]: any } = {};
 
-        // 회차별 데이터 정리
-        mySubGrades.forEach(g => {
-          const sessionMatch = g.test_name.match(/(\d+)회차/);
-          if (sessionMatch) {
-            const sNum = parseInt(sessionMatch[1]);
-            if (sNum <= LIMIT_SESSIONS) {
-              if (sNum > localMax) localMax = sNum;
-              if (sNum > globalMaxSessions) globalMaxSessions = sNum;
-              
-              if (g.test_date) allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
+  mySubGrades.forEach(g => {
+    const sessionMatch = g.test_name.match(/(\d+)회차/);
+    if (sessionMatch) {
+      const sNum = parseInt(sessionMatch[1]);
+      if (sNum > globalMaxSessions) globalMaxSessions = sNum;
+          if (g.test_date) allDatesMap[sNum] = g.test_date.substring(5).replace('-', '/');
 
-              const sameTestGrades = classSubGrades.filter(cg => cg.test_name === g.test_name);
-              const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => s > 0);
-              const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
+          // 반 평균 계산 로직
+      const sameTestGrades = classSubGrades.filter(cg => cg.test_name === g.test_name);
+      const validScores = sameTestGrades.map(sg => Number(sg.score)).filter(s => s > 0);
+      const avg = validScores.length > 0 ? (validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
 
-              sessionDataMap[sNum] = {
-                session: `${sNum}회`,
-                score: Number(g.score) || 0,
-                average: Number(avg.toFixed(1)),
-                max: g.max_score || 100
-              };
-            }
-          }
-        });
+          // 만점 기준 (개별 성적 -> 카테고리 설정 -> 기본값 100)
+          const currentMax = g.max_score || cat.max_score || 100;
 
-        const sessions = Array.from({ length: LIMIT_SESSIONS }, (_, i) => 
-          sessionDataMap[i + 1] || { session: `${i + 1}회`, score: 0, average: 0, max: 100 }
-        );
-
-        const myValidScores = sessions.map(s => s.score).filter(s => s > 0);
-        const myAvg = myValidScores.length > 0 ? myValidScores.reduce((a, b) => a + b, 0) / myValidScores.length : 0;
-        
-        const classValidAvgs = sessions.map(s => s.average).filter(s => s > 0);
-        const classAvg = classValidAvgs.length > 0 ? classValidAvgs.reduce((a, b) => a + b, 0) / classValidAvgs.length : 0;
-
-        // ✅ 이 부분이 포인트: DB에 저장된 max_score를 우선적으로 가져옵니다.
-        const dbMaxScore = mySubGrades.length > 0 ? mySubGrades[0].max_score : 100;
-
-        return {
-          subject: cat.name,
-          description: cat.description || "등록된 학습 설명이 없습니다.",
-          sessions: sessions, // 차트에서 slice해서 쓸 것이므로 여기선 전체 전달
-          avgScore: myAvg.toFixed(1),
-          totalClassAvg: classAvg.toFixed(1),
-          deviation: (myAvg - classAvg).toFixed(1),
-          maxStandard: cat.max_score || dbMaxScore || 100 
-        };
+          sessionDataMap[sNum] = {
+        session: `${sNum}회`,
+        score: Number(g.score) || 0,
+        average: Number(avg.toFixed(1)),
+        max: currentMax
+          };
+        }
       });
 
-      // 5. 상태 업데이트
-      setMasterDates(Array.from({ length: globalMaxSessions }, (_, i) => allDatesMap[i + 1] || '-'));
-      setMaxSessions(globalMaxSessions);
-      setReportData(processedData);
+      // FINAL_LIMIT 기준으로 배열 생성 (12회, 15회 등 유동적)
+  const sessions = Array.from({ length: FINAL_LIMIT }, (_, i) => 
+    sessionDataMap[i + 1] || { session: `${i + 1}회`, score: 0, average: 0, max: 100 }
+  );
+      const myValidScores = sessions.map(s => s.score).filter(s => s > 0);
+      const myAvg = myValidScores.length > 0 ? myValidScores.reduce((a, b) => a + b, 0) / myValidScores.length : 0;
+      const classValidAvgs = sessions.map(s => s.average).filter(s => s > 0);
+      const classAvg = classValidAvgs.length > 0 ? classValidAvgs.reduce((a, b) => a + b, 0) / classValidAvgs.length : 0;
+
+      return {
+        subject: cat.name,
+        description: cat.description || "등록된 학습 설명이 없습니다.",
+        sessions: sessions,
+        avgScore: myAvg.toFixed(1),
+        totalClassAvg: classAvg.toFixed(1),
+        deviation: (myAvg - classAvg).toFixed(1),
+        // ✅ 카테고리 설정의 만점을 최우선으로, 없으면 DB 기록, 그것도 없으면 100
+        maxStandard: cat.max_score || (mySubGrades.length > 0 ? mySubGrades[0].max_score : 100) 
+      };
+    });
+
+    setMasterDates(Array.from({ length: globalMaxSessions }, (_, i) => allDatesMap[i + 1] || '-'));
+    setMaxSessions(globalMaxSessions);
+    setReportData(processedData);
   } catch (err) {
     console.error("Report Load Error:", err);
   } finally {
@@ -449,88 +460,86 @@ export default function AdminReportPage() {
 
               <table className="w-full border-collapse border-y-2 border-indigo-900 table-fixed text-[11px] mb-6">
 
- <thead>
-  {/* 1. 첫 번째 줄: 배경색 bg-indigo-50, 테두리는 위아래 모두 indigo-200으로 통일 */}
+<thead>
+  {/* 1. 첫 번째 줄 */}
   <tr className="bg-indigo-50"> 
-    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[20%] p-0 relative overflow-hidden bg-indigo-50/50">
+    {/* ✅ 너비를 w-[20%]에서 w-[15%]로 축소하여 중앙 공간 확보 */}
+    <th rowSpan={2} className="border-b-2 border-r border-indigo-200 w-[15%] p-0 relative overflow-hidden bg-indigo-50/50">
       <div className="absolute inset-0" style={{background: 'linear-gradient(to top right, transparent calc(50% - 0.5px), #c7d2fe 50%, transparent calc(50% + 0.5px))'}}></div>
-      <div className="relative h-[60px] w-full">
-        <span className="absolute top-2 right-2 text-indigo-900 font-bold text-[10px]">회차 (날짜)</span>
-        <span className="absolute bottom-2 left-2 text-indigo-900 font-bold text-[10px]">평가 항목</span>
+      <div className="relative h-[50px] w-full"> {/* 높이 살짝 축소 */}
+        <span className="absolute top-1.5 right-1.5 text-indigo-900 font-bold text-[9px]">회차 (날짜)</span>
+        <span className="absolute bottom-1.5 left-1.5 text-indigo-900 font-bold text-[9px]">평가 항목</span>
       </div>
     </th>
     {[...Array(maxSessions)].map((_, i) => (
-      <th key={i} className="py-2 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black">{i + 1}회</th>
+      <th key={i} 
+          className="py-1 border-r border-b-2 border-indigo-200 text-[13px] text-center font-black text-indigo-900 min-w-[40px]">
+          {/* ✅ text-[13px] -> [11px]로 축소, min-w로 최소 간격 보장 */}
+          {i + 1}회
+      </th>
     ))}
-    {/* ✅ 여기 하단 테두리를 border-indigo-200으로 수정했습니다. (기존 indigo-900) */}
-    <th rowSpan={2} className="py-2 px-2 font-black border-b-2 border-indigo-200 bg-indigo-900 text-[15px] text-white text-center w-[20%]">평균 / 만점</th>
+    {/* ✅ 너비를 w-[20%]에서 w-[15%]로 축소 */}
+    <th rowSpan={2} className="py-2 px-1 font-black border-b-2 border-indigo-200 bg-indigo-900 text-[13px] text-white text-center w-[15%]">
+      평균 / 만점
+    </th>
   </tr>
 
   {/* 2. 두 번째 줄 */}
   <tr className="bg-white">
     {[...Array(maxSessions)].map((_, i) => (
-      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[11px] text-gray-500 font-bold">{masterDates[i] || '-'}</th>
+      <th key={i} className="py-1 border-b-2 border-r border-indigo-200 text-center text-[13px] text-gray-800 font-bold">
+        {/* ✅ 날짜 폰트를 [11px] -> [9px]로 줄여서 다닥다닥 붙는 느낌 제거 */}
+        {masterDates[i] || '-'}
+      </th>
     ))}
   </tr>
 </thead>
-
                 <tbody>
-
                   {reportData.map((data, i) => (
-
                     <tr key={i} className="border-b border-indigo-100 last:border-0">
-
-                      <td className="py-3 px-2 text-center font-black bg-indigo-50/50 text-[13px] border-r border-indigo-100 text-indigo-900">{data.subject}</td>
-
+                      <td className="py-1.5 px-2 text-center font-black bg-indigo-50/50 text-[13px] border-r border-indigo-100 text-indigo-900">{data.subject}</td>
                       {[...Array(maxSessions)].map((_, idx) => (
-
-                        <td key={idx} className="py-3 border-r border-indigo-100 text-center font-black text-[16px]">
-
+                        <td key={idx} className="py-2 border-r border-indigo-100 text-center font-black text-[16px]">
                           {data.sessions[idx]?.score > 0 ? data.sessions[idx].score : <span className="text-gray-200">-</span>}
-
                         </td>
-
                       ))}
-
-                      <td className="py-3 bg-indigo-50/40 text-center font-black">
-
+                      <td className="py-1.5 bg-indigo-50/40 text-center font-black">
                         <span className="text-indigo-900 text-[20px] font-sans">{data.avgScore}</span>
-
                         <span className="text-gray-400 mx-1 text-[10px]">/</span>
-
                         <span className="text-gray-500 text-[14px] font-sans">{data.maxStandard}</span>
-
                       </td>
-
                     </tr>
-
                   ))}
-
                 </tbody>
-
               </table>
 
 
 
-             <div className="bg-slate-50 border-y border-slate-200 py-5 px-8 space-y-3">
-                  <h4 className="text-[20px] font-black text-indigo-900 uppercase tracking-[0.2em] mb-2">평가항목 설명</h4>
-                  {reportData.map((data, idx) => (
-                    /* 1. items-center를 추가하여 높이가 달라도 중앙에 맞춥니다. */
-                    <div key={idx} className="flex gap-4 items-center border-b border-slate-100 last:border-0 py-2 last:pb-0">
-                      
-                      {/* 2. py-2를 제거하고 고정 너비와 shrink-0을 설정합니다. */}
-                      <div className="min-w-[100px] shrink-0 bg-indigo-100 text-indigo-700 px-3 py-1.5 text-[14px] font-black text-center">
-                        {data.subject}
-                      </div>
+             <div className="bg-slate-50 border-y border-slate-200 py-2 px-4 space-y-1"> 
+  {/* ✅ py-3 -> py-2로 줄이고, 항목 간 간격인 space-y-3을 space-y-1로 대폭 축소 */}
+  
+  <h4 className="text-[15px] font-black text-indigo-900 uppercase tracking-[0.1em] mb-1">
+    평가항목 설명
+    {/* ✅ 제목 크기(20->15)와 아래 마진(mb-2->mb-1)을 줄여 공간 확보 */}
+  </h4>
 
-                      {/* 3. p 태그의 py-2를 제거하여 텍스트가 박스 높이에 영향을 주지 않게 합니다. */}
-                      <p className="text-[14px] font-bold text-slate-600 leading-relaxed flex-1">
-                        {data.description}
-                      </p>
-                      
-                    </div>
-                  ))}
-              </div>
+  {reportData.map((data, idx) => (
+    <div key={idx} className="flex gap-3 items-center py-1 border-b border-slate-200/50 last:border-0">
+      {/* ✅ gap-4 -> gap-3으로 줄이고, py-2 -> py-1로 축소 */}
+      {/* ✅ 선이 아예 없으면 구분이 안 되므로 아주 연한 border-b를 추가해 가독성 확보 */}
+      
+      <div className="min-w-[100px] shrink-0 bg-indigo-100 text-indigo-700 px-2 py-1 text-[12px] font-black text-center rounded-sm">
+        {/* ✅ 너비(110->100), 패딩(py-1.5->py-1), 폰트(14->12) 모두 축소 */}
+        {data.subject}
+      </div>
+
+      <p className="text-[12px] font-medium text-slate-600 leading-snug flex-1">
+        {/* ✅ 폰트(14->12), 굵기(bold->medium), 줄간격(relaxed->snug) 축소 */}
+        {data.description}
+      </p>
+    </div>
+  ))}
+</div>
 
             </div>
 
@@ -706,10 +715,11 @@ export default function AdminReportPage() {
               tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}}
             />
             <YAxis
-              domain={[0, data.maxStandard]}
-              axisLine={false}
-              tickLine={false}
-              tick={{fontSize: 10, fill: '#cbd5e1'}}
+              domain={[0, Number(data.maxStandard) || 100]} 
+                allowDataOverflow={true} 
+                axisLine={false}
+                tickLine={false}
+                tick={{fontSize: 10, fill: '#cbd5e1'}}
             />
             <Tooltip cursor={false} contentStyle={{ display: 'none' }} />
             <Bar dataKey="score" fill="#4f46e5" barSize={18} radius={[4,4,0,0]}/>
