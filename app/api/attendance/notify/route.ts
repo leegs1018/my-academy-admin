@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     message: {
       to: to.replace(/-/g, ''), // 하이픈 제거
       from: sender,
-      text: `[이주영 영어학원] ${studentName} 학생이 ${displayDate} ${time}에 ${status}하였습니다.`
+      text: `[이주영 영어학원] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`
     }
   };
 
