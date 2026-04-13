@@ -52,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { href: '/admin/student-list', label: '학생 통합 명부', icon: '📋' },
     { href: '/admin/attendance', label: '일정 및 출석관리', icon: '✅', color: 'hover:bg-green-50' },
     { href: '/admin/notices', label: '공지사항', icon: '📢', color: 'hover:bg-yellow-50' },
+    { href: '/admin/pdf-editor', label: '영어 문제 생성', icon: '📝', color: 'hover:bg-violet-50' },
   ];
 
   return (
