@@ -32,8 +32,8 @@ export async function POST(req: Request) {
 
   const message = {
     message: {
-      to: to.replace(/-/g, ''), // 하이픈 제거
-      from: sender,
+      to: to.replace(/-/g, ''),
+      from: sender.replace(/-/g, ''), // 발신번호 하이픈 제거
       text: `[${academyName || '이주영 영어학원'}] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`
     }
   };

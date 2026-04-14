@@ -7,12 +7,14 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-async function sendSMS(to: string, studentName: string, status: string, attendanceDate: string, academyName: string) {
+async function sendSMS(to: string, studentName: string, status: string, attendanceDate: string, academyName: string): Promise<{ ok: boolean; error?: string }> {
   const apiKey = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
   const sender = process.env.SOLAPI_SENDER_NUMBER;
 
-  if (!apiKey || !apiSecret || !sender) return;
+  if (!apiKey || !apiSecret || !sender) {
+    return { ok: false, error: 'SOLAPI 환경변수 누락 (SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER_NUMBER)' };
+  }
 
   const formatKoreanDate = (dateStr: string) => {
     const dateObj = new Date(dateStr);
@@ -27,20 +29,24 @@ async function sendSMS(to: string, studentName: string, status: string, attendan
   const signature = CryptoJS.HmacSHA256(date + salt, apiSecret).toString();
   const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
 
-  await fetch('https://api.solapi.com/messages/v4/send', {
-    method: 'POST',
-    headers: {
-      'Authorization': authHeader,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: {
-        to: to.replace(/-/g, ''),
-        from: sender,
-        text: `[${academyName}] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`,
-      },
-    }),
-  });
+  try {
+    const res = await fetch('https://api.solapi.com/messages/v4/send', {
+      method: 'POST',
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          to: to.replace(/-/g, ''),
+          from: sender.replace(/-/g, ''), // 혹시 하이픈 포함돼도 제거
+          text: `[${academyName}] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`,
+        },
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok) return { ok: false, error: JSON.stringify(result) };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
 }
 
 export async function POST(req: Request) {
@@ -133,8 +139,10 @@ export async function POST(req: Request) {
   }
 
   // 학부모 SMS 발송
+  let smsResult: { ok: boolean; error?: string } = { ok: true };
   if (student.parent_phone) {
-    await sendSMS(student.parent_phone, student.name, action, today, academy_name);
+    smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
+    if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
   }
 
   return NextResponse.json({
@@ -142,5 +150,6 @@ export async function POST(req: Request) {
     message: `${student.name} 학생 ${action} 처리가 완료되었습니다.`,
     student_name: student.name,
     action,
+    sms: smsResult.ok ? '발송 완료' : `발송 실패: ${smsResult.error}`,
   });
 }
