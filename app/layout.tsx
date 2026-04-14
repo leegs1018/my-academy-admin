@@ -8,31 +8,45 @@ import './globals.css';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [academyName, setAcademyName] = useState('학원 관리 시스템'); // 💡 학원명 상태 추가
+  const [academyName, setAcademyName] = useState('학원 관리 시스템');
+  const [kioskCode, setKioskCode] = useState('');
+  const [userId, setUserId] = useState('');
   const router = useRouter();
   const pathname = usePathname();
 
-  // 💡 레이아웃에서 학원 이름을 불러오는 로직 추가
   useEffect(() => {
-    const getAcademyName = async () => {
+    const getAcademyInfo = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
+        setUserId(session.user.id);
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name')
+          .select('academy_name, kiosk_code')
           .eq('user_id', session.user.id)
           .single();
-        
+
         if (data?.academy_name) setAcademyName(data.academy_name);
+        if (data?.kiosk_code) setKioskCode(data.kiosk_code);
       }
     };
-    getAcademyName();
-  }, [pathname]); // 페이지 이동 시 세션 확인을 위해 pathname 추가
+    getAcademyInfo();
+  }, [pathname]);
+
+  const handleReissueKioskCode = async () => {
+    if (!confirm('출결 코드를 재발급하면 기존 코드로 연결된 키오스크에서 재입력이 필요합니다. 계속할까요?')) return;
+    const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const { error } = await supabase
+      .from('academy_config')
+      .update({ kiosk_code: newCode })
+      .eq('user_id', userId);
+    if (!error) setKioskCode(newCode);
+  };
 
   const isLandingPage = pathname === '/';
   const isLoginPage = pathname === '/login';
   const isRegisterPage = pathname === '/register';
-  const showSidebar = !isLandingPage && !isLoginPage && !isRegisterPage;
+  const isKioskPage = pathname === '/kiosk';
+  const showSidebar = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage;
 
   const handleLogout = async () => {
     if (confirm('로그아웃 하시겠습니까?')) {
@@ -79,10 +93,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* 2. 사이드바 메뉴 */}
             <div className={`fixed top-0 left-0 h-full w-72 bg-white shadow-[10px_0_30px_rgba(0,0,0,0.1)] z-[90] transform transition-transform duration-300 ease-in-out border-r-2 border-indigo-50 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
               <div className="p-8 pt-24 flex flex-col h-full gap-4">
-                <div className="mb-10 text-center">
-                  {/* 💡 고정된 이름 대신 DB에서 가져온 학원명 표시 */}
+                <div className="mb-6 text-center">
                   <h2 className="text-2xl font-black text-indigo-600 italic break-keep">{academyName}</h2>
                   <p className="text-xs font-bold text-gray-400 tracking-tighter mt-1">MANAGEMENT SYSTEM</p>
+                  {kioskCode && (
+                    <div className="mt-3 px-3 py-2 bg-indigo-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-indigo-400 font-bold">출결 키오스크 코드</p>
+                        <button
+                          onClick={handleReissueKioskCode}
+                          className="text-[10px] text-indigo-300 hover:text-indigo-500 font-bold transition-colors"
+                        >
+                          재발급
+                        </button>
+                      </div>
+                      <p className="text-2xl font-black text-indigo-600 tracking-[0.25em]">{kioskCode}</p>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
 
 export async function POST(req: Request) {
-  const { to, studentName, status, attendance_date, time } = await req.json();
+  const { to, studentName, status, attendance_date, time, academyName } = await req.json();
 
   const apiKey = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     message: {
       to: to.replace(/-/g, ''), // 하이픈 제거
       from: sender,
-      text: `[이주영 영어학원] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`
+      text: `[${academyName || '이주영 영어학원'}] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`
     }
   };
 

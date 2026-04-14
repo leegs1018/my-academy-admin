@@ -9,7 +9,8 @@
       "Bash(node -e ':*)",
       "Bash(node -e \"console.log\\(require\\('./node_modules/pdf-parse/package.json'\\).version\\)\")",
       "Bash(node pdftest.mjs)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
     ]
   }
 }

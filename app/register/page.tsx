@@ -64,19 +64,30 @@ export default function RegisterPage() {
         // [비즈니스 로직] 추천인 코드 유무에 따른 포인트 차등 지급
         const initialPoints = formData.referralCode ? 2000 : 1000;
 
+        // 키오스크 코드 생성 (6자리 랜덤, 중복 시 최대 3회 재시도)
+        const generateKioskCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+        let kioskCode = generateKioskCode();
+
         // 3. academy_config 테이블에 상세 정보 저장
-        const { error: dbError } = await supabase
-          .from('academy_config')
-          .insert([
-            { 
-              user_id: data.user.id, 
-              academy_name: formData.academyName,
-              academy_phone: formData.academyPhone,
-              mobile: formData.mobile,
-              referral_code: formData.referralCode,
-              points: initialPoints 
-            }
-          ]);
+        let dbError = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { error } = await supabase
+            .from('academy_config')
+            .insert([
+              {
+                user_id: data.user.id,
+                academy_name: formData.academyName,
+                academy_phone: formData.academyPhone,
+                mobile: formData.mobile,
+                referral_code: formData.referralCode,
+                points: initialPoints,
+                kiosk_code: kioskCode,
+              }
+            ]);
+          if (!error) { dbError = null; break; }
+          if (error.code === '23505') { kioskCode = generateKioskCode(); dbError = error; }
+          else { dbError = error; break; }
+        }
 
         if (dbError) {
           // 💡 Auth는 성공했는데 DB 저장이 실패한 경우를 대비해 알림
