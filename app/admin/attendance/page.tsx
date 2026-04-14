@@ -16,17 +16,30 @@ export default function AttendancePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [noteInput, setNoteInput] = useState('');
   const [allNotes, setAllNotes] = useState<any[]>([]);
+  const [userId, setUserId] = useState('');
 
   useEffect(() => {
-    fetchClasses();
-    fetchAllNotes();
-    fetchAllStudents();
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) setUserId(session.user.id);
+    };
+    getUser();
   }, []);
 
   useEffect(() => {
-    fetchAttendance();
-    fetchDateNote(selectedDate);
-  }, [selectedClass, selectedDate]);
+    if (userId) {
+      fetchClasses();
+      fetchAllNotes();
+      fetchAllStudents();
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) {
+      fetchAttendance();
+      fetchDateNote(selectedDate);
+    }
+  }, [selectedClass, selectedDate, userId]);
 
   const onDateChange = (newDate: any) => {
     const dateStr = newDate.toLocaleDateString('sv-SE');
@@ -35,22 +48,22 @@ export default function AttendancePage() {
   };
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('class_name').order('class_name');
+    const { data } = await supabase.from('classes').select('class_name').eq('academy_id', userId).order('class_name');
     if (data) setClassList(data);
   };
 
   const fetchAllStudents = async () => {
-    const { data } = await supabase.from('students').select('id, name, class_name, parent_phone').order('name');
+    const { data } = await supabase.from('students').select('id, name, class_name, parent_phone').eq('academy_id', userId).order('name');
     if (data) setAllStudents(data);
   };
 
   const fetchAllNotes = async () => {
-    const { data } = await supabase.from('calendar_notes').select('note_date');
+    const { data } = await supabase.from('calendar_notes').select('note_date').eq('academy_id', userId);
     if (data) setAllNotes(data.map(n => n.note_date));
   };
 
   const fetchDateNote = async (dateStr: string) => {
-    const { data } = await supabase.from('calendar_notes').select('content').eq('note_date', dateStr).maybeSingle();
+    const { data } = await supabase.from('calendar_notes').select('content').eq('academy_id', userId).eq('note_date', dateStr).maybeSingle();
     setNoteInput(data ? data.content : '');
   };
 
@@ -96,13 +109,15 @@ export default function AttendancePage() {
       return;
     }
 
-    const { error } = await supabase.from('attendance').upsert({ 
-      student_id: student.id, 
-      student_name: student.name, 
-      class_name: student.class_name, 
-      status, 
-      attendance_date: selectedDate 
-    }, { onConflict: 'student_id, attendance_date' });
+    const { error } = await supabase.from('attendance').upsert({
+      academy_id: userId,
+      student_id: student.id,
+      student_name: student.name,
+      class_name: student.class_name,
+      status,
+      attendance_date: selectedDate,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'student_id,attendance_date' });
 
     if (!error) {
       setAttendanceMap({ ...attendanceMap, [student.id]: status });
@@ -118,7 +133,7 @@ export default function AttendancePage() {
   // ... 나머지 메모 저장/삭제 및 필터 로직 (기존과 동일) ...
   const handleDeleteNote = async () => {
     if (!confirm('이 날의 일정을 완전히 삭제하시겠습니까?')) return;
-    const { error } = await supabase.from('calendar_notes').delete().eq('note_date', selectedDate);
+    const { error } = await supabase.from('calendar_notes').delete().eq('academy_id', userId).eq('note_date', selectedDate);
     if (!error) {
       setNoteInput('');
       fetchAllNotes();
@@ -128,7 +143,7 @@ export default function AttendancePage() {
 
   const handleSaveNote = async () => {
     if (!noteInput.trim()) return alert('내용을 입력해주세요.');
-    const { error } = await supabase.from('calendar_notes').upsert({ note_date: selectedDate, content: noteInput }, { onConflict: 'note_date' });
+    const { error } = await supabase.from('calendar_notes').upsert({ academy_id: userId, note_date: selectedDate, content: noteInput }, { onConflict: 'note_date' });
     if (!error) {
       fetchAllNotes();
       alert('저장되었습니다.');
@@ -136,7 +151,7 @@ export default function AttendancePage() {
   };
 
   const fetchAttendance = async () => {
-    let query = supabase.from('attendance').select('*').eq('attendance_date', selectedDate);
+    let query = supabase.from('attendance').select('*').eq('academy_id', userId).eq('attendance_date', selectedDate);
     if (selectedClass) query = query.eq('class_name', selectedClass);
     const { data: attendanceData } = await query;
     const map: any = {};

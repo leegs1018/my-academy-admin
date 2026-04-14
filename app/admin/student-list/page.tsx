@@ -23,10 +23,22 @@ export default function StudentListPage() {
   const schoolLevels = ['유치', '초등', '중등', '고등', 'N수생', '기타'];
   const parentRelations = ['어머님 (모)', '아버님 (부)', '기타'];
 
+  const [userId, setUserId] = useState('');
+
   useEffect(() => {
-    fetchStudents();
-    fetchClasses();
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) setUserId(session.user.id);
+    };
+    getUser();
   }, []);
+
+  useEffect(() => {
+    if (userId) {
+      fetchStudents();
+      fetchClasses();
+    }
+  }, [userId]);
 
   // 데이터를 가져올 때 상태 명칭을 정리하는 함수
   const cleanStatus = (status: string) => {
@@ -38,7 +50,7 @@ export default function StudentListPage() {
   };
 
   const fetchStudents = async () => {
-    const { data } = await supabase.from('students').select('*').order('name', { ascending: true });
+    const { data } = await supabase.from('students').select('*').eq('academy_id', userId).order('name', { ascending: true });
     if (data) {
       const cleanedData = data.map(s => ({
         ...s,
@@ -49,7 +61,7 @@ export default function StudentListPage() {
   };
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('class_name').order('class_name', { ascending: true });
+    const { data } = await supabase.from('classes').select('class_name').eq('academy_id', userId).order('class_name', { ascending: true });
     if (data) setClassList(data);
   };
 

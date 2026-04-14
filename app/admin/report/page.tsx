@@ -44,17 +44,37 @@ export default function AdminReportPage() {
 
   const [isSaving, setIsSaving] = useState(false);
 
+  const [userId, setUserId] = useState('');
+
+
+
+  useEffect(() => {
+
+    const getUser = async () => {
+
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session?.user?.id) setUserId(session.user.id);
+
+    };
+
+    getUser();
+
+  }, []);
+
 
 
   // 1. 초기 데이터 로드
 
   useEffect(() => {
 
+    if (!userId) return;
+
     const fetchInitialData = async () => {
 
-      const { data: studentList } = await supabase.from('students').select('*').order('name', { ascending: true });
+      const { data: studentList } = await supabase.from('students').select('*').eq('academy_id', userId).order('name', { ascending: true });
 
-      const { data: classList } = await supabase.from('classes').select('*');
+      const { data: classList } = await supabase.from('classes').select('*').eq('academy_id', userId);
 
       if (studentList) setStudents(studentList);
 
@@ -64,7 +84,7 @@ export default function AdminReportPage() {
 
     fetchInitialData();
 
-  }, []);
+  }, [userId]);
 
 
 
@@ -100,7 +120,7 @@ export default function AdminReportPage() {
 
       await supabase.from('teacher_feedbacks').upsert({
 
-        student_id: selectedStudent.id, year: selectedYear, month: selectedMonth, content: teacherComment, updated_at: new Date().toISOString()
+        academy_id: userId, student_id: selectedStudent.id, year: selectedYear, month: selectedMonth, content: teacherComment, updated_at: new Date().toISOString()
 
       }, { onConflict: 'student_id,year,month' });
 
@@ -125,7 +145,7 @@ export default function AdminReportPage() {
     const categorySettings = Array.isArray(currentClassInfo?.test_categories) ? currentClassInfo.test_categories : [];
 
     // 2. 학생들 ID 목록
-    const { data: classmates } = await supabase.from('students').select('id').eq('class_name', selectedStudent.class_name);
+    const { data: classmates } = await supabase.from('students').select('id').eq('academy_id', userId).eq('class_name', selectedStudent.class_name);
     const classmateIds = classmates?.map(c => c.id) || [];
 
     // 3. 성적 데이터 호출

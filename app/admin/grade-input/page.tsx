@@ -23,15 +23,25 @@ export default function GradeInputPage() {
   const [sessionDates, setSessionDates] = useState<{label: string, fullDate: string}[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState('');
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) setUserId(session.user.id);
+    };
+    getUser();
+  }, []);
 
   // 초기 클래스 목록 로드
   useEffect(() => {
+    if (!userId) return;
     async function fetchClasses() {
-      const { data } = await supabase.from('classes').select('*').order('class_name');
+      const { data } = await supabase.from('classes').select('*').eq('academy_id', userId).order('class_name');
       if (data) setClassList(data);
     }
     fetchClasses();
-  }, []);
+  }, [userId]);
 
   // 클래스, 월, 과목이 바뀔 때마다 데이터 로드
   useEffect(() => {
@@ -128,8 +138,8 @@ export default function GradeInputPage() {
         actualSessions = actualSessions.slice(0, sessionLimit);
       }
 
-      const { data: studentData } = await supabase.from('students').select('*').eq('class_name', targetClassName);
-      const { data: allGradeData } = await supabase.from('grades').select('*').eq('category_id', catId);
+      const { data: studentData } = await supabase.from('students').select('*').eq('academy_id', userId).eq('class_name', targetClassName);
+      const { data: allGradeData } = await supabase.from('grades').select('*').eq('academy_id', userId).eq('category_id', catId);
 
       if (studentData) {
         const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
@@ -189,6 +199,7 @@ export default function GradeInputPage() {
       students.forEach(student => {
         const score = student.scores[idx];
         upsertGrades.push({
+          academy_id: userId,
           student_id: student.id,
           category_id: selectedCategoryId,
           class_id: parseInt(selectedClassId),

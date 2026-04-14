@@ -7,21 +7,31 @@ export default function NoticePage() {
   const [notices, setNotices] = useState<any[]>([]);
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
   const [newNotice, setNewNotice] = useState({ title: '', content: '', is_important: false });
+  const [userId, setUserId] = useState('');
 
-  useEffect(() => { fetchNotices(); }, []);
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) setUserId(session.user.id);
+    };
+    getUser();
+  }, []);
+
+  useEffect(() => { if (userId) fetchNotices(); }, [userId]);
 
   const fetchNotices = async () => {
     const { data } = await supabase
       .from('notices')
       .select('*')
-      .order('is_important', { ascending: false }) // 중요 공지 우선
+      .eq('academy_id', userId)
+      .order('is_important', { ascending: false })
       .order('created_at', { ascending: false });
     if (data) setNotices(data);
   };
 
   const handleSave = async () => {
     if (!newNotice.title || !newNotice.content) return alert('제목과 내용을 입력해주세요.');
-    const { error } = await supabase.from('notices').insert([newNotice]);
+    const { error } = await supabase.from('notices').insert([{ ...newNotice, academy_id: userId }]);
     if (!error) {
       alert('공지사항이 등록되었습니다!');
       setIsWriteModalOpen(false);
