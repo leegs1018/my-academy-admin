@@ -31,22 +31,24 @@ export default function LandingPage() {
             <span className="text-[10px] font-bold text-slate-400 tracking-[0.2em]">MANAGEMENT CENTER</span>
           </div>
         </div>
-        <div className="hidden md:flex items-center gap-4">
-          <Link href="/kiosk" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-300 text-slate-600 rounded-full hover:border-indigo-500 hover:text-indigo-600 transition-all">
+        <div className="flex items-center gap-2 md:gap-4">
+          <Link href="/kiosk" className="px-4 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-bold border-2 border-slate-300 text-slate-600 rounded-full hover:border-indigo-500 hover:text-indigo-600 transition-all">
             출결 키오스크
           </Link>
-          {isLoggedIn ? (
-            <Link href="/admin" className="px-6 py-3 text-sm font-bold bg-indigo-600 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
-              대시보드로 이동 🚀
-            </Link>
-          ) : (
-            <>
-              <Link href="/login" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">로그인</Link>
-              <Link href="/register" className="px-6 py-3 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
-                솔루션 가입하기
+          <div className="hidden md:flex items-center gap-4">
+            {isLoggedIn ? (
+              <Link href="/admin" className="px-6 py-3 text-sm font-bold bg-indigo-600 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                대시보드로 이동 🚀
               </Link>
-            </>
-          )}
+            ) : (
+              <>
+                <Link href="/login" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">로그인</Link>
+                <Link href="/register" className="px-6 py-3 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                  솔루션 가입하기
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
