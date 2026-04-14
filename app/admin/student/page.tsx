@@ -7,6 +7,7 @@ export default function StudentPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [classList, setClassList] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [userId, setUserId] = useState('');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -41,10 +42,20 @@ export default function StudentPage() {
     '상담메모': 'counseling_memo'
   };
 
-  useEffect(() => { 
-    fetchStudents();
-    fetchClasses();
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) setUserId(session.user.id);
+    };
+    getUser();
   }, []);
+
+  useEffect(() => {
+    if (userId) {
+      fetchStudents();
+      fetchClasses();
+    }
+  }, [userId]);
 
   useEffect(() => {
     if (formData.isPhoneSame) {
@@ -53,12 +64,12 @@ export default function StudentPage() {
   }, [formData.isPhoneSame, formData.parentPhone]);
 
   const fetchStudents = async () => {
-    const { data } = await supabase.from('students').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('students').select('*').eq('academy_id', userId).order('created_at', { ascending: false });
     if (data) setStudents(data);
   };
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('*').order('class_name', { ascending: true });
+    const { data } = await supabase.from('classes').select('*').eq('academy_id', userId).order('class_name', { ascending: true });
     if (data) setClassList(data);
   };
 
@@ -134,7 +145,8 @@ export default function StudentPage() {
           throw new Error(`등록되지 않은 클래스명: [${Array.from(invalidClasses).join(', ')}]`);
         }
 
-        const { error } = await supabase.from('students').insert(studentsToInsert);
+        const studentsWithAcademy = studentsToInsert.map(s => ({ ...s, academy_id: userId }));
+        const { error } = await supabase.from('students').insert(studentsWithAcademy);
         if (error) throw error;
 
         alert(`성공! 총 ${studentsToInsert.length}명의 학생을 등록했습니다. ✨`);
@@ -163,19 +175,21 @@ export default function StudentPage() {
     if (!formData.name) return alert('이름은 필수입니다!');
     
     const { error } = await supabase.from('students').insert([{
+      academy_id: userId,
       name: formData.name,
       student_phone: formData.studentPhone,
       parent_phone: formData.parentPhone,
       parent_relation: formData.parentRelation,
       admission_date: formData.admissionDate,
       gender: formData.gender,
-      birth_date: formData.birthDate || null, 
+      birth_date: formData.birthDate || null,
       class_name: formData.className,
       school_name: formData.schoolName,
       grade_year: formData.gradeYear,
       school_level: formData.schoolLevel,
       grade_level: formData.gradeLevel,
-      counseling_memo: formData.counselingMemo
+      counseling_memo: formData.counselingMemo,
+      status: '재원',
     }]);
 
     if (!error) {
