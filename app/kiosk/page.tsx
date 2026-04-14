@@ -281,7 +281,7 @@ export default function KioskPage() {
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">🏫</div>
               <h2 className="text-xl font-black text-slate-800">학원 코드 입력</h2>
-              <p className="text-sm text-slate-400 mt-1">원장님께 받은 6자리 코드를 입력하세요</p>
+              <p className="text-sm text-slate-400 mt-1">발급받은 학원 6자리 코드를 입력하세요</p>
             </div>
             <CodeDisplay value={codeInput} length={6} label="학원 코드" />
             {errorMsg && <p className="text-center text-red-500 text-sm font-bold mb-4">{errorMsg}</p>}
