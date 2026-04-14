@@ -11,8 +11,17 @@ interface Subject {
 
 export default function ClassPage() {
   const [classes, setClasses] = useState<any[]>([]);
+  const [userId, setUserId] = useState('');
   const currentYear = new Date().getFullYear();
   const yearOptions = [currentYear - 1, currentYear, currentYear + 1];
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) setUserId(session.user.id);
+    };
+    getUser();
+  }, []);
 
   // 새 과목 생성 시 고유 ID 부여 (이 ID는 평생 갑니다)
   const createInitialSubject = (): Subject => ({
@@ -42,10 +51,10 @@ export default function ClassPage() {
 
   const levelOptions = ['초등', '중등', '고등', '수능', '내신', '기타'];
 
-  useEffect(() => { fetchClasses(); }, []);
+  useEffect(() => { if (userId) fetchClasses(); }, [userId]);
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('classes').select('*').eq('academy_id', userId).order('created_at', { ascending: false });
     if (data) setClasses(data);
   };
 
@@ -133,16 +142,19 @@ export default function ClassPage() {
     if (!formData.class_name) return alert('클래스 명칭을 입력하세요');
     const validCategories = formData.test_categories.filter(cat => cat.name.trim() !== '');
     if (validCategories.length === 0) return alert('최소 하나 이상의 과목을 입력하세요.');
+    if (!userId) return alert('로그인 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
 
-    const { error } = await supabase.from('classes').insert([{ ...formData, test_categories: validCategories }]);
+    const { error } = await supabase.from('classes').insert([{ ...formData, academy_id: userId, test_categories: validCategories }]);
     if (!error) {
       alert('클래스 등록 성공!');
-      setFormData({ 
-        class_name: '', teacher_name: '', target_level: '초등', start_time: '14:00', end_time: '16:00', 
-        start_year: currentYear, tuition_fee: 0, test_categories: [createInitialSubject()], 
-        mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false 
+      setFormData({
+        class_name: '', teacher_name: '', target_level: '초등', start_time: '14:00', end_time: '16:00',
+        start_year: currentYear, tuition_fee: 0, test_categories: [createInitialSubject()],
+        mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false
       });
       fetchClasses();
+    } else {
+      alert('등록 실패: ' + error.message);
     }
   };
 
