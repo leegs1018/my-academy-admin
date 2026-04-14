@@ -377,7 +377,7 @@ export default function KioskPage() {
               <div className="space-y-3">
                 <button
                   onClick={() => handleAttend('등원')}
-                  disabled={loading || selectedStudent.today_status === '등원' || selectedStudent.today_status === '하원'}
+                  disabled={loading || selectedStudent.today_status === '등원'}
                   className={`w-full py-5 rounded-2xl text-xl font-black transition-all active:scale-95 ${
                     selectedStudent.today_status === '없음'
                       ? 'bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-200'
@@ -388,7 +388,7 @@ export default function KioskPage() {
                 </button>
                 <button
                   onClick={() => handleAttend('하원')}
-                  disabled={loading || selectedStudent.today_status === '없음' || selectedStudent.today_status === '하원'}
+                  disabled={loading || selectedStudent.today_status === '없음'}
                   className={`w-full py-5 rounded-2xl text-xl font-black transition-all active:scale-95 ${
                     selectedStudent.today_status === '등원'
                       ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-200'
