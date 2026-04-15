@@ -10,7 +10,8 @@
       "Bash(node -e \"console.log\\(require\\('./node_modules/pdf-parse/package.json'\\).version\\)\")",
       "Bash(node pdftest.mjs)",
       "WebSearch",
-      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase'; // 💡 경로 별칭(@) 사용 권장
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -12,13 +12,6 @@ export default function DashboardPage() {
   const [recentNotices, setRecentNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 💡 로그아웃 로직 (Supabase 세션과 로컬 스토리지 한 번에 정리)
-  const handleLogout = async () => {
-    if (!confirm('로그아웃 하시겠습니까?')) return;
-    await supabase.auth.signOut();
-    localStorage.clear();
-    router.replace('/'); // 💡 window.location.href 대신 router.replace로 부드럽게 이동
-  };
 
   const fetchDashboardData = useCallback(async (userId: string) => {
     try {
@@ -103,24 +96,15 @@ export default function DashboardPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-10 pb-20">
       {/* 상단 헤더 */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-5xl font-black text-slate-900 italic tracking-tighter">DASHBOARD</h1>
-          <p className="text-slate-400 font-bold mt-2 text-lg">오늘도 원장님의 열정을 응원합니다! 🔥</p>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">대시보드</h1>
+          <p className="text-gray-400 font-bold mt-1">오늘도 원장님의 열정을 응원합니다! 🔥</p>
         </div>
-        
-        <div className="flex flex-col items-end gap-3 w-full md:w-auto">
-          <div className="bg-white px-6 py-2 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="font-black text-slate-800 text-lg">
-              {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
-            </p>
-          </div>
-          <button 
-            onClick={handleLogout}
-            className="px-5 py-2.5 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 font-black rounded-2xl transition-all text-sm border border-slate-100 shadow-sm"
-          >
-            로그아웃 🚪
-          </button>
+        <div className="bg-white px-5 py-2.5 rounded-2xl border border-gray-100 shadow-sm">
+          <p className="font-black text-gray-700 text-sm">
+            {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+          </p>
         </div>
       </header>
 
