@@ -11,7 +11,9 @@
       "Bash(node pdftest.mjs)",
       "WebSearch",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(git -C /c/Users/이규승/academy-manager log --all --oneline --grep=\"migration\\\\|schema\\\\|database\\\\|table\\\\|sms\")",
+      "Bash(git -C /c/Users/이규승/academy-manager log --all --oneline)"
     ]
   }
 }

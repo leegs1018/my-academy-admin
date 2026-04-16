@@ -176,7 +176,7 @@ export default function SMSPage() {
       const res = await fetch('/api/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, recipients }),
+        body: JSON.stringify({ message, recipients, academy_id: userId }),
       });
       const result = await res.json();
 
@@ -223,7 +223,7 @@ export default function SMSPage() {
     <div className="py-6">
       {/* 헤더 */}
       <div className="mb-6">
-        <h1 className="text-3xl font-black text-gray-800">📱 단체 문자 발송</h1>
+        <h1 className="text-3xl font-black text-gray-800">📱 문자 발송</h1>
         <p className="text-sm text-gray-400 mt-1 font-bold">수강생 또는 학부모에게 문자 메시지를 발송합니다</p>
       </div>
 

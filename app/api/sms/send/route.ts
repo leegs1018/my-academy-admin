@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
+import { createClient } from '@supabase/supabase-js';
 
 interface Recipient {
   student_id: string;
@@ -8,9 +9,10 @@ interface Recipient {
 }
 
 export async function POST(req: Request) {
-  const { message, recipients } = await req.json() as {
+  const { message, recipients, academy_id } = await req.json() as {
     message: string;
     recipients: Recipient[];
+    academy_id?: string;
   };
 
   if (!message || !recipients || recipients.length === 0) {
@@ -23,6 +25,21 @@ export async function POST(req: Request) {
 
   if (!apiKey || !apiSecret || !sender) {
     return NextResponse.json({ error: '서버 환경변수 설정 오류' }, { status: 500 });
+  }
+
+  // 학원 이름 조회
+  let subject = '알림';
+  if (academy_id) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data: cfg } = await supabase
+      .from('academy_config')
+      .select('academy_name')
+      .eq('user_id', academy_id)
+      .single();
+    if (cfg?.academy_name) subject = cfg.academy_name;
   }
 
   const results: { student_id: string; name: string; phone: string; status: 'success' | 'fail'; error?: string }[] = [];
@@ -45,6 +62,7 @@ export async function POST(req: Request) {
             to: recipient.phone.replace(/-/g, ''),
             from: sender.replace(/-/g, ''),
             text: message,
+            subject,
           },
         }),
       });
