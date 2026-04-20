@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Image from 'next/image';
+import { supabase } from '@/lib/supabase';
 
 interface TFQuestion {
   number: number;
@@ -17,14 +18,82 @@ interface VocabRow {
   antonym: string; antonym_m: string;
 }
 
+interface KoreanSummary {
+  type: '일반' | '논쟁' | '문제';
+  rows: { label: string; content: string }[];
+}
+
 interface GeneratedMaterials {
-  summaries: string[];
   tf_questions: TFQuestion[];
   answer_key: string;
-  korean_summary: string;
+  korean_summary: KoreanSummary;
   english_titles: string[];
   one_sentence_summaries: { english: string; korean: string }[];
   vocabulary_table: VocabRow[];
+}
+
+interface PdfHistoryItem {
+  id: string;
+  created_at: string;
+  passage_excerpt: string;
+  passage_full: string;
+  passage_type: string;
+  difficulty: string;
+  pdf_path: string;
+}
+
+function buildPdfHtml(el: HTMLElement): string {
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; background: white; padding: 12px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+    .section-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; }
+    .section-card > div:first-child { padding: 8px 16px !important; }
+    .section-card > div:last-child { padding: 14px !important; }
+    .section-card h2 { font-size: 0.95rem !important; line-height: 1.3 !important; }
+    .section-card p.text-xs, .section-card p.text-sm { font-size: 10px !important; line-height: 1.4 !important; }
+    .text-3xl { font-size: 1.2rem !important; }
+    .space-y-2 > * + *, .space-y-3 > * + * { margin-top: 4px !important; }
+    .space-y-4 > * + * { margin-top: 6px !important; }
+    .p-3 { padding: 5px !important; }
+    .p-4 { padding: 7px !important; }
+    .p-5 { padding: 8px !important; }
+    .gap-3, .gap-4 { gap: 5px !important; }
+    .mb-4 { margin-bottom: 6px !important; }
+    .mt-3 { margin-top: 4px !important; }
+    .leading-relaxed { line-height: 1.45 !important; }
+    .rounded-\\[2\\.5rem\\] { border-radius: 14px !important; }
+    .rounded-2xl { border-radius: 10px !important; }
+    .rounded-xl { border-radius: 8px !important; }
+    .rounded-full { border-radius: 6px !important; }
+    table { break-inside: auto; font-size: 11px; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    td, th { padding: 4px 6px !important; }
+    #vocab-table { min-width: 0 !important; width: 100%; table-layout: fixed; font-size: 10px; }
+    #vocab-table th, #vocab-table td { padding: 4px 5px !important; word-break: break-word; }
+    #vocab-table .vocab-word { display: block; }
+    #vocab-table .vocab-meaning { display: block; margin-left: 0 !important; font-size: 9px; }
+  </style>
+</head>
+<body>${el.outerHTML}</body>
+</html>`;
+}
+
+function elToBase64(html: string): string {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(html);
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += 8192) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
+  }
+  return btoa(chunks.join(''));
 }
 
 function renderBold(text: string) {
@@ -35,7 +104,21 @@ function renderBold(text: string) {
   );
 }
 
+const TYPE_COLORS: Record<string, string> = {
+  '일반': 'bg-indigo-100 text-indigo-700',
+  '논쟁': 'bg-amber-100 text-amber-700',
+  '문제': 'bg-rose-100 text-rose-700',
+};
+const DIFF_COLORS: Record<string, string> = {
+  '상': 'bg-red-100 text-red-700',
+  '중': 'bg-yellow-100 text-yellow-700',
+  '하': 'bg-green-100 text-green-700',
+};
+
 export default function PdfEditorPage() {
+  // 페이지 탭
+  const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
+
   // 입력 모드
   const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
 
@@ -59,7 +142,143 @@ export default function PdfEditorPage() {
   const [showAnswerKey, setShowAnswerKey] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 이력 탭
+  const [historyList, setHistoryList] = useState<PdfHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchType, setSearchType] = useState('');
+  const [searchDate, setSearchDate] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+
+  // ── 이력 조회 ──
+  const fetchHistory = useCallback(async (query = searchQuery, type = searchType, date = searchDate) => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setHistoryError('로그인 정보를 확인할 수 없습니다.'); return; }
+
+      let q = supabase
+        .from('pdf_history')
+        .select('*')
+        .eq('academy_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (type) q = q.eq('passage_type', type);
+      if (date) q = q.gte('created_at', date).lte('created_at', date + 'T23:59:59');
+      if (query) q = q.ilike('passage_full', `%${query}%`);
+
+      const { data, error: fetchErr } = await q;
+      if (fetchErr) { setHistoryError(`조회 오류: ${fetchErr.message}`); return; }
+      setHistoryList(data ?? []);
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : '알 수 없는 오류');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [searchQuery, searchType, searchDate]);
+
+  useEffect(() => {
+    if (activeTab === 'history') fetchHistory();
+  }, [activeTab]);
+
+  // ── 문제 생성 후 백그라운드 자동 저장 ──
+  const autoSavePdf = useCallback(async (generated: GeneratedMaterials, text: string, diff: string) => {
+    const el = document.getElementById('print-area');
+    if (!el) return;
+    setSaveStatus('saving');
+    try {
+      const htmlBase64 = elToBase64(buildPdfHtml(el));
+      const res = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ htmlBase64 }),
+      });
+      if (!res.ok) { setSaveStatus('error'); return; }
+      const pdfBlob = await res.blob();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setSaveStatus('error'); return; }
+      const fileName = `${user.id}/${Date.now()}.pdf`;
+      const { error: uploadErr } = await supabase.storage
+        .from('pdf-history')
+        .upload(fileName, pdfBlob, { contentType: 'application/pdf' });
+      if (uploadErr) { setSaveStatus('error'); return; }
+      const { error: insertErr } = await supabase.from('pdf_history').insert({
+        academy_id: user.id,
+        passage_excerpt: text.slice(0, 150),
+        passage_full: text,
+        passage_type: generated.korean_summary.type,
+        difficulty: diff,
+        pdf_path: fileName,
+      });
+      setSaveStatus(insertErr ? 'error' : 'done');
+    } catch { setSaveStatus('error'); }
+  }, []);
+
+  // ── 이력에서 단건 다운로드 ──
+  const downloadFromHistory = async (pdfPath: string, createdAt: string) => {
+    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(pdfPath, 3600);
+    if (!data?.signedUrl) return;
+    const date = new Date(createdAt).toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '');
+    const a = document.createElement('a');
+    a.href = data.signedUrl;
+    a.download = `영어문제_${date}.pdf`;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // ── 선택 항목 일괄 다운로드 ──
+  const downloadSelected = async () => {
+    setBulkDownloading(true);
+    const items = historyList.filter(i => selectedIds.has(i.id) && i.pdf_path);
+    for (const item of items) {
+      await downloadFromHistory(item.pdf_path, item.created_at);
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setBulkDownloading(false);
+  };
+
+  // ── 선택 항목 삭제 ──
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const items = historyList.filter(i => selectedIds.has(i.id));
+    const paths = items.filter(i => i.pdf_path).map(i => i.pdf_path);
+    if (paths.length > 0) {
+      await supabase.storage.from('pdf-history').remove(paths);
+    }
+    const { error: delErr } = await supabase.from('pdf_history').delete().in('id', [...selectedIds]);
+    if (delErr) {
+      alert(`삭제 실패: ${delErr.message}\nSupabase에서 DELETE RLS 정책을 확인해주세요.`);
+      return;
+    }
+    const deleted = new Set(selectedIds);
+    setHistoryList(prev => prev.filter(i => !deleted.has(i.id)));
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === historyList.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(historyList.map(i => i.id)));
+    }
+  };
 
   // ── 이미지 선택 ──
   const handleImageSelect = (file: File) => {
@@ -139,7 +358,10 @@ export default function PdfEditorPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
-      setResult(json.data as GeneratedMaterials);
+      const generated = json.data as GeneratedMaterials;
+      setResult(generated);
+      // DOM 렌더링 후 백그라운드에서 PDF 생성 + 이력 자동 저장
+      setTimeout(() => autoSavePdf(generated, textToSend, difficulty), 500);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
@@ -169,43 +391,16 @@ export default function PdfEditorPage() {
     if (!el) return;
     setPdfLoading(true);
     try {
-      // 1. print-area HTML 추출 후 완전한 HTML 문서로 래핑
-      const html = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Noto Sans KR', sans-serif; background: white; padding: 24px; }
-    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  </style>
-</head>
-<body>${el.outerHTML}</body>
-</html>`;
-
-      // 2. HTML → UTF-8 base64 인코딩 (한글이 URL/헤더에 들어가지 않도록)
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(html);
-      const chunks: string[] = [];
-      for (let i = 0; i < bytes.length; i += 8192) {
-        chunks.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
-      }
-      const htmlBase64 = btoa(chunks.join(''));
-
-      // 3. base64(ASCII만 포함) → JSON body로 서버 전송
+      const htmlBase64 = elToBase64(buildPdfHtml(el));
       const res = await fetch('/api/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ htmlBase64 }),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as { error?: string }).error || 'PDF 생성 실패');
       }
-
-      // 3. 다운로드
       const pdfBlob = await res.blob();
       const url = URL.createObjectURL(pdfBlob);
       const today = new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '');
@@ -238,299 +433,527 @@ export default function PdfEditorPage() {
       )}
 
       {/* 헤더 */}
-      <div className="no-print mb-8">
+      <div className="no-print mb-6">
         <h1 className="text-4xl font-black text-slate-900 tracking-tighter">📝 영어 문제 생성</h1>
-        <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 6가지 교육 자료를 만들어드려요</p>
+        <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 5가지 교육 자료를 만들어드려요</p>
       </div>
 
-      {/* 입력 섹션 */}
-      <div className="no-print bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 mb-8">
-
-        {/* 탭 */}
-        <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl w-fit">
-          {([['text', '✏️ 텍스트 직접 입력'], ['image', '📷 사진 등록']] as const).map(([mode, label]) => (
-            <button key={mode} onClick={() => { setInputMode(mode); setError(null); }}
-              className={`px-6 py-3 rounded-xl font-black text-sm transition-all
-                ${inputMode === mode ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── 텍스트 탭 ── */}
-        {inputMode === 'text' && (
-          <div>
-            <p className="text-sm font-bold text-slate-500 mb-3">
-              영어 지문을 복사(Ctrl+C)한 뒤 아래에 붙여넣기(Ctrl+V) 해주세요
-            </p>
-            <textarea
-              value={manualText}
-              onChange={(e) => { setManualText(e.target.value); setResult(null); }}
-              placeholder="여기에 영어 지문을 붙여넣어 주세요..."
-              rows={12}
-              className="w-full p-5 border-2 border-slate-200 rounded-2xl font-mono text-sm
-                         text-slate-700 resize-y focus:outline-none focus:border-indigo-400
-                         transition-colors placeholder:text-slate-300"
-            />
-            <p className="text-xs text-slate-400 font-bold mt-2 text-right">
-              {manualText.trim().length}자
-              {manualText.trim().length > 0 && manualText.trim().length < 50 && ' (최소 50자 이상)'}
-            </p>
-          </div>
-        )}
-
-        {/* ── 사진 탭 ── */}
-        {inputMode === 'image' && (
-          <div className="space-y-5">
-            {/* 이미지 업로드 존 */}
-            <label
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-              className={`block w-full border-4 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all
-                ${isDragging ? 'border-indigo-500 bg-indigo-50'
-                  : imageFile ? 'border-emerald-300 bg-emerald-50/50'
-                  : 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50'}`}
-            >
-              <div className="text-5xl mb-3">{imageFile ? '🖼️' : '📷'}</div>
-              {imageFile ? (
-                <>
-                  <p className="font-black text-emerald-700 text-lg">{imageFile.name}</p>
-                  <p className="text-xs text-slate-400 mt-1">다른 사진으로 변경하려면 클릭하세요</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-black text-slate-600 text-lg">사진을 클릭하거나 드래그하여 등록</p>
-                  <p className="text-sm text-slate-400 font-bold mt-2">JPG · PNG · WebP · GIF · 최대 10MB</p>
-                </>
-              )}
-              <input type="file" accept="image/*" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageSelect(f); }} />
-            </label>
-
-            {/* 이미지 미리보기 + OCR 버튼 */}
-            {imageFile && imagePreview && (
-              <div className="flex flex-col md:flex-row gap-5">
-                {/* 미리보기 */}
-                <div className="md:w-1/2 rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center min-h-[200px]">
-                  <Image
-                    src={imagePreview}
-                    alt="업로드된 이미지"
-                    width={600}
-                    height={400}
-                    className="max-h-80 object-contain w-full"
-                    unoptimized
-                  />
-                </div>
-
-                {/* OCR 결과 영역 */}
-                <div className="md:w-1/2 flex flex-col gap-3">
-                  {!ocrDone ? (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
-                      <p className="font-black text-indigo-500 text-center mb-4">
-                        사진에서 영어 텍스트를<br />AI가 자동으로 추출해드려요
-                      </p>
-                      <button onClick={handleOCR} disabled={ocrLoading}
-                        className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black
-                                   hover:bg-indigo-700 active:scale-95 transition-all shadow-lg
-                                   disabled:opacity-50">
-                        🔍 텍스트 추출하기
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <p className="font-black text-emerald-600 text-sm">✅ 텍스트 추출 완료 — 수정 후 문제를 생성하세요</p>
-                        <button onClick={() => { setOcrDone(false); setOcrText(''); }}
-                          className="no-print text-xs font-black text-slate-400 hover:text-rose-500 transition-colors">
-                          다시 추출
-                        </button>
-                      </div>
-                      <textarea
-                        value={ocrText}
-                        onChange={(e) => setOcrText(e.target.value)}
-                        rows={10}
-                        className="flex-1 w-full p-4 border-2 border-emerald-200 rounded-2xl font-mono text-sm
-                                   text-slate-700 resize-y focus:outline-none focus:border-indigo-400
-                                   transition-colors bg-emerald-50/30"
-                      />
-                      <p className="text-xs text-slate-400 font-bold text-right">{ocrText.trim().length}자</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 에러 */}
-        {error && (
-          <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-            <p className="text-rose-600 font-black whitespace-pre-line">⚠️ {error}</p>
-          </div>
-        )}
-
-        {/* 난이도 선택 */}
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <span className="font-black text-slate-700 text-lg">난이도 선택:</span>
-          {(['상', '중', '하'] as const).map((d) => (
-            <button key={d} onClick={() => setDifficulty(d)}
-              className={`px-8 py-3 rounded-2xl font-black text-xl transition-all
-                ${difficulty === d ? 'bg-indigo-600 text-white shadow-lg scale-105'
-                  : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
-              {d}
-            </button>
-          ))}
-          <span className="text-sm text-slate-400 font-bold">
-            {difficulty === '상' ? '수능/내신 상위권' : difficulty === '중' ? '일반 고등학교 내신' : '중학교~고등 초급'}
-          </span>
-        </div>
-
-        {/* 생성 버튼 */}
-        <button onClick={handleGenerate} disabled={!canGenerate}
-          className="mt-6 w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl
-                     shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all
-                     disabled:opacity-40 disabled:cursor-not-allowed">
-          AI로 문제 생성하기 🚀
+      {/* 페이지 탭 */}
+      <div className="no-print flex gap-2 mb-6 border-b-2 border-slate-100">
+        <button
+          onClick={() => setActiveTab('generate')}
+          className={`px-6 py-3 font-black text-base rounded-t-xl transition-all
+            ${activeTab === 'generate' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          ✏️ 문제 생성
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`px-6 py-3 font-black text-base rounded-t-xl transition-all
+            ${activeTab === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          📋 생성 이력
         </button>
       </div>
 
-      {/* 결과 섹션 */}
-      {result && (
-        <div id="print-area" className="space-y-6">
+      {/* ══ 문제 생성 탭 ══ */}
+      {activeTab === 'generate' && (
+        <>
+          {/* 입력 섹션 */}
+          <div className="no-print bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 mb-8">
 
-          <SectionCard number="01" title="요약문 2가지" subtitle="본문에 쓰인 단어를 활용한 중간 길이 요약"
-            color="bg-indigo-500" onCopy={() => copy(result.summaries.join('\n\n'), 'summaries')} copied={copiedSection === 'summaries'}>
-            <div className="space-y-4">
-              {result.summaries.map((s, i) => (
-                <div key={i} className="p-5 bg-indigo-50 rounded-2xl border border-indigo-100">
-                  <span className="inline-block bg-indigo-600 text-white text-xs font-black px-3 py-1 rounded-full mb-3">Version {i + 1}</span>
-                  <p className="text-slate-700 font-bold leading-relaxed">{s}</p>
-                </div>
+            {/* 입력 모드 탭 */}
+            <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl w-fit">
+              {([['text', '✏️ 텍스트 직접 입력'], ['image', '📷 사진 등록']] as const).map(([mode, label]) => (
+                <button key={mode} onClick={() => { setInputMode(mode); setError(null); }}
+                  className={`px-6 py-3 rounded-xl font-black text-sm transition-all
+                    ${inputMode === mode ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                  {label}
+                </button>
               ))}
             </div>
-          </SectionCard>
 
-          <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T 5개 F 5개"
-            color="bg-violet-500" onCopy={() => copy(buildTFText(), 'tf')} copied={copiedSection === 'tf'}>
-            <div className="space-y-2 mb-4">
-              {result.tf_questions.map((q) => (
-                <div key={q.number} className="flex items-start gap-3 p-3 rounded-xl hover:bg-violet-50 transition-colors">
-                  <span className="font-black text-violet-600 w-7 shrink-0">{q.number}.</span>
-                  <p className="text-slate-700 font-bold leading-relaxed flex-1">{q.statement}</p>
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-violet-100 pt-4">
-              <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors">
-                <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
-                해설지 {showAnswerKey ? '닫기' : '보기'}
-              </button>
-              {showAnswerKey && (
-                <div className="mt-3 p-4 bg-violet-50 rounded-2xl border border-violet-100">
-                  <div className="flex justify-between mb-2">
-                    <span className="font-black text-violet-700">정답</span>
-                    <button onClick={() => copy(result.answer_key, 'answer_key')}
-                      className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
-                      {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
-                    </button>
-                  </div>
-                  <p className="font-black text-slate-700 tracking-wide">{result.answer_key}</p>
-                </div>
-              )}
-            </div>
-          </SectionCard>
+            {/* 텍스트 입력 */}
+            {inputMode === 'text' && (
+              <div>
+                <p className="text-sm font-bold text-slate-500 mb-3">
+                  영어 지문을 복사(Ctrl+C)한 뒤 아래에 붙여넣기(Ctrl+V) 해주세요
+                </p>
+                <textarea
+                  value={manualText}
+                  onChange={(e) => { setManualText(e.target.value); setResult(null); }}
+                  placeholder="여기에 영어 지문을 붙여넣어 주세요..."
+                  rows={12}
+                  className="w-full p-5 border-2 border-slate-200 rounded-2xl font-mono text-sm
+                             text-slate-700 resize-y focus:outline-none focus:border-indigo-400
+                             transition-colors placeholder:text-slate-300"
+                />
+                <p className="text-xs text-slate-400 font-bold mt-2 text-right">
+                  {manualText.trim().length}자
+                  {manualText.trim().length > 0 && manualText.trim().length < 50 && ' (최소 50자 이상)'}
+                </p>
+              </div>
+            )}
 
-          <SectionCard number="03" title="한글 요약" subtitle="시험 대비용 내용 정리"
-            color="bg-emerald-500" onCopy={() => copy(result.korean_summary, 'korean')} copied={copiedSection === 'korean'}>
-            <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
-              <p className="text-slate-700 font-bold leading-loose whitespace-pre-wrap">{result.korean_summary}</p>
-            </div>
-          </SectionCard>
+            {/* 이미지 입력 */}
+            {inputMode === 'image' && (
+              <div className="space-y-5">
+                <label
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  className={`block w-full border-4 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all
+                    ${isDragging ? 'border-indigo-500 bg-indigo-50'
+                      : imageFile ? 'border-emerald-300 bg-emerald-50/50'
+                      : 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50'}`}
+                >
+                  <div className="text-5xl mb-3">{imageFile ? '🖼️' : '📷'}</div>
+                  {imageFile ? (
+                    <>
+                      <p className="font-black text-emerald-700 text-lg">{imageFile.name}</p>
+                      <p className="text-xs text-slate-400 mt-1">다른 사진으로 변경하려면 클릭하세요</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-black text-slate-600 text-lg">사진을 클릭하거나 드래그하여 등록</p>
+                      <p className="text-sm text-slate-400 font-bold mt-2">JPG · PNG · WebP · GIF · 최대 10MB</p>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageSelect(f); }} />
+                </label>
 
-          <SectionCard number="04" title="영어 제목 3가지" subtitle="한글 번역 포함 · 시험 대비용"
-            color="bg-amber-500" onCopy={() => copy(result.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
-            <div className="space-y-3">
-              {result.english_titles.map((title, i) => (
-                <div key={i} className="flex items-start gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                  <span className="font-black text-amber-600 w-7 shrink-0">{i + 1}.</span>
-                  <p className="text-slate-700 font-bold leading-relaxed">{title}</p>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard number="05" title="1문장 영어 요약 3가지" subtitle="본문에 없는 단어 사용 · 핵심 어휘 볼드체"
-            color="bg-rose-500" onCopy={() => copy(buildOneSentenceText(), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
-            <div className="space-y-4">
-              {result.one_sentence_summaries.map((s, i) => (
-                <div key={i} className="p-5 bg-rose-50 rounded-2xl border border-rose-100">
-                  <div className="flex items-start gap-3">
-                    <span className="font-black text-rose-600 w-7 shrink-0">{i + 1}.</span>
-                    <div className="flex-1">
-                      <p className="text-slate-700 font-bold leading-relaxed mb-2">{renderBold(s.english)}</p>
-                      <p className="text-slate-500 font-bold text-sm">({s.korean})</p>
+                {imageFile && imagePreview && (
+                  <div className="flex flex-col md:flex-row gap-5">
+                    <div className="md:w-1/2 rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center min-h-[200px]">
+                      <Image
+                        src={imagePreview}
+                        alt="업로드된 이미지"
+                        width={600}
+                        height={400}
+                        className="max-h-80 object-contain w-full"
+                        unoptimized
+                      />
+                    </div>
+                    <div className="md:w-1/2 flex flex-col gap-3">
+                      {!ocrDone ? (
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
+                          <p className="font-black text-indigo-500 text-center mb-4">
+                            사진에서 영어 텍스트를<br />AI가 자동으로 추출해드려요
+                          </p>
+                          <button onClick={handleOCR} disabled={ocrLoading}
+                            className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black
+                                       hover:bg-indigo-700 active:scale-95 transition-all shadow-lg
+                                       disabled:opacity-50">
+                            🔍 텍스트 추출하기
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <p className="font-black text-emerald-600 text-sm">✅ 텍스트 추출 완료 — 수정 후 문제를 생성하세요</p>
+                            <button onClick={() => { setOcrDone(false); setOcrText(''); }}
+                              className="no-print text-xs font-black text-slate-400 hover:text-rose-500 transition-colors">
+                              다시 추출
+                            </button>
+                          </div>
+                          <textarea
+                            value={ocrText}
+                            onChange={(e) => setOcrText(e.target.value)}
+                            rows={10}
+                            className="flex-1 w-full p-4 border-2 border-emerald-200 rounded-2xl font-mono text-sm
+                                       text-slate-700 resize-y focus:outline-none focus:border-indigo-400
+                                       transition-colors bg-emerald-50/30"
+                          />
+                          <p className="text-xs text-slate-400 font-bold text-right">{ocrText.trim().length}자</p>
+                        </div>
+                      )}
                     </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* 에러 */}
+            {error && (
+              <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+                <p className="text-rose-600 font-black whitespace-pre-line">⚠️ {error}</p>
+              </div>
+            )}
+
+            {/* 난이도 선택 */}
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <span className="font-black text-slate-700 text-lg">난이도 선택:</span>
+              {(['상', '중', '하'] as const).map((d) => (
+                <button key={d} onClick={() => setDifficulty(d)}
+                  className={`px-8 py-3 rounded-2xl font-black text-xl transition-all
+                    ${difficulty === d ? 'bg-indigo-600 text-white shadow-lg scale-105'
+                      : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
+                  {d}
+                </button>
+              ))}
+              <span className="text-sm text-slate-400 font-bold">
+                {difficulty === '상' ? '수능/내신 상위권' : difficulty === '중' ? '일반 고등학교 내신' : '중학교~고등 초급'}
+              </span>
+            </div>
+
+            <button onClick={handleGenerate} disabled={!canGenerate}
+              className="mt-6 w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl
+                         shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+              AI로 문제 생성하기 🚀
+            </button>
+          </div>
+
+          {/* 결과 섹션 */}
+          {result && (
+            <div id="print-area" className="space-y-6">
+
+              <SectionCard number="01" title="한글 요약" subtitle="지문 유형별 구조 · 고등 시험 대비용"
+                color="bg-indigo-500"
+                onCopy={() => copy(result.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
+                copied={copiedSection === 'korean'}>
+                <div>
+                  <span className="inline-block mb-4 bg-indigo-100 text-indigo-700 text-xs font-black px-3 py-1 rounded-full">
+                    {result.korean_summary.type === '일반' ? '일반 지문' : result.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
+                  </span>
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      {result.korean_summary.rows.map((row, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
+                          <td className="w-24 p-4 font-black text-indigo-700 text-sm border border-indigo-100 whitespace-nowrap align-top">
+                            {row.label}
+                          </td>
+                          <td className="p-4 text-slate-700 font-bold leading-relaxed border border-indigo-100">
+                            {row.content}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SectionCard>
+
+              <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T 5개 F 5개"
+                color="bg-violet-500" onCopy={() => copy(buildTFText(), 'tf')} copied={copiedSection === 'tf'}>
+                <div className="space-y-2 mb-4">
+                  {result.tf_questions.map((q) => (
+                    <div key={q.number} className="flex items-start gap-3 p-3 rounded-xl hover:bg-violet-50 transition-colors">
+                      <span className="font-black text-violet-600 w-7 shrink-0">{q.number}.</span>
+                      <p className="text-slate-700 font-bold leading-relaxed flex-1">{q.statement}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-violet-100 pt-4">
+                  <button onClick={() => setShowAnswerKey(!showAnswerKey)}
+                    className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors">
+                    <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
+                    해설지 {showAnswerKey ? '닫기' : '보기'}
+                  </button>
+                  {showAnswerKey && (
+                    <div className="mt-3 p-4 bg-violet-50 rounded-2xl border border-violet-100">
+                      <div className="flex justify-between mb-2">
+                        <span className="font-black text-violet-700">정답</span>
+                        <button onClick={() => copy(result.answer_key, 'answer_key')}
+                          className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
+                          {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
+                        </button>
+                      </div>
+                      <p className="font-black text-slate-700 tracking-wide">{result.answer_key}</p>
+                    </div>
+                  )}
+                </div>
+              </SectionCard>
+
+              <SectionCard number="03" title="영어 제목 3가지" subtitle="한글 번역 포함 · 시험 대비용"
+                color="bg-amber-500" onCopy={() => copy(result.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
+                <div className="space-y-3">
+                  {result.english_titles.map((title, i) => (
+                    <div key={i} className="flex items-start gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                      <span className="font-black text-amber-600 w-7 shrink-0">{i + 1}.</span>
+                      <p className="text-slate-700 font-bold leading-relaxed">{title}</p>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              <SectionCard number="04" title="1문장 영어 요약 3가지" subtitle="본문에 없는 단어 사용 · 핵심 어휘 볼드체"
+                color="bg-rose-500" onCopy={() => copy(buildOneSentenceText(), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
+                <div className="space-y-4">
+                  {result.one_sentence_summaries.map((s, i) => (
+                    <div key={i} className="p-5 bg-rose-50 rounded-2xl border border-rose-100">
+                      <div className="flex items-start gap-3">
+                        <span className="font-black text-rose-600 w-7 shrink-0">{i + 1}.</span>
+                        <div className="flex-1">
+                          <p className="text-slate-700 font-bold leading-relaxed mb-2">{renderBold(s.english)}</p>
+                          <p className="text-slate-500 font-bold text-sm">({s.korean})</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+
+              <SectionCard number="05" title="관련 어휘 10개" subtitle="지문 내 어휘 추출 · 동의어 3개 · 반의어 1개 · 한글 뜻 포함 (총 40개)"
+                color="bg-slate-700" onCopy={() => copy(buildVocabText(), 'vocab')} copied={copiedSection === 'vocab'}>
+                <div className="overflow-x-auto">
+                  <table id="vocab-table" className="w-full text-sm border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-slate-800 text-white">
+                        {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+                          <th key={i} className={`p-3 text-left font-black whitespace-nowrap
+                            ${i === 0 ? 'rounded-tl-xl' : ''} ${i === 4 ? 'rounded-tr-xl' : ''}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.vocabulary_table.map((row, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                          <td className="p-3 border-b border-slate-100">
+                            <span className="vocab-word font-black text-indigo-700">{row.word}</span>
+                            <span className="vocab-meaning text-slate-400 ml-1">( {row.meaning} )</span>
+                          </td>
+                          {[
+                            [row.syn1, row.syn1_m], [row.syn2, row.syn2_m], [row.syn3, row.syn3_m]
+                          ].map(([w, m], j) => (
+                            <td key={j} className="p-3 border-b border-slate-100">
+                              <span className="vocab-word font-bold text-slate-700">{w}</span>
+                              <span className="vocab-meaning text-slate-400 ml-1">( {m} )</span>
+                            </td>
+                          ))}
+                          <td className="p-3 border-b border-slate-100">
+                            <span className="vocab-word font-black text-rose-600">{row.antonym}</span>
+                            <span className="vocab-meaning text-slate-400 ml-1">( {row.antonym_m} )</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SectionCard>
+
+            </div>
+          )}
+
+          {result && (
+            <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
+              {/* 자동 저장 상태 토스트 */}
+              {saveStatus === 'saving' && (
+                <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
+                  <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                  이력 자동 저장 중...
+                </div>
+              )}
+              {saveStatus === 'done' && (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-emerald-600">
+                  ✅ 이력에 저장됨
+                </div>
+              )}
+              {saveStatus === 'error' && (
+                <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-rose-600">
+                  ⚠️ 이력 저장 실패 (RLS 정책 확인 필요)
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button onClick={handleDownloadPDF} disabled={pdfLoading}
+                  className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl
+                             hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
+                  {pdfLoading ? '⏳ 생성 중...' : '⬇️ PDF 저장'}
+                </button>
+                <button onClick={() => window.print()}
+                  className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl
+                             hover:bg-slate-700 active:scale-95 transition-all">
+                  🖨️ 인쇄
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ══ 생성 이력 탭 ══ */}
+      {activeTab === 'history' && (
+        <div className="space-y-4">
+          {/* 검색 바 */}
+          <div className="bg-white p-5 rounded-[2rem] shadow-lg border border-slate-100">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-black text-slate-500">날짜</label>
+                <input
+                  type="date"
+                  value={searchDate}
+                  onChange={(e) => setSearchDate(e.target.value)}
+                  className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm
+                             focus:outline-none focus:border-indigo-400 transition-colors"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-black text-slate-500">지문 유형</label>
+                <select
+                  value={searchType}
+                  onChange={(e) => setSearchType(e.target.value)}
+                  className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm
+                             focus:outline-none focus:border-indigo-400 transition-colors bg-white"
+                >
+                  <option value="">전체</option>
+                  <option value="일반">일반</option>
+                  <option value="논쟁">논쟁</option>
+                  <option value="문제">문제</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="text-xs font-black text-slate-500">지문 내 단어 검색</label>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchHistory()}
+                  placeholder="단어를 입력하세요..."
+                  className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm
+                             focus:outline-none focus:border-indigo-400 transition-colors"
+                />
+              </div>
+              <button
+                onClick={() => fetchHistory()}
+                disabled={historyLoading}
+                className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm
+                           hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+              >
+                🔍 검색
+              </button>
+              {(searchDate || searchType || searchQuery) && (
+                <button
+                  onClick={() => {
+                    setSearchDate(''); setSearchType(''); setSearchQuery('');
+                    fetchHistory('', '', '');
+                  }}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 에러 */}
+          {historyError && (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+              <p className="text-rose-600 font-black">⚠️ {historyError}</p>
+              <p className="text-rose-400 text-sm font-bold mt-1">Supabase RLS 정책이 설정되어 있는지 확인해주세요.</p>
+            </div>
+          )}
+
+          {/* 선택 액션 바 */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
+              <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
+              <div className="flex gap-2 ml-auto">
+                <button
+                  onClick={downloadSelected}
+                  disabled={bulkDownloading}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm
+                             hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 4v11" />
+                  </svg>
+                  {bulkDownloading ? '다운로드 중...' : 'PDF 다운로드'}
+                </button>
+                <button
+                  onClick={deleteSelected}
+                  className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm
+                             hover:bg-rose-600 active:scale-95 transition-all"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  삭제
+                </button>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 이력 목록 */}
+          {historyLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : historyList.length === 0 ? (
+            <div className="bg-white rounded-[2rem] p-16 text-center shadow-lg border border-slate-100">
+              <p className="text-5xl mb-4">📭</p>
+              <p className="font-black text-slate-500 text-lg">생성된 이력이 없습니다</p>
+              <p className="text-slate-400 font-bold text-sm mt-2">문제를 생성하면 자동으로 이곳에 기록돼요</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
+              {/* 테이블 헤더 */}
+              <div className="grid grid-cols-[40px_160px_80px_60px_1fr_52px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === historyList.length && historyList.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5"
+                />
+                <span className="text-xs font-black text-slate-500">날짜</span>
+                <span className="text-xs font-black text-slate-500">유형</span>
+                <span className="text-xs font-black text-slate-500">난이도</span>
+                <span className="text-xs font-black text-slate-500">지문 요약</span>
+                <span className="text-xs font-black text-slate-500 text-center">PDF</span>
+              </div>
+              {historyList.map((item, i) => (
+                <div
+                  key={item.id}
+                  className={`grid grid-cols-[40px_160px_80px_60px_1fr_52px] gap-3 px-5 py-4 items-center
+                    ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
+                    border-b border-slate-100 last:border-0 hover:bg-indigo-50/60 transition-colors`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => toggleSelect(item.id)}
+                    className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                  />
+                  <span className="text-sm font-bold text-slate-600 whitespace-nowrap">
+                    {new Date(item.created_at).toLocaleString('ko-KR', {
+                      year: 'numeric', month: '2-digit', day: '2-digit',
+                      hour: '2-digit', minute: '2-digit'
+                    })}
+                  </span>
+                  <span className={`text-xs font-black px-2 py-1 rounded-full w-fit
+                    ${TYPE_COLORS[item.passage_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                    {item.passage_type || '-'}
+                  </span>
+                  <span className={`text-xs font-black px-2 py-1 rounded-full w-fit
+                    ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
+                    {item.difficulty || '-'}
+                  </span>
+                  <p className="text-sm text-slate-600 font-bold truncate">
+                    {item.passage_excerpt}
+                  </p>
+                  {item.pdf_path ? (
+                    <button
+                      onClick={() => downloadFromHistory(item.pdf_path, item.created_at)}
+                      title="PDF 다운로드"
+                      className="flex items-center justify-center w-10 h-10 bg-indigo-100 hover:bg-indigo-200
+                                 text-indigo-600 rounded-xl transition-all active:scale-90 mx-auto"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 4v11" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-300 font-bold text-center mx-auto">저장중</span>
+                  )}
                 </div>
               ))}
             </div>
-          </SectionCard>
-
-          <SectionCard number="06" title="관련 어휘 10개" subtitle="동의어 3개 · 반의어 1개 · 한글 뜻 포함"
-            color="bg-slate-700" onCopy={() => copy(buildVocabText(), 'vocab')} copied={copiedSection === 'vocab'}>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse min-w-[700px]">
-                <thead>
-                  <tr className="bg-slate-800 text-white">
-                    {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                      <th key={i} className={`p-3 text-left font-black whitespace-nowrap
-                        ${i === 0 ? 'rounded-tl-xl' : ''} ${i === 4 ? 'rounded-tr-xl' : ''}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.vocabulary_table.map((row, i) => (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="p-3 border-b border-slate-100">
-                        <span className="font-black text-indigo-700">{row.word}</span>
-                        <span className="text-slate-400 ml-1">({row.meaning})</span>
-                      </td>
-                      {[
-                        [row.syn1, row.syn1_m], [row.syn2, row.syn2_m], [row.syn3, row.syn3_m]
-                      ].map(([w, m], j) => (
-                        <td key={j} className="p-3 border-b border-slate-100">
-                          <span className="font-bold text-slate-700">{w}</span>
-                          <span className="text-slate-400 ml-1">({m})</span>
-                        </td>
-                      ))}
-                      <td className="p-3 border-b border-slate-100">
-                        <span className="font-black text-rose-600">{row.antonym}</span>
-                        <span className="text-slate-400 ml-1">({row.antonym_m})</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-
-        </div>
-      )}
-
-      {result && (
-        <div className="no-print fixed bottom-8 right-8 flex gap-3 z-50">
-          <button onClick={handleDownloadPDF} disabled={pdfLoading}
-            className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl
-                       hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
-            {pdfLoading ? '⏳ 생성 중...' : '⬇️ PDF 저장'}
-          </button>
-          <button onClick={() => window.print()}
-            className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl
-                       hover:bg-slate-700 active:scale-95 transition-all">
-            🖨️ 인쇄
-          </button>
+          )}
         </div>
       )}
     </div>
@@ -542,7 +965,7 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children 
   onCopy: () => void; copied: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+    <div className="section-card bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
       <div className={`${color} px-8 py-5 flex items-center justify-between`}>
         <div className="flex items-center gap-4">
           <span className="text-white/70 font-black text-3xl leading-none">{number}</span>

@@ -18,11 +18,20 @@ interface VocabRow {
   antonym: string; antonym_m: string;
 }
 
+interface KoreanSummaryRow {
+  label: string;
+  content: string;
+}
+
+interface KoreanSummary {
+  type: '일반' | '논쟁' | '문제';
+  rows: KoreanSummaryRow[];
+}
+
 interface GeneratedMaterials {
-  summaries: string[];
   tf_questions: TFQuestion[];
   answer_key: string;
-  korean_summary: string;
+  korean_summary: KoreanSummary;
   english_titles: string[];
   one_sentence_summaries: { english: string; korean: string }[];
   vocabulary_table: VocabRow[];
@@ -36,7 +45,7 @@ function buildPrompt(text: string, difficulty: string): string {
   };
 
   return `당신은 한국 영어학원의 전문 영어 교사 AI입니다.
-아래 영어 지문을 분석하여 6가지 교육 자료를 생성해주세요.
+아래 영어 지문을 분석하여 5가지 교육 자료를 생성해주세요.
 
 난이도: ${difficulty} (${difficultyGuide[difficulty] || difficultyGuide['중']})
 
@@ -47,10 +56,14 @@ ${text}
 반드시 아래 JSON 형식으로만 반환하세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요.
 
 {
-  "summaries": [
-    "Summary 1 - medium length (3~5 sentences) using words from the passage",
-    "Summary 2 - medium length (3~5 sentences) using words from the passage (different perspective)"
-  ],
+  "korean_summary": {
+    "type": "일반",
+    "rows": [
+      {"label": "핵심내용", "content": "한글로 핵심 내용 1~2문장"},
+      {"label": "사례", "content": "한글로 사례 1~2문장"},
+      {"label": "결론", "content": "한글로 결론 1문장"}
+    ]
+  },
   "tf_questions": [
     {"number": 1, "statement": "English statement using vocabulary NOT in the passage", "answer": "T"},
     {"number": 2, "statement": "...", "answer": "F"},
@@ -64,7 +77,6 @@ ${text}
     {"number": 10, "statement": "...", "answer": "F"}
   ],
   "answer_key": "1. T  2. F  3. T  4. F  5. T  6. F  7. T  8. F  9. T  10. F",
-  "korean_summary": "1. 핵심 주장:\\n- (한 문장. 글 전체를 관통하는 주장)\\n\\n2. 관계의 본질:\\n- (글에서 설명하는 대상 간의 관계 정의. 관계의 성격 설명. 필요시 비유 포함)\\n\\n3. 글쓴이의 비판:\\n- (글쓴이가 문제 삼는 대상 또는 태도. 무엇을 비판하는지 + 왜 문제인지)",
   "english_titles": [
     "First Long Title For Exam Preparation (한글 번역)",
     "Second Title Covering the Main Theme (한글 번역)",
@@ -81,17 +93,18 @@ ${text}
 }
 
 생성 규칙:
-1. summaries: 반드시 지문에 나온 단어를 그대로 활용. 각 3~5문장 중간 길이. 2가지 다른 관점. 영어로 작성.
-2. tf_questions: T 5개, F 5개 (반드시 동수). 지문에 없는 어휘로 영어 서술문 작성. 괄호 없음. 번호는 1~10 숫자.
+1. korean_summary: 고등 시험대비용. 지문 종류를 먼저 파악한 후 아래 구조로 작성.
+   - type 값: "일반" | "논쟁" | "문제" 중 하나를 반드시 설정.
+   - rows 배열: 각 행은 label(항목명)과 content(한글 1~2문장)로 구성.
+     - 일반 지문 → rows 3개: label = "핵심내용", "사례", "결론"
+     - 논쟁 지문 → rows 3개: label = "주장", "근거", "결론"
+     - 문제 지문 → rows 3개: label = "현상", "문제", "해결"
+   - content는 각 행당 한글 1~2문장으로 명확하게 작성. 원문 직역 금지.
+2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자.
 3. answer_key: "1. T  2. F ..." 형식. 괄호 없음. 번호 복사가 깔끔하게.
-4. korean_summary: 반드시 아래 3개 항목을 모두 포함할 것.
-   - "1. 핵심 주장:" : 한 문장. 글 전체를 관통하는 주장만.
-   - "2. 관계의 본질:" : 대상 간 관계의 성격 정의. 단순 요약 금지. 필요시 비유 포함.
-   - "3. 글쓴이의 비판:" : 비판 대상 + 왜 문제인지 포함.
-   - 각 항목 2~3문장 이내. 원문 직역 금지, 의미 요약. 추상적 표현 금지.
-5. english_titles: 10단어 이상의 시험 대비용 긴 제목. 괄호 안에 한글 번역 포함. 총 3개.
-6. one_sentence_summaries: 지문에 없는 단어만 사용. 핵심 어휘는 **볼드** 처리. 총 3개. 영어+한국어.
-7. vocabulary_table: 지문의 핵심 어휘 10개. 모두 소문자. 뜻은 한국어 1~2단어. word (의미), syn1 (의미), syn2 (의미), syn3 (의미), antonym (의미) 가로 표 형식.`;
+4. english_titles: 지문 내용에 알맞은 영어 제목 3가지. 조금 길게 (시험 문제 대비용). 괄호 안에 한글 번역 포함. 총 3개.
+5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역도 괄호 안에 포함. 요약문에서 중요 어휘는 **볼드** 처리. 총 3개.
+6. vocabulary_table: 지문 내에서 주제와 관련된 어휘를 10개 추출 (지문에 쓰인 어휘 그대로, 소문자 변환). 각 어휘마다 동의어 3개, 반의어 1개 생성. 한글 뜻 포함. 모두 소문자. 형식: word ( 한글뜻 ) — 괄호 안 양쪽에 한 칸 공백. 총 10행 × (표제어+동의어3+반의어1) = 50항목, 동의어+반의어만 합산 시 40개.`;
 }
 
 function extractJson(text: string): string {
