@@ -225,10 +225,15 @@ export default function PdfEditorPage() {
     if (!el) return;
     setSaveStatus('saving');
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setSaveStatus('error'); return; }
       const htmlBase64 = elToBase64(buildPdfHtml(el));
       const res = await fetch('/api/save-pdf-history', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           htmlBase64,
           passageExcerpt: text.slice(0, 150),
@@ -275,9 +280,14 @@ export default function PdfEditorPage() {
     if (selectedIds.size === 0) return;
     setBulkDeleting(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setBulkDeleting(false); alert('로그인이 필요합니다.'); return; }
       const res = await fetch('/api/delete-pdf-history', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ ids: [...selectedIds] }),
       });
       const json = await res.json() as { success?: boolean; error?: string };

@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
 import puppeteer from 'puppeteer';
 
 export const runtime = 'nodejs';
@@ -9,23 +7,20 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-
-    const supabaseAuth = createServerClient(
+    const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) { return cookieStore.get(name)?.value; },
-          set(_name: string, _value: string, _options: CookieOptions) {},
-          remove(_name: string, _options: CookieOptions) {},
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: { user } } = await supabaseAuth.auth.getUser();
-    if (!user) {
+    // Verify user via Bearer token from client
+    const authHeader = request.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    }
+    const { data: { user }, error: authErr } = await adminClient.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: '인증에 실패했습니다.' }, { status: 401 });
     }
 
     const { htmlBase64, passageExcerpt, passageFull, passageType, difficulty } =
@@ -62,12 +57,6 @@ export async function POST(request: Request) {
     } finally {
       if (browser) await browser.close();
     }
-
-    // Use service role key to bypass RLS
-    const adminClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
 
     const fileName = `${user.id}/${Date.now()}.pdf`;
     const { error: uploadErr } = await adminClient.storage

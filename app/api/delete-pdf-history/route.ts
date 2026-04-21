@@ -1,40 +1,29 @@
 import { NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-
-    const supabaseAuth = createServerClient(
+    const adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) { return cookieStore.get(name)?.value; },
-          set(_name: string, _value: string, _options: CookieOptions) {},
-          remove(_name: string, _options: CookieOptions) {},
-        },
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: { user } } = await supabaseAuth.auth.getUser();
-    if (!user) {
+    const authHeader = request.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    }
+    const { data: { user }, error: authErr } = await adminClient.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: '인증에 실패했습니다.' }, { status: 401 });
     }
 
     const { ids } = await request.json() as { ids: string[] };
     if (!ids || ids.length === 0) {
       return NextResponse.json({ error: '삭제할 항목이 없습니다.' }, { status: 400 });
     }
-
-    const adminClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
 
     // Fetch items to get pdf_paths (also verifies ownership)
     const { data: items, error: fetchErr } = await adminClient
