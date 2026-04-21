@@ -144,6 +144,7 @@ export default function PdfEditorPage() {
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+  const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 학원 로고
@@ -243,9 +244,17 @@ export default function PdfEditorPage() {
         }),
       });
       const json = await res.json() as { success?: boolean; error?: string };
-      setSaveStatus(res.ok && json.success ? 'done' : 'error');
-    } catch {
+      if (res.ok && json.success) {
+        setSaveStatus('done');
+      } else {
+        console.error('[autoSavePdf] 실패:', json.error);
+        setSaveStatus('error');
+        setSaveErrorMsg(json.error || '알 수 없는 오류');
+      }
+    } catch (e) {
+      console.error('[autoSavePdf] 예외:', e);
       setSaveStatus('error');
+      setSaveErrorMsg(e instanceof Error ? e.message : '네트워크 오류');
     }
   }, []);
 
@@ -822,8 +831,8 @@ export default function PdfEditorPage() {
                 </div>
               )}
               {saveStatus === 'error' && (
-                <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-rose-600">
-                  ⚠️ 이력 저장 실패 (RLS 정책 확인 필요)
+                <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-rose-600 max-w-xs">
+                  ⚠️ 이력 저장 실패: {saveErrorMsg || '오류'}
                 </div>
               )}
               <div className="flex gap-3">
