@@ -569,15 +569,15 @@ export default function PdfEditorPage() {
 
                 {/* 원문 */}
                 <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-                  <div className="bg-slate-700 px-5 py-3 flex items-center gap-3">
-                    <span className="text-white/70 font-black text-xl leading-none">00</span>
+                  <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
+                    <span className="text-white/70 font-black text-lg leading-none">00</span>
                     <div>
-                      <h2 className="text-white font-black text-base leading-tight">원문 지문</h2>
-                      <p className="text-white/80 font-bold text-[11px] mt-0.5">Original Passage</p>
+                      <h2 className="text-white font-black text-sm leading-tight">원문 지문</h2>
+                      <p className="text-white/80 font-bold text-xs mt-0.5">Original Passage</p>
                     </div>
                   </div>
-                  <div className="p-5">
-                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xs">{originalPassageText}</p>
+                  <div className="p-4">
+                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">{originalPassageText}</p>
                   </div>
                 </div>
 
@@ -594,7 +594,7 @@ export default function PdfEditorPage() {
                         {result.korean_summary.rows.map((row, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
                             <td className="w-20 p-2 font-black text-indigo-700 text-xs border border-indigo-100 whitespace-nowrap align-top">{row.label}</td>
-                            <td className="p-2 text-slate-700 font-bold text-xs leading-relaxed border border-indigo-100">{row.content}</td>
+                            <td className="p-2 text-slate-700 font-bold text-sm leading-relaxed border border-indigo-100">{row.content}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -604,11 +604,11 @@ export default function PdfEditorPage() {
 
                 <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T 5개 F 5개"
                   color="bg-violet-500" onCopy={() => copy(buildTFText(), 'tf')} copied={copiedSection === 'tf'}>
-                  <div className="space-y-1 mb-3">
+                  <div className="space-y-0.5 mb-3">
                     {result.tf_questions.map((q) => (
                       <div key={q.number} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-violet-50 transition-colors">
-                        <span className="font-black text-violet-600 w-5 shrink-0 text-xs">{q.number}.</span>
-                        <p className="text-slate-700 font-bold leading-snug flex-1 text-xs">{q.statement}</p>
+                        <span className="font-black text-violet-600 w-6 shrink-0 text-sm">{q.number}.</span>
+                        <p className="text-slate-700 font-bold leading-snug flex-1 text-sm">{q.statement}</p>
                       </div>
                     ))}
                   </div>
@@ -644,8 +644,8 @@ export default function PdfEditorPage() {
                   <div className="space-y-2">
                     {result.english_titles.map((title, i) => (
                       <div key={i} className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl border border-amber-100">
-                        <span className="font-black text-amber-600 w-5 shrink-0 text-xs">{i + 1}.</span>
-                        <p className="text-slate-700 font-bold leading-snug text-xs">{title}</p>
+                        <span className="font-black text-amber-600 w-6 shrink-0 text-sm">{i + 1}.</span>
+                        <p className="text-slate-700 font-bold leading-snug text-sm">{title}</p>
                       </div>
                     ))}
                   </div>
@@ -657,10 +657,10 @@ export default function PdfEditorPage() {
                     {result.one_sentence_summaries.map((s, i) => (
                       <div key={i} className="px-3 py-2 bg-rose-50 rounded-xl border border-rose-100">
                         <div className="flex items-start gap-2">
-                          <span className="font-black text-rose-600 w-5 shrink-0 text-xs">{i + 1}.</span>
+                          <span className="font-black text-rose-600 w-6 shrink-0 text-sm">{i + 1}.</span>
                           <div className="flex-1">
-                            <p className="text-slate-700 font-bold leading-snug text-xs mb-1">{renderBold(s.english)}</p>
-                            <p className="text-slate-500 font-bold text-[11px]">({s.korean})</p>
+                            <p className="text-slate-700 font-bold leading-snug text-sm mb-1">{renderBold(s.english)}</p>
+                            <p className="text-slate-500 font-bold text-xs">({s.korean})</p>
                           </div>
                         </div>
                       </div>
@@ -675,26 +675,26 @@ export default function PdfEditorPage() {
                       <thead>
                         <tr className="bg-slate-800 text-white">
                           {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                            <th key={i} className={`p-1.5 text-left font-black whitespace-nowrap ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
+                            <th key={i} className={`px-2 py-2 text-left font-black whitespace-nowrap ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {result.vocabulary_table.map((row, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                            <td className="p-1.5 border-b border-slate-100">
+                            <td className="px-2 py-1.5 border-b border-slate-100">
                               <span className="font-black text-indigo-700">{row.word}</span>
-                              <span className="text-slate-400 text-[10px] ml-1">({row.meaning})</span>
+                              <span className="text-slate-400 text-[11px] ml-1">({row.meaning})</span>
                             </td>
                             {[[row.syn1, row.syn1_m], [row.syn2, row.syn2_m], [row.syn3, row.syn3_m]].map(([w, m], j) => (
-                              <td key={j} className="p-1.5 border-b border-slate-100">
+                              <td key={j} className="px-2 py-1.5 border-b border-slate-100">
                                 <span className="font-bold text-slate-700">{w}</span>
-                                <span className="text-slate-400 text-[10px] ml-1">({m})</span>
+                                <span className="text-slate-400 text-[11px] ml-1">({m})</span>
                               </td>
                             ))}
-                            <td className="p-1.5 border-b border-slate-100">
+                            <td className="px-2 py-1.5 border-b border-slate-100">
                               <span className="font-black text-rose-600">{row.antonym}</span>
-                              <span className="text-slate-400 text-[10px] ml-1">({row.antonym_m})</span>
+                              <span className="text-slate-400 text-[11px] ml-1">({row.antonym_m})</span>
                             </td>
                           </tr>
                         ))}
@@ -902,12 +902,12 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children 
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-      <div className={`${color} px-5 py-3 flex items-center justify-between`}>
+      <div className={`${color} px-5 py-2.5 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
-          <span className="text-white/70 font-black text-xl leading-none">{number}</span>
+          <span className="text-white/70 font-black text-lg leading-none">{number}</span>
           <div>
-            <h2 className="text-white font-black text-base leading-tight">{title}</h2>
-            <p className="text-white/80 font-bold text-[11px] mt-0.5">{subtitle}</p>
+            <h2 className="text-white font-black text-sm leading-tight">{title}</h2>
+            <p className="text-white/80 font-bold text-xs mt-0.5">{subtitle}</p>
           </div>
         </div>
         <button onClick={onCopy}
@@ -915,7 +915,7 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children 
           {copied ? '✅ 복사됨' : '📋 복사'}
         </button>
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
