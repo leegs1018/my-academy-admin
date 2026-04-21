@@ -56,28 +56,25 @@ async function generatePdfBlob(): Promise<Blob | null> {
     const { toJpeg } = await import('html-to-image');
     const { jsPDF } = await import('jspdf');
 
-    const W = 210, M = 8, cW = W - 2 * M, pageH = 297 - 2 * M;
+    const W = 210, M = 5, cW = W - 2 * M, pageH = 297 - 2 * M;
 
     const p1Ratio = page1El.offsetHeight / page1El.offsetWidth;
     const p2Ratio = page2El.offsetHeight / page2El.offsetWidth;
 
-    const opts = { pixelRatio: 1.5, quality: 0.88, backgroundColor: '#ffffff', cacheBust: true };
+    // 가로폭을 최대로 쓰되, 세로가 A4를 넘으면 균등 축소
+    const scale1 = Math.min(1, pageH / (cW * p1Ratio));
+    const scale2 = Math.min(1, pageH / (cW * p2Ratio));
+
+    const opts = { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
     const [url1, url2] = await Promise.all([
       toJpeg(page1El, opts),
       toJpeg(page2El, opts),
     ]);
 
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-
-    // 각 페이지 이미지가 A4 안에 들어오도록 높이 제한
-    const h1 = Math.min(cW * p1Ratio, pageH);
-    const w1 = h1 / p1Ratio;
-    pdf.addImage(url1, 'JPEG', M + (cW - w1) / 2, M, w1, h1);
-
+    pdf.addImage(url1, 'JPEG', M, M, cW * scale1, cW * p1Ratio * scale1);
     pdf.addPage();
-    const h2 = Math.min(cW * p2Ratio, pageH);
-    const w2 = h2 / p2Ratio;
-    pdf.addImage(url2, 'JPEG', M + (cW - w2) / 2, M, w2, h2);
+    pdf.addImage(url2, 'JPEG', M, M, cW * scale2, cW * p2Ratio * scale2);
 
     return pdf.output('blob');
   } finally {
@@ -577,7 +574,7 @@ export default function PdfEditorPage() {
                     </div>
                   </div>
                   <div className="p-4">
-                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">{originalPassageText}</p>
+                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-base">{originalPassageText}</p>
                   </div>
                 </div>
 
@@ -594,7 +591,7 @@ export default function PdfEditorPage() {
                         {result.korean_summary.rows.map((row, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
                             <td className="w-20 p-2 font-black text-indigo-700 text-xs border border-indigo-100 whitespace-nowrap align-top">{row.label}</td>
-                            <td className="p-2 text-slate-700 font-bold text-sm leading-relaxed border border-indigo-100">{row.content}</td>
+                            <td className="p-2 text-slate-700 font-bold text-base leading-relaxed border border-indigo-100">{row.content}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -607,8 +604,8 @@ export default function PdfEditorPage() {
                   <div className="space-y-0.5 mb-3">
                     {result.tf_questions.map((q) => (
                       <div key={q.number} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-violet-50 transition-colors">
-                        <span className="font-black text-violet-600 w-6 shrink-0 text-sm">{q.number}.</span>
-                        <p className="text-slate-700 font-bold leading-snug flex-1 text-sm">{q.statement}</p>
+                        <span className="font-black text-violet-600 w-7 shrink-0 text-base">{q.number}.</span>
+                        <p className="text-slate-700 font-bold leading-snug flex-1 text-base">{q.statement}</p>
                       </div>
                     ))}
                   </div>
@@ -644,8 +641,8 @@ export default function PdfEditorPage() {
                   <div className="space-y-2">
                     {result.english_titles.map((title, i) => (
                       <div key={i} className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl border border-amber-100">
-                        <span className="font-black text-amber-600 w-6 shrink-0 text-sm">{i + 1}.</span>
-                        <p className="text-slate-700 font-bold leading-snug text-sm">{title}</p>
+                        <span className="font-black text-amber-600 w-7 shrink-0 text-base">{i + 1}.</span>
+                        <p className="text-slate-700 font-bold leading-snug text-base">{title}</p>
                       </div>
                     ))}
                   </div>
@@ -657,10 +654,10 @@ export default function PdfEditorPage() {
                     {result.one_sentence_summaries.map((s, i) => (
                       <div key={i} className="px-3 py-2 bg-rose-50 rounded-xl border border-rose-100">
                         <div className="flex items-start gap-2">
-                          <span className="font-black text-rose-600 w-6 shrink-0 text-sm">{i + 1}.</span>
+                          <span className="font-black text-rose-600 w-7 shrink-0 text-base">{i + 1}.</span>
                           <div className="flex-1">
-                            <p className="text-slate-700 font-bold leading-snug text-sm mb-1">{renderBold(s.english)}</p>
-                            <p className="text-slate-500 font-bold text-xs">({s.korean})</p>
+                            <p className="text-slate-700 font-bold leading-snug text-base mb-1">{renderBold(s.english)}</p>
+                            <p className="text-slate-500 font-bold text-sm">({s.korean})</p>
                           </div>
                         </div>
                       </div>
@@ -671,7 +668,7 @@ export default function PdfEditorPage() {
                 <SectionCard number="05" title="관련 어휘 10개" subtitle="지문 내 어휘 추출 · 동의어 3개 · 반의어 1개 · 한글 뜻 포함 (총 40개)"
                   color="bg-slate-700" onCopy={() => copy(buildVocabText(), 'vocab')} copied={copiedSection === 'vocab'}>
                   <div className="overflow-x-auto">
-                    <table id="vocab-table" className="w-full text-xs border-collapse">
+                    <table id="vocab-table" className="w-full text-sm border-collapse">
                       <thead>
                         <tr className="bg-slate-800 text-white">
                           {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
@@ -684,17 +681,17 @@ export default function PdfEditorPage() {
                           <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                             <td className="px-2 py-1.5 border-b border-slate-100">
                               <span className="font-black text-indigo-700">{row.word}</span>
-                              <span className="text-slate-400 text-[11px] ml-1">({row.meaning})</span>
+                              <span className="text-slate-400 text-xs ml-1">({row.meaning})</span>
                             </td>
                             {[[row.syn1, row.syn1_m], [row.syn2, row.syn2_m], [row.syn3, row.syn3_m]].map(([w, m], j) => (
                               <td key={j} className="px-2 py-1.5 border-b border-slate-100">
                                 <span className="font-bold text-slate-700">{w}</span>
-                                <span className="text-slate-400 text-[11px] ml-1">({m})</span>
+                                <span className="text-slate-400 text-xs ml-1">({m})</span>
                               </td>
                             ))}
                             <td className="px-2 py-1.5 border-b border-slate-100">
                               <span className="font-black text-rose-600">{row.antonym}</span>
-                              <span className="text-slate-400 text-[11px] ml-1">({row.antonym_m})</span>
+                              <span className="text-slate-400 text-xs ml-1">({row.antonym_m})</span>
                             </td>
                           </tr>
                         ))}
