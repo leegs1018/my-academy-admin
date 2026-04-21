@@ -574,7 +574,7 @@ export default function PdfEditorPage() {
                     </div>
                   </div>
                   <div className="p-4">
-                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-base">{originalPassageText}</p>
+                    <p className="text-slate-700 font-bold leading-loose whitespace-pre-wrap text-base">{originalPassageText}</p>
                   </div>
                 </div>
 
@@ -591,7 +591,7 @@ export default function PdfEditorPage() {
                         {result.korean_summary.rows.map((row, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
                             <td className="w-20 p-2 font-black text-indigo-700 text-xs border border-indigo-100 whitespace-nowrap align-top">{row.label}</td>
-                            <td className="p-2 text-slate-700 font-bold text-base leading-relaxed border border-indigo-100">{row.content}</td>
+                            <td className="p-2 text-slate-700 font-bold text-base leading-loose border border-indigo-100">{row.content}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -601,11 +601,11 @@ export default function PdfEditorPage() {
 
                 <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T 5개 F 5개"
                   color="bg-violet-500" onCopy={() => copy(buildTFText(), 'tf')} copied={copiedSection === 'tf'}>
-                  <div className="space-y-0.5 mb-3">
+                  <div className="space-y-1.5 mb-3">
                     {result.tf_questions.map((q) => (
                       <div key={q.number} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-violet-50 transition-colors">
                         <span className="font-black text-violet-600 w-7 shrink-0 text-base">{q.number}.</span>
-                        <p className="text-slate-700 font-bold leading-snug flex-1 text-base">{q.statement}</p>
+                        <p className="text-slate-700 font-bold leading-relaxed flex-1 text-base">{q.statement}</p>
                       </div>
                     ))}
                   </div>
@@ -642,7 +642,7 @@ export default function PdfEditorPage() {
                     {result.english_titles.map((title, i) => (
                       <div key={i} className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl border border-amber-100">
                         <span className="font-black text-amber-600 w-7 shrink-0 text-base">{i + 1}.</span>
-                        <p className="text-slate-700 font-bold leading-snug text-base">{title}</p>
+                        <p className="text-slate-700 font-bold leading-relaxed text-base">{title}</p>
                       </div>
                     ))}
                   </div>
@@ -656,7 +656,7 @@ export default function PdfEditorPage() {
                         <div className="flex items-start gap-2">
                           <span className="font-black text-rose-600 w-7 shrink-0 text-base">{i + 1}.</span>
                           <div className="flex-1">
-                            <p className="text-slate-700 font-bold leading-snug text-base mb-1">{renderBold(s.english)}</p>
+                            <p className="text-slate-700 font-bold leading-relaxed text-base mb-1">{renderBold(s.english)}</p>
                             <p className="text-slate-500 font-bold text-sm">({s.korean})</p>
                           </div>
                         </div>
@@ -679,17 +679,17 @@ export default function PdfEditorPage() {
                       <tbody>
                         {result.vocabulary_table.map((row, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                            <td className="px-2 py-1.5 border-b border-slate-100">
+                            <td className="px-2 py-2 border-b border-slate-100">
                               <span className="font-black text-indigo-700">{row.word}</span>
                               <span className="text-slate-400 text-xs ml-1">({row.meaning})</span>
                             </td>
                             {[[row.syn1, row.syn1_m], [row.syn2, row.syn2_m], [row.syn3, row.syn3_m]].map(([w, m], j) => (
-                              <td key={j} className="px-2 py-1.5 border-b border-slate-100">
+                              <td key={j} className="px-2 py-2 border-b border-slate-100">
                                 <span className="font-bold text-slate-700">{w}</span>
                                 <span className="text-slate-400 text-xs ml-1">({m})</span>
                               </td>
                             ))}
-                            <td className="px-2 py-1.5 border-b border-slate-100">
+                            <td className="px-2 py-2 border-b border-slate-100">
                               <span className="font-black text-rose-600">{row.antonym}</span>
                               <span className="text-slate-400 text-xs ml-1">({row.antonym_m})</span>
                             </td>
