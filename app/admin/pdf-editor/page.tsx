@@ -53,23 +53,23 @@ async function generatePdfBlob(): Promise<Blob | null> {
   noPrintEls.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
 
   try {
-    const { toPng } = await import('html-to-image');
+    const { toJpeg } = await import('html-to-image');
     const { jsPDF } = await import('jspdf');
 
     const W = 210, M = 8, cW = W - 2 * M;
     const p1Ratio = page1El.offsetHeight / page1El.offsetWidth;
     const p2Ratio = page2El.offsetHeight / page2El.offsetWidth;
 
-    const opts = { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true };
+    const opts = { pixelRatio: 1.5, quality: 0.85, backgroundColor: '#ffffff', cacheBust: true };
     const [url1, url2] = await Promise.all([
-      toPng(page1El, opts),
-      toPng(page2El, opts),
+      toJpeg(page1El, opts),
+      toJpeg(page2El, opts),
     ]);
 
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    pdf.addImage(url1, 'PNG', M, M, cW, cW * p1Ratio);
+    pdf.addImage(url1, 'JPEG', M, M, cW, cW * p1Ratio);
     pdf.addPage();
-    pdf.addImage(url2, 'PNG', M, M, cW, cW * p2Ratio);
+    pdf.addImage(url2, 'JPEG', M, M, cW, cW * p2Ratio);
 
     return pdf.output('blob');
   } finally {
