@@ -1,8 +1,25 @@
 import { NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+async function launchBrowser() {
+  if (process.env.NODE_ENV === 'production') {
+    const chromium = (await import('@sparticuz/chromium')).default;
+    const puppeteer = (await import('puppeteer-core')).default;
+    return puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  } else {
+    const puppeteer = (await import('puppeteer')).default;
+    return puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+  }
+}
 
 export async function POST(request: Request) {
   let browser;
@@ -13,14 +30,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'HTML 내용이 없습니다.' }, { status: 400 });
     }
 
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-
+    browser = await launchBrowser();
     const page = await browser.newPage();
 
-    // base64 data URL로 로드 — 한글이 URL/CDP 명령에 들어가지 않아 ByteString 오류 방지
     await page.goto(`data:text/html;base64,${htmlBase64}`, {
       waitUntil: 'networkidle2',
       timeout: 30000,
