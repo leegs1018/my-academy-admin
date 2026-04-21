@@ -50,36 +50,42 @@ function buildPdfHtml(el: HTMLElement): string {
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Noto Sans KR', sans-serif; background: white; padding: 12px; }
+    body { font-family: 'Noto Sans KR', sans-serif; background: white; padding: 10px; font-size: 12px; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .no-print { display: none !important; }
-    .section-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; }
-    .section-card > div:first-child { padding: 8px 16px !important; }
-    .section-card > div:last-child { padding: 14px !important; }
-    .section-card h2 { font-size: 0.95rem !important; line-height: 1.3 !important; }
-    .section-card p.text-xs, .section-card p.text-sm { font-size: 10px !important; line-height: 1.4 !important; }
-    .text-3xl { font-size: 1.2rem !important; }
-    .space-y-2 > * + *, .space-y-3 > * + * { margin-top: 4px !important; }
-    .space-y-4 > * + * { margin-top: 6px !important; }
-    .p-3 { padding: 5px !important; }
-    .p-4 { padding: 7px !important; }
-    .p-5 { padding: 8px !important; }
-    .gap-3, .gap-4 { gap: 5px !important; }
-    .mb-4 { margin-bottom: 6px !important; }
-    .mt-3 { margin-top: 4px !important; }
-    .leading-relaxed { line-height: 1.45 !important; }
-    .rounded-\\[2\\.5rem\\] { border-radius: 14px !important; }
-    .rounded-2xl { border-radius: 10px !important; }
-    .rounded-xl { border-radius: 8px !important; }
-    .rounded-full { border-radius: 6px !important; }
-    table { break-inside: auto; font-size: 11px; }
+    .section-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px; }
+    .section-card > div:first-child { padding: 6px 14px !important; }
+    .section-card > div:last-child { padding: 10px !important; }
+    .section-card h2 { font-size: 0.85rem !important; line-height: 1.2 !important; }
+    .section-card p.text-xs, .section-card p.text-sm { font-size: 9px !important; line-height: 1.35 !important; }
+    .text-3xl { font-size: 1rem !important; }
+    .space-y-2 > * + *, .space-y-3 > * + * { margin-top: 3px !important; }
+    .space-y-4 > * + * { margin-top: 5px !important; }
+    .p-3 { padding: 4px !important; }
+    .p-4 { padding: 6px !important; }
+    .p-5 { padding: 7px !important; }
+    .gap-3, .gap-4 { gap: 4px !important; }
+    .mb-4 { margin-bottom: 5px !important; }
+    .mt-3 { margin-top: 3px !important; }
+    .leading-relaxed { line-height: 1.4 !important; }
+    .rounded-\\[2\\.5rem\\] { border-radius: 10px !important; }
+    .rounded-2xl { border-radius: 8px !important; }
+    .rounded-xl { border-radius: 6px !important; }
+    .rounded-full { border-radius: 5px !important; }
+    table { break-inside: auto; font-size: 10px; }
     tr { break-inside: avoid; page-break-inside: avoid; }
     thead { display: table-header-group; }
-    td, th { padding: 4px 6px !important; }
-    #vocab-table { min-width: 0 !important; width: 100%; table-layout: fixed; font-size: 10px; }
-    #vocab-table th, #vocab-table td { padding: 4px 5px !important; word-break: break-word; }
+    td, th { padding: 3px 5px !important; }
+    #vocab-table { min-width: 0 !important; width: 100%; table-layout: fixed; font-size: 9px; }
+    #vocab-table th, #vocab-table td { padding: 3px 4px !important; word-break: break-word; }
     #vocab-table .vocab-word { display: block; }
-    #vocab-table .vocab-meaning { display: block; margin-left: 0 !important; font-size: 9px; }
+    #vocab-table .vocab-meaning { display: block; margin-left: 0 !important; font-size: 8px; }
+    .page-break { page-break-after: always; break-after: page; }
+    .passage-card { break-inside: avoid; page-break-inside: avoid; margin-bottom: 8px; font-size: 11px; line-height: 1.55; }
+    .passage-card > div:first-child { padding: 6px 14px !important; }
+    .passage-card > div:last-child { padding: 10px 14px !important; }
+    .logo-section { margin-top: 12px; text-align: right; }
+    .logo-section img { max-height: 60px; max-width: 180px; object-fit: contain; }
   </style>
 </head>
 <body>${el.outerHTML}</body>
@@ -116,16 +122,11 @@ const DIFF_COLORS: Record<string, string> = {
 };
 
 export default function PdfEditorPage() {
-  // 페이지 탭
   const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
-
-  // 입력 모드
   const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
 
-  // 텍스트 탭
   const [manualText, setManualText] = useState('');
 
-  // 이미지 탭
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState('');
@@ -133,11 +134,11 @@ export default function PdfEditorPage() {
   const [ocrDone, setOcrDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // 공통
   const [difficulty, setDifficulty] = useState<'상' | '중' | '하'>('중');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [result, setResult] = useState<GeneratedMaterials | null>(null);
+  const [originalPassageText, setOriginalPassageText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showAnswerKey, setShowAnswerKey] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
@@ -145,7 +146,9 @@ export default function PdfEditorPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 이력 탭
+  // 학원 로고
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+
   const [historyList, setHistoryList] = useState<PdfHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -154,6 +157,35 @@ export default function PdfEditorPage() {
   const [searchDate, setSearchDate] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // ── 컴포넌트 마운트 시 로고 로드 ──
+  useEffect(() => {
+    const loadLogo = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from('academy_config')
+          .select('logo_url')
+          .eq('user_id', user.id)
+          .single();
+        if (!data?.logo_url) return;
+        const { data: signed } = await supabase.storage
+          .from('academy-logos')
+          .createSignedUrl(data.logo_url, 3600);
+        if (!signed?.signedUrl) return;
+        const res = await fetch(signed.signedUrl);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => setLogoDataUrl(reader.result as string);
+        reader.readAsDataURL(blob);
+      } catch {
+        // logo load failure is non-critical
+      }
+    };
+    loadLogo();
+  }, []);
 
   // ── 이력 조회 ──
   const fetchHistory = useCallback(async (query = searchQuery, type = searchType, date = searchDate) => {
@@ -194,30 +226,22 @@ export default function PdfEditorPage() {
     setSaveStatus('saving');
     try {
       const htmlBase64 = elToBase64(buildPdfHtml(el));
-      const res = await fetch('/api/generate-pdf', {
+      const res = await fetch('/api/save-pdf-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ htmlBase64 }),
+        body: JSON.stringify({
+          htmlBase64,
+          passageExcerpt: text.slice(0, 150),
+          passageFull: text,
+          passageType: generated.korean_summary.type,
+          difficulty: diff,
+        }),
       });
-      if (!res.ok) { setSaveStatus('error'); return; }
-      const pdfBlob = await res.blob();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setSaveStatus('error'); return; }
-      const fileName = `${user.id}/${Date.now()}.pdf`;
-      const { error: uploadErr } = await supabase.storage
-        .from('pdf-history')
-        .upload(fileName, pdfBlob, { contentType: 'application/pdf' });
-      if (uploadErr) { setSaveStatus('error'); return; }
-      const { error: insertErr } = await supabase.from('pdf_history').insert({
-        academy_id: user.id,
-        passage_excerpt: text.slice(0, 150),
-        passage_full: text,
-        passage_type: generated.korean_summary.type,
-        difficulty: diff,
-        pdf_path: fileName,
-      });
-      setSaveStatus(insertErr ? 'error' : 'done');
-    } catch { setSaveStatus('error'); }
+      const json = await res.json() as { success?: boolean; error?: string };
+      setSaveStatus(res.ok && json.success ? 'done' : 'error');
+    } catch {
+      setSaveStatus('error');
+    }
   }, []);
 
   // ── 이력에서 단건 다운로드 ──
@@ -246,22 +270,29 @@ export default function PdfEditorPage() {
     setBulkDownloading(false);
   };
 
-  // ── 선택 항목 삭제 ──
+  // ── 선택 항목 삭제 (서버 API) ──
   const deleteSelected = async () => {
     if (selectedIds.size === 0) return;
-    const items = historyList.filter(i => selectedIds.has(i.id));
-    const paths = items.filter(i => i.pdf_path).map(i => i.pdf_path);
-    if (paths.length > 0) {
-      await supabase.storage.from('pdf-history').remove(paths);
+    setBulkDeleting(true);
+    try {
+      const res = await fetch('/api/delete-pdf-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const json = await res.json() as { success?: boolean; error?: string };
+      if (!res.ok || !json.success) {
+        alert(`삭제 실패: ${json.error || '알 수 없는 오류'}`);
+        return;
+      }
+      const deleted = new Set(selectedIds);
+      setHistoryList(prev => prev.filter(i => !deleted.has(i.id)));
+      setSelectedIds(new Set());
+    } catch (e) {
+      alert(`삭제 중 오류: ${e instanceof Error ? e.message : '알 수 없는 오류'}`);
+    } finally {
+      setBulkDeleting(false);
     }
-    const { error: delErr } = await supabase.from('pdf_history').delete().in('id', [...selectedIds]);
-    if (delErr) {
-      alert(`삭제 실패: ${delErr.message}\nSupabase에서 DELETE RLS 정책을 확인해주세요.`);
-      return;
-    }
-    const deleted = new Set(selectedIds);
-    setHistoryList(prev => prev.filter(i => !deleted.has(i.id)));
-    setSelectedIds(new Set());
   };
 
   const toggleSelect = (id: string) => {
@@ -359,8 +390,9 @@ export default function PdfEditorPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
       const generated = json.data as GeneratedMaterials;
+      setOriginalPassageText(textToSend);
       setResult(generated);
-      // DOM 렌더링 후 백그라운드에서 PDF 생성 + 이력 자동 저장
+      setSaveStatus('idle');
       setTimeout(() => autoSavePdf(generated, textToSend, difficulty), 500);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
@@ -609,6 +641,22 @@ export default function PdfEditorPage() {
           {result && (
             <div id="print-area" className="space-y-6">
 
+              {/* ── 원문 (지문) ── */}
+              <div className="passage-card section-card bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                <div className="bg-slate-700 px-8 py-5 flex items-center gap-4">
+                  <span className="text-white/70 font-black text-3xl leading-none">00</span>
+                  <div>
+                    <h2 className="text-white font-black text-xl leading-tight">원문 지문</h2>
+                    <p className="text-white/80 font-bold text-xs mt-0.5">Original Passage</p>
+                  </div>
+                </div>
+                <div className="p-8">
+                  <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">
+                    {originalPassageText}
+                  </p>
+                </div>
+              </div>
+
               <SectionCard number="01" title="한글 요약" subtitle="지문 유형별 구조 · 고등 시험 대비용"
                 color="bg-indigo-500"
                 onCopy={() => copy(result.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
@@ -664,6 +712,9 @@ export default function PdfEditorPage() {
                   )}
                 </div>
               </SectionCard>
+
+              {/* 1페이지 끝 → 2페이지 시작 */}
+              <div className="page-break" />
 
               <SectionCard number="03" title="영어 제목 3가지" subtitle="한글 번역 포함 · 시험 대비용"
                 color="bg-amber-500" onCopy={() => copy(result.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
@@ -732,12 +783,23 @@ export default function PdfEditorPage() {
                 </div>
               </SectionCard>
 
+              {/* 학원 로고 (2페이지 하단) */}
+              {logoDataUrl && (
+                <div className="logo-section flex justify-end pt-2 pb-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoDataUrl}
+                    alt="학원 로고"
+                    style={{ maxHeight: '60px', maxWidth: '180px', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+
             </div>
           )}
 
           {result && (
             <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
-              {/* 자동 저장 상태 토스트 */}
               {saveStatus === 'saving' && (
                 <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
@@ -861,13 +923,14 @@ export default function PdfEditorPage() {
                 </button>
                 <button
                   onClick={deleteSelected}
+                  disabled={bulkDeleting}
                   className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm
-                             hover:bg-rose-600 active:scale-95 transition-all"
+                             hover:bg-rose-600 active:scale-95 transition-all disabled:opacity-50"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  삭제
+                  {bulkDeleting ? '삭제 중...' : '삭제'}
                 </button>
                 <button
                   onClick={() => setSelectedIds(new Set())}
@@ -892,7 +955,6 @@ export default function PdfEditorPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              {/* 테이블 헤더 */}
               <div className="grid grid-cols-[40px_160px_80px_60px_1fr_52px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
                 <input
                   type="checkbox"

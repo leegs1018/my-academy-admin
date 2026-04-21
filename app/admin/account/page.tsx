@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function AccountPage() {
   const router = useRouter();
@@ -21,6 +22,13 @@ export default function AccountPage() {
   const [points, setPoints] = useState(0);
   const [kioskCode, setKioskCode] = useState('');
   const [userId, setUserId] = useState('');
+
+  // 로고
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoMsg, setLogoMsg] = useState('');
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // 수정 상태
   const [saving, setSaving] = useState(false);
@@ -57,10 +65,9 @@ export default function AccountPage() {
       return;
     }
 
-    // 비밀번호 확인 성공 → 학원 정보 로드
     const { data } = await supabase
       .from('academy_config')
-      .select('academy_name, academy_phone, mobile, points, kiosk_code')
+      .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url')
       .eq('user_id', userId)
       .single();
 
@@ -70,6 +77,14 @@ export default function AccountPage() {
       setMobile(data.mobile || '');
       setPoints(data.points || 0);
       setKioskCode(data.kiosk_code || '');
+      setLogoUrl(data.logo_url || '');
+
+      if (data.logo_url) {
+        const { data: signedData } = await supabase.storage
+          .from('academy-logos')
+          .createSignedUrl(data.logo_url, 3600);
+        if (signedData?.signedUrl) setLogoPreview(signedData.signedUrl);
+      }
     }
 
     setVerifyLoading(false);
@@ -88,6 +103,72 @@ export default function AccountPage() {
     setSaving(false);
     setSaveMsg(error ? '저장 중 오류가 발생했습니다.' : '저장되었습니다.');
     setTimeout(() => setSaveMsg(''), 3000);
+  };
+
+  // ── 로고 업로드 ──────────────────────────────────
+  const handleLogoUpload = async (file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      setLogoMsg('JPG, PNG, WebP, GIF 형식만 지원합니다.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoMsg('파일 크기는 5MB 이하여야 합니다.');
+      return;
+    }
+
+    setLogoUploading(true);
+    setLogoMsg('');
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const path = `${userId}/logo.${ext}`;
+
+    // Remove existing logo if different extension
+    if (logoUrl && logoUrl !== path) {
+      await supabase.storage.from('academy-logos').remove([logoUrl]);
+    }
+
+    const { error: uploadErr } = await supabase.storage
+      .from('academy-logos')
+      .upload(path, file, { contentType: file.type, upsert: true });
+
+    if (uploadErr) {
+      setLogoMsg(`업로드 실패: ${uploadErr.message}`);
+      setLogoUploading(false);
+      return;
+    }
+
+    const { error: updateErr } = await supabase
+      .from('academy_config')
+      .update({ logo_url: path })
+      .eq('user_id', userId);
+
+    if (updateErr) {
+      setLogoMsg(`저장 실패: ${updateErr.message}`);
+      setLogoUploading(false);
+      return;
+    }
+
+    setLogoUrl(path);
+    const { data: signedData } = await supabase.storage
+      .from('academy-logos')
+      .createSignedUrl(path, 3600);
+    if (signedData?.signedUrl) setLogoPreview(signedData.signedUrl);
+
+    setLogoUploading(false);
+    setLogoMsg('로고가 저장되었습니다.');
+    setTimeout(() => setLogoMsg(''), 3000);
+  };
+
+  const handleLogoDelete = async () => {
+    if (!logoUrl) return;
+    if (!confirm('로고를 삭제하시겠습니까?')) return;
+
+    await supabase.storage.from('academy-logos').remove([logoUrl]);
+    await supabase.from('academy_config').update({ logo_url: null }).eq('user_id', userId);
+    setLogoUrl('');
+    setLogoPreview(null);
+    setLogoMsg('로고가 삭제되었습니다.');
+    setTimeout(() => setLogoMsg(''), 3000);
   };
 
   // ── 키오스크 코드 재발급 ──────────────────────────
@@ -255,6 +336,72 @@ export default function AccountPage() {
                   {saveMsg}
                 </span>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* 학원 로고 */}
+        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h2 className="text-sm font-black text-gray-600 uppercase tracking-wider">학원 로고</h2>
+            <p className="text-xs text-gray-400 mt-0.5">영어 문제지 PDF에 표시됩니다</p>
+          </div>
+          <div className="px-6 py-5">
+            <div className="flex items-start gap-5">
+              {/* 로고 미리보기 */}
+              <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center bg-gray-50 shrink-0 overflow-hidden">
+                {logoPreview ? (
+                  <Image
+                    src={logoPreview}
+                    alt="학원 로고"
+                    width={128}
+                    height={128}
+                    className="w-full h-full object-contain p-2"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="text-center">
+                    <div className="text-3xl mb-1">🏫</div>
+                    <p className="text-xs text-gray-400 font-bold">로고 없음</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 업로드 버튼 영역 */}
+              <div className="flex flex-col gap-3 flex-1">
+                <p className="text-xs font-bold text-gray-500">
+                  JPG · PNG · WebP · GIF · 최대 5MB
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={logoUploading}
+                    className="px-5 py-2.5 bg-gray-900 text-white font-black rounded-2xl hover:bg-gray-800 transition-all disabled:bg-gray-300 text-sm"
+                  >
+                    {logoUploading ? '업로드 중...' : logoPreview ? '🔄 로고 변경' : '📤 로고 업로드'}
+                  </button>
+                  {logoPreview && (
+                    <button
+                      onClick={handleLogoDelete}
+                      className="px-5 py-2.5 bg-red-50 text-red-500 font-black rounded-2xl hover:bg-red-100 transition-all text-sm border border-red-100"
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+                {logoMsg && (
+                  <span className={`text-sm font-bold ${logoMsg.includes('실패') || logoMsg.includes('오류') ? 'text-red-500' : 'text-green-500'}`}>
+                    {logoMsg}
+                  </span>
+                )}
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }}
+                />
+              </div>
             </div>
           </div>
         </div>
