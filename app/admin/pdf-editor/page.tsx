@@ -227,24 +227,51 @@ export default function PdfEditorPage() {
     setSaveStatus('saving');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setSaveStatus('error'); return; }
+      if (!session) { setSaveStatus('error'); setSaveErrorMsg('로그인 세션 없음'); return; }
+
+      // Step 1: Generate PDF using existing working route
       const htmlBase64 = elToBase64(buildPdfHtml(el));
-      const res = await fetch('/api/save-pdf-history', {
+      const pdfRes = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ htmlBase64 }),
+      });
+      if (!pdfRes.ok) {
+        setSaveStatus('error');
+        setSaveErrorMsg('PDF 생성 실패');
+        return;
+      }
+
+      // Step 2: Convert PDF blob to base64
+      const pdfBlob = await pdfRes.blob();
+      const pdfBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          // Remove data URL prefix (data:application/pdf;base64,)
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(pdfBlob);
+      });
+
+      // Step 3: Save to storage + DB via server API (service role key, no puppeteer)
+      const saveRes = await fetch('/api/save-pdf-history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          htmlBase64,
+          pdfBase64,
           passageExcerpt: text.slice(0, 150),
           passageFull: text,
           passageType: generated.korean_summary.type,
           difficulty: diff,
         }),
       });
-      const json = await res.json() as { success?: boolean; error?: string };
-      if (res.ok && json.success) {
+      const json = await saveRes.json() as { success?: boolean; error?: string };
+      if (saveRes.ok && json.success) {
         setSaveStatus('done');
       } else {
         console.error('[autoSavePdf] 실패:', json.error);

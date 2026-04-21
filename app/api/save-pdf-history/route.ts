@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import puppeteer from 'puppeteer';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 export async function POST(request: Request) {
   try {
@@ -23,41 +22,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '인증에 실패했습니다.' }, { status: 401 });
     }
 
-    const { htmlBase64, passageExcerpt, passageFull, passageType, difficulty } =
+    // Client sends already-generated PDF as base64
+    const { pdfBase64, passageExcerpt, passageFull, passageType, difficulty } =
       await request.json() as {
-        htmlBase64: string;
+        pdfBase64: string;
         passageExcerpt: string;
         passageFull: string;
         passageType: string;
         difficulty: string;
       };
 
-    if (!htmlBase64) {
-      return NextResponse.json({ error: 'HTML 내용이 없습니다.' }, { status: 400 });
+    if (!pdfBase64) {
+      return NextResponse.json({ error: 'PDF 데이터가 없습니다.' }, { status: 400 });
     }
 
-    // Generate PDF
-    let browser;
-    let pdfBuffer: Uint8Array;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      });
-      const page = await browser.newPage();
-      await page.goto(`data:text/html;base64,${htmlBase64}`, {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
-      });
-      pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
-      });
-    } finally {
-      if (browser) await browser.close();
-    }
-
+    const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const fileName = `${user.id}/${Date.now()}.pdf`;
     const { error: uploadErr } = await adminClient.storage
       .from('pdf-history')
