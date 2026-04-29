@@ -264,8 +264,8 @@ export default function AccountPage() {
         {/* 포인트 배지 */}
         <div className="bg-gray-900 rounded-3xl p-6 flex items-center justify-between">
           <div>
-            <p className="text-xs font-black text-gray-400 tracking-wider">MY POINTS</p>
-            <p className="text-3xl font-black text-white mt-1">{points.toLocaleString()}<span className="text-lg text-gray-400 ml-1">P</span></p>
+            <p className="text-xs font-black text-gray-400 tracking-wider">MY CON</p>
+            <p className="text-3xl font-black text-white mt-1">{points.toLocaleString()}<span className="text-lg text-gray-400 ml-1">C</span></p>
           </div>
           <div className="w-14 h-14 bg-yellow-400 rounded-2xl flex items-center justify-center text-2xl">⭐</div>
         </div>

@@ -43,15 +43,26 @@ export async function middleware(request: NextRequest) {
   // 1. 유저 세션 확인 (이 부분이 유저 정보를 서버에서 안전하게 읽어옵니다)
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 2. 로그인 안 된 상태에서 /admin 접근 시 로그인 페이지로
-  if (!user && request.nextUrl.pathname.startsWith('/admin')) {
+  const pathname = request.nextUrl.pathname;
+
+  // 2. 미인증 접근 차단
+  if (!user && pathname.startsWith('/admin')) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+  if (!user && pathname.startsWith('/superadmin')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-// 3. 이미 로그인 된 상태에서 로그인/회원가입 접근 시 /admin으로 보냄
-if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/register')) {
-  return NextResponse.redirect(new URL('/admin', request.url)) // 여기를 /admin으로 변경!
-}
+  // 3. 일반 학원 원장의 /superadmin 접근 차단
+  if (user && pathname.startsWith('/superadmin') && user.email !== process.env.SUPER_ADMIN_EMAIL) {
+    return NextResponse.redirect(new URL('/admin', request.url))
+  }
+
+  // 4. 로그인 후 리다이렉트 분기 (슈퍼어드민 vs 학원 원장)
+  if (user && (pathname === '/login' || pathname === '/register')) {
+    const dest = user.email === process.env.SUPER_ADMIN_EMAIL ? '/superadmin' : '/admin'
+    return NextResponse.redirect(new URL(dest, request.url))
+  }
 
   return response
 }

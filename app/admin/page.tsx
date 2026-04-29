@@ -47,9 +47,8 @@ export default function DashboardPage() {
           .eq(todayField, true)
           .lte('start_time', currentTime)
           .gte('end_time', currentTime),
-        // 💡 중요 공지 상단 배치 + 최신순 3개
-        supabase.from('notices').select('*')
-          .eq('academy_id', userId)
+        // 시스템 공지 최신 3개
+        supabase.from('system_notices').select('*')
           .order('is_important', { ascending: false })
           .order('created_at', { ascending: false })
           .limit(3)
@@ -150,16 +149,16 @@ export default function DashboardPage() {
         <section className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-50">
           <div className="flex justify-between items-center mb-8">
             <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-              <span className="w-2.5 h-7 bg-yellow-400 rounded-full"></span>
-              학원 공지사항
+              <span className="w-2.5 h-7 bg-indigo-400 rounded-full"></span>
+              공지사항
             </h3>
             <Link href="/admin/notices" className="text-sm font-black text-slate-300 hover:text-indigo-600 transition-colors">전체보기 ➜</Link>
           </div>
           <div className="space-y-4">
             {recentNotices.length > 0 ? recentNotices.map((n, i) => (
-              <Link href="/admin/notices" key={i} className={`block p-5 rounded-[2rem] transition-all border-2 ${n.is_important ? 'bg-yellow-50 border-yellow-100' : 'bg-slate-50 border-transparent hover:border-slate-100 hover:bg-white'}`}>
+              <Link href="/admin/notices" key={i} className={`block p-5 rounded-[2rem] transition-all border-2 ${n.is_important ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-transparent hover:border-slate-100 hover:bg-white'}`}>
                 <div className="flex items-center gap-3 mb-2">
-                  {n.is_important && <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">Urgent</span>}
+                  {n.is_important && <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest">중요</span>}
                   <span className="font-black text-slate-800 truncate text-lg">{n.title}</span>
                 </div>
                 <div className="text-xs text-slate-400 font-bold flex items-center gap-1">

@@ -17,12 +17,14 @@ const menuItems = [
   { href: '/admin/sms',          label: '문자 발송',       icon: '📱' },
   { href: '/admin/pdf-editor',   label: '영어 문제 생성',  icon: '📝' },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
+  { href: '/admin/inquiries',    label: '문의하기',        icon: '💬' },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [academyName, setAcademyName] = useState('');
   const [kioskCode, setKioskCode] = useState('');
+  const [points, setPoints] = useState<number>(0);
   const [isDark, setIsDark] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -57,11 +59,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code')
+          .select('academy_name, kiosk_code, points')
           .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
+        if (data?.points !== undefined) setPoints(data.points);
       }
     };
     getAcademyInfo();
@@ -90,12 +93,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isLoginPage = pathname === '/login';
   const isRegisterPage = pathname === '/register';
   const isKioskPage = pathname === '/kiosk';
-  const showLayout = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage;
+  const isSuperAdminPage = pathname.startsWith('/superadmin');
+  const showLayout = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage && !isSuperAdminPage;
 
   if (!showLayout) {
     return (
       <html lang="ko">
-        <body>{children}</body>
+        <body className={isSuperAdminPage ? 'bg-slate-950' : ''}>{children}</body>
       </html>
     );
   }
@@ -235,6 +239,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </div>
                     <span className="text-base font-black text-gray-800 hidden sm:block max-w-[140px] truncate">
                       {academyName || '내 학원'}
+                    </span>
+                    <span className="hidden sm:block text-xs font-black text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-lg whitespace-nowrap">
+                      {points.toLocaleString()}C
                     </span>
                     <span className="text-gray-400 text-xs">▼</span>
                   </button>

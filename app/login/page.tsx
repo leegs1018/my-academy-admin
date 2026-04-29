@@ -26,7 +26,10 @@ export default function LoginPage() {
     // 자동 로그인 설정이 있고 세션이 유효하면 바로 이동
     if (savedAutoLogin) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) router.replace('/admin');
+        if (session) {
+          const dest = session.user.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ? '/superadmin' : '/admin';
+          router.replace(dest);
+        }
       });
     }
   }, [router]);
@@ -57,7 +60,8 @@ export default function LoginPage() {
           localStorage.removeItem(AUTO_LOGIN_KEY);
           localStorage.removeItem(SAVED_EMAIL_KEY);
         }
-        router.push('/admin');
+        const dest = data.session.user.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ? '/superadmin' : '/admin';
+        router.push(dest);
         router.refresh();
       }
     } catch (err) {
