@@ -23,9 +23,11 @@ export async function POST(request: Request) {
     }
 
     // Client sends already-generated PDF as base64
-    const { pdfBase64, passageExcerpt, passageFull, passageType, difficulty } =
+    const { pdfBase64, answerPdfBase64, title, passageExcerpt, passageFull, passageType, difficulty } =
       await request.json() as {
         pdfBase64: string;
+        answerPdfBase64?: string;
+        title?: string | null;
         passageExcerpt: string;
         passageFull: string;
         passageType: string;
@@ -36,8 +38,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'PDF 데이터가 없습니다.' }, { status: 400 });
     }
 
+    const ts = Date.now();
+    const fileName = `${user.id}/${ts}.pdf`;
+    const answerFileName = answerPdfBase64 ? `${user.id}/${ts}_answer.pdf` : null;
+
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    const fileName = `${user.id}/${Date.now()}.pdf`;
     const { error: uploadErr } = await adminClient.storage
       .from('pdf-history')
       .upload(fileName, pdfBuffer, { contentType: 'application/pdf' });
@@ -47,19 +52,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `스토리지 업로드 실패: ${uploadErr.message}` }, { status: 500 });
     }
 
+    if (answerPdfBase64 && answerFileName) {
+      const answerBuffer = Buffer.from(answerPdfBase64, 'base64');
+      const { error: answerUploadErr } = await adminClient.storage
+        .from('pdf-history')
+        .upload(answerFileName, answerBuffer, { contentType: 'application/pdf' });
+      if (answerUploadErr) {
+        console.error('[save-pdf-history] answer storage upload error:', answerUploadErr);
+      }
+    }
+
     const { error: insertErr } = await adminClient.from('pdf_history').insert({
       academy_id: user.id,
+      title: title ?? null,
       passage_excerpt: passageExcerpt,
       passage_full: passageFull,
       passage_type: passageType,
       difficulty,
       pdf_path: fileName,
+      answer_pdf_path: answerFileName,
     });
 
     if (insertErr) {
       console.error('[save-pdf-history] db insert error:', insertErr);
-      // Clean up uploaded file
       await adminClient.storage.from('pdf-history').remove([fileName]);
+      if (answerFileName) await adminClient.storage.from('pdf-history').remove([answerFileName]);
       return NextResponse.json({ error: `DB 저장 실패: ${insertErr.message}` }, { status: 500 });
     }
 

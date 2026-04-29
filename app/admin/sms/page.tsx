@@ -47,6 +47,8 @@ export default function SMSPage() {
   // 발송 이력
   const [logs, setLogs] = useState<any[]>([]);
   const [selectedLog, setSelectedLog] = useState<any>(null);
+  const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
+  const [isDeletingLogs, setIsDeletingLogs] = useState(false);
 
   // ── 초기 데이터 로드 ────────────────────────────
   useEffect(() => {
@@ -203,6 +205,37 @@ export default function SMSPage() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  // ── 발송 이력 선택/삭제 ─────────────────────────
+  const allLogsSelected = logs.length > 0 && logs.every(l => selectedLogIds.has(l.id));
+
+  const toggleSelectAllLogs = () => {
+    if (allLogsSelected) {
+      setSelectedLogIds(new Set());
+    } else {
+      setSelectedLogIds(new Set(logs.map(l => l.id)));
+    }
+  };
+
+  const toggleSelectLog = (id: string) => {
+    const next = new Set(selectedLogIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedLogIds(next);
+  };
+
+  const handleDeleteLogs = async () => {
+    if (selectedLogIds.size === 0) return;
+    if (!confirm(`선택한 ${selectedLogIds.size}건의 이력을 삭제할까요?`)) return;
+    setIsDeletingLogs(true);
+    const ids = [...selectedLogIds];
+    const { error } = await supabase.from('sms_logs').delete().in('id', ids);
+    if (!error) {
+      setLogs(prev => prev.filter(l => !selectedLogIds.has(l.id)));
+      setSelectedLogIds(new Set());
+    }
+    setIsDeletingLogs(false);
   };
 
   const messageType = getMessageType(message);
@@ -550,8 +583,17 @@ export default function SMSPage() {
       {/* ─── 발송 이력 탭 ─── */}
       {activeTab === 'logs' && (
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg font-black text-gray-700">발송 이력</h2>
+            {selectedLogIds.size > 0 && (
+              <button
+                onClick={handleDeleteLogs}
+                disabled={isDeletingLogs}
+                className="px-4 py-2 text-xs font-black text-red-500 bg-red-50 hover:bg-red-100 border-2 border-red-200 rounded-xl transition-all disabled:opacity-50"
+              >
+                {isDeletingLogs ? '삭제 중...' : `선택 ${selectedLogIds.size}건 삭제`}
+              </button>
+            )}
           </div>
           {logs.length === 0 ? (
             <div className="py-20 text-center">
@@ -563,6 +605,14 @@ export default function SMSPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="py-3 px-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allLogsSelected}
+                        onChange={toggleSelectAllLogs}
+                        className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                      />
+                    </th>
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">발송일시</th>
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">내용 미리보기</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신 유형</th>
@@ -577,7 +627,15 @@ export default function SMSPage() {
                     const date = new Date(log.created_at);
                     const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
                     return (
-                      <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <tr key={log.id} className={`border-b border-gray-50 transition-colors ${selectedLogIds.has(log.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                        <td className="py-3 px-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedLogIds.has(log.id)}
+                            onChange={() => toggleSelectLog(log.id)}
+                            className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-4 text-xs font-bold text-gray-500 whitespace-nowrap">{dateStr}</td>
                         <td className="py-3 px-4 max-w-[200px]">
                           <span className="text-sm text-gray-700 font-bold truncate block">{log.message}</span>

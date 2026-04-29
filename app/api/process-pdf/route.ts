@@ -7,6 +7,7 @@ interface TFQuestion {
   number: number;
   statement: string;
   answer: 'T' | 'F';
+  explanation: string;
 }
 
 interface VocabRow {
@@ -65,16 +66,16 @@ ${text}
     ]
   },
   "tf_questions": [
-    {"number": 1, "statement": "English statement using vocabulary NOT in the passage", "answer": "T"},
-    {"number": 2, "statement": "...", "answer": "F"},
-    {"number": 3, "statement": "...", "answer": "T"},
-    {"number": 4, "statement": "...", "answer": "F"},
-    {"number": 5, "statement": "...", "answer": "T"},
-    {"number": 6, "statement": "...", "answer": "F"},
-    {"number": 7, "statement": "...", "answer": "T"},
-    {"number": 8, "statement": "...", "answer": "F"},
-    {"number": 9, "statement": "...", "answer": "T"},
-    {"number": 10, "statement": "...", "answer": "F"}
+    {"number": 1, "statement": "English statement using vocabulary NOT in the passage", "answer": "T", "explanation": "한글로 왜 T인지 설명"},
+    {"number": 2, "statement": "...", "answer": "F", "explanation": "한글로 왜 F인지 설명"},
+    {"number": 3, "statement": "...", "answer": "T", "explanation": "..."},
+    {"number": 4, "statement": "...", "answer": "F", "explanation": "..."},
+    {"number": 5, "statement": "...", "answer": "T", "explanation": "..."},
+    {"number": 6, "statement": "...", "answer": "F", "explanation": "..."},
+    {"number": 7, "statement": "...", "answer": "T", "explanation": "..."},
+    {"number": 8, "statement": "...", "answer": "F", "explanation": "..."},
+    {"number": 9, "statement": "...", "answer": "T", "explanation": "..."},
+    {"number": 10, "statement": "...", "answer": "F", "explanation": "..."}
   ],
   "answer_key": "1. T  2. F  3. T  4. F  5. T  6. F  7. T  8. F  9. T  10. F",
   "english_titles": [
@@ -100,7 +101,7 @@ ${text}
      - 논쟁 지문 → rows 3개: label = "주장", "근거", "결론"
      - 문제 지문 → rows 3개: label = "현상", "문제", "해결"
    - content는 각 행당 한글 1~2문장으로 명확하게 작성. 원문 직역 금지.
-2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자. 각 문장은 반드시 100자 이상의 충분한 길이로 작성할 것 (짧은 문장 금지).
+2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자. 각 문장은 반드시 100자 이상의 충분한 길이로 작성할 것 (짧은 문장 금지). explanation은 해당 문장이 왜 T 또는 F인지 한글 1~2문장으로 설명. 지문의 어느 내용을 근거로 판단했는지 포함.
 3. answer_key: "1. T  2. F ..." 형식. 괄호 없음. 번호 복사가 깔끔하게.
 4. english_titles: 지문 내용에 알맞은 영어 제목 3가지. 조금 길게 (시험 문제 대비용). 괄호 안에 한글 번역 포함. 총 3개.
 5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역도 괄호 안에 포함. 요약문에서 중요 어휘는 **볼드** 처리. 총 3개.

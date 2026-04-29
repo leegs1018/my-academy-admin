@@ -8,6 +8,7 @@ interface TFQuestion {
   number: number;
   statement: string;
   answer: 'T' | 'F';
+  explanation?: string;
 }
 
 interface VocabRow {
@@ -35,35 +36,35 @@ interface GeneratedMaterials {
 interface PdfHistoryItem {
   id: string;
   created_at: string;
+  title?: string;
   passage_excerpt: string;
   passage_full: string;
   passage_type: string;
   difficulty: string;
   pdf_path: string;
+  answer_pdf_path?: string;
 }
 
+
 // ── 클라이언트 사이드 PDF 생성 (Puppeteer 불필요) ──
-async function generatePdfBlob(): Promise<Blob | null> {
+async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
   const page1El = document.getElementById('pdf-page-1');
   const page2El = document.getElementById('pdf-page-2');
   if (!page1El || !page2El) return null;
 
-  // UI 전용 요소 임시 숨김
   const noPrintEls = document.querySelectorAll('#print-area .no-print');
   noPrintEls.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
+  const answerAreaEls = hideAnswerArea ? document.querySelectorAll('.pdf-answer-area') : null;
+  answerAreaEls?.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
 
   try {
     const { toJpeg } = await import('html-to-image');
     const { jsPDF } = await import('jspdf');
 
-    const W = 210, M = 5, cW = W - 2 * M, pageH = 297 - 2 * M;
+    const W = 210, M = 5, cW = W - 2 * M;
 
     const p1Ratio = page1El.offsetHeight / page1El.offsetWidth;
     const p2Ratio = page2El.offsetHeight / page2El.offsetWidth;
-
-    // 가로폭을 최대로 쓰되, 세로가 A4를 넘으면 균등 축소
-    const scale1 = Math.min(1, pageH / (cW * p1Ratio));
-    const scale2 = Math.min(1, pageH / (cW * p2Ratio));
 
     const opts = { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
     const [url1, url2] = await Promise.all([
@@ -72,13 +73,63 @@ async function generatePdfBlob(): Promise<Blob | null> {
     ]);
 
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    pdf.addImage(url1, 'JPEG', M, M, cW * scale1, cW * p1Ratio * scale1);
+    pdf.addImage(url1, 'JPEG', M, M, cW, cW * p1Ratio);
     pdf.addPage();
-    pdf.addImage(url2, 'JPEG', M, M, cW * scale2, cW * p2Ratio * scale2);
+    pdf.addImage(url2, 'JPEG', M, M, cW, cW * p2Ratio);
 
     return pdf.output('blob');
   } finally {
     noPrintEls.forEach(el => (el as HTMLElement).style.removeProperty('display'));
+    answerAreaEls?.forEach(el => (el as HTMLElement).style.removeProperty('display'));
+  }
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function buildAnswerPdfBlob(result: GeneratedMaterials, title: string): Promise<Blob> {
+  const { toJpeg } = await import('html-to-image');
+  const { jsPDF } = await import('jspdf');
+
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:0;left:0;width:800px;background:white;padding:40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;z-index:-9999;';
+
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let html = '';
+  if (title) html += `<h1 style="font-size:22px;font-weight:900;color:#1e293b;margin:0 0 24px;">${esc(title)}</h1>`;
+  html += `<div style="margin-bottom:24px;"><h2 style="font-size:16px;font-weight:900;color:#7c3aed;margin:0 0 8px;">T/F 정답</h2>`;
+  html += `<p style="font-size:15px;font-weight:700;color:#334155;letter-spacing:0.05em;margin:0;">${esc(result.answer_key)}</p></div>`;
+  if (result.tf_questions.some(q => q.explanation)) {
+    html += `<div><h2 style="font-size:16px;font-weight:900;color:#7c3aed;margin:0 0 12px;">해설</h2><div style="display:flex;flex-direction:column;gap:10px;">`;
+    for (const q of result.tf_questions) {
+      if (!q.explanation) continue;
+      html += `<div style="display:flex;gap:12px;"><span style="font-weight:900;color:#7c3aed;min-width:52px;flex-shrink:0;font-size:14px;">${q.number}. ${q.answer}</span><p style="font-weight:700;color:#475569;line-height:1.6;font-size:14px;flex:1;margin:0;">${esc(q.explanation)}</p></div>`;
+    }
+    html += `</div></div>`;
+  }
+  el.innerHTML = html;
+  document.body.appendChild(el);
+
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => requestAnimationFrame(r));
+
+  try {
+    const W = 210, M = 5, cW = W - 2 * M;
+    const ratio = el.offsetHeight / el.offsetWidth;
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true });
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    pdf.addImage(url, 'JPEG', M, M, cW, cW * ratio);
+    return pdf.output('blob');
+  } finally {
+    if (document.body.contains(el)) document.body.removeChild(el);
   }
 }
 
@@ -122,7 +173,8 @@ export default function PdfEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAnswerKey, setShowAnswerKey] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfTitle, setPdfTitle] = useState('');
+  const [pdfLoading, setPdfLoading] = useState<false | '문제' | '답안'>(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -199,21 +251,29 @@ export default function PdfEditorPage() {
   }, [activeTab]);
 
   // ── 자동 저장 (클라이언트 PDF → 서버 저장) ──
-  const autoSavePdf = useCallback(async (generated: GeneratedMaterials, text: string, diff: string) => {
+  const autoSavePdf = useCallback(async (generated: GeneratedMaterials, text: string, diff: string, titleSnapshot: string) => {
     setSaveStatus('saving');
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setSaveStatus('error'); setSaveErrorMsg('로그인 세션 없음'); return; }
 
-      const pdfBlob = await generatePdfBlob();
+      const [pdfBlob, answerBlob] = await Promise.all([
+        generatePdfBlob(true),
+        buildAnswerPdfBlob(generated, pdfTitle.trim()),
+      ]);
       if (!pdfBlob) { setSaveStatus('error'); setSaveErrorMsg('PDF 요소를 찾을 수 없음'); return; }
 
-      const pdfBase64 = await new Promise<string>((resolve, reject) => {
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
-        reader.readAsDataURL(pdfBlob);
+        reader.readAsDataURL(blob);
       });
+
+      const [pdfBase64, answerPdfBase64] = await Promise.all([
+        toBase64(pdfBlob),
+        toBase64(answerBlob),
+      ]);
 
       const res = await fetch('/api/save-pdf-history', {
         method: 'POST',
@@ -223,6 +283,8 @@ export default function PdfEditorPage() {
         },
         body: JSON.stringify({
           pdfBase64,
+          answerPdfBase64,
+          title: titleSnapshot.trim() || null,
           passageExcerpt: text.slice(0, 150),
           passageFull: text,
           passageType: generated.korean_summary.type,
@@ -243,13 +305,12 @@ export default function PdfEditorPage() {
   }, []);
 
   // ── 이력에서 단건 다운로드 ──
-  const downloadFromHistory = async (pdfPath: string, createdAt: string) => {
+  const downloadFromHistory = async (pdfPath: string, filename: string) => {
     const { data } = await supabase.storage.from('pdf-history').createSignedUrl(pdfPath, 3600);
     if (!data?.signedUrl) return;
-    const date = new Date(createdAt).toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '');
     const a = document.createElement('a');
     a.href = data.signedUrl;
-    a.download = `영어문제_${date}.pdf`;
+    a.download = filename;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
@@ -260,10 +321,17 @@ export default function PdfEditorPage() {
   // ── 선택 항목 일괄 다운로드 ──
   const downloadSelected = async () => {
     setBulkDownloading(true);
-    const items = historyList.filter(i => selectedIds.has(i.id) && i.pdf_path);
+    const items = historyList.filter(i => selectedIds.has(i.id));
     for (const item of items) {
-      await downloadFromHistory(item.pdf_path, item.created_at);
-      await new Promise(r => setTimeout(r, 800));
+      const base = item.title || '영어문제';
+      if (item.pdf_path) {
+        await downloadFromHistory(item.pdf_path, `${base}_문제.pdf`);
+        await new Promise(r => setTimeout(r, 600));
+      }
+      if (item.answer_pdf_path) {
+        await downloadFromHistory(item.answer_pdf_path, `${base}_답안해설.pdf`);
+        await new Promise(r => setTimeout(r, 600));
+      }
     }
     setBulkDownloading(false);
   };
@@ -376,7 +444,7 @@ export default function PdfEditorPage() {
       setResult(generated);
       setSaveStatus('idle');
       // DOM 렌더링 대기 후 자동 저장
-      setTimeout(() => autoSavePdf(generated, textToSend, difficulty), 800);
+      setTimeout(() => autoSavePdf(generated, textToSend, difficulty, pdfTitle), 800);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
@@ -398,21 +466,29 @@ export default function PdfEditorPage() {
   const buildVocabText = () =>
     result?.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n') ?? '';
 
-  // ── PDF 다운로드 (클라이언트 사이드) ──
-  const handleDownloadPDF = async () => {
-    setPdfLoading(true);
+  const baseName = pdfTitle.trim() || '영어문제';
+
+  // ── 문제 PDF 다운로드 ──
+  const handleDownloadProblemPDF = async () => {
+    setPdfLoading('문제');
     try {
-      const blob = await generatePdfBlob();
+      const blob = await generatePdfBlob(true);
       if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
-      const url = URL.createObjectURL(blob);
-      const today = new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `영어문제_${today}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, `${baseName}_문제.pdf`);
+    } catch (e) {
+      alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  // ── 답안·해설 PDF 다운로드 ──
+  const handleDownloadAnswerPDF = async () => {
+    if (!result) return;
+    setPdfLoading('답안');
+    try {
+      const blob = await buildAnswerPdfBlob(result, pdfTitle.trim());
+      triggerDownload(blob, `${baseName}_답안해설.pdf`);
     } catch (e) {
       alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
     } finally {
@@ -454,6 +530,16 @@ export default function PdfEditorPage() {
       {activeTab === 'generate' && (
         <>
           <div className="no-print bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 mb-8">
+            <div className="mb-6">
+              <label className="text-sm font-black text-slate-600 mb-2 block">제목 (PDF 파일명)</label>
+              <input
+                type="text"
+                value={pdfTitle}
+                onChange={(e) => setPdfTitle(e.target.value)}
+                placeholder="예: 수능 2025 6월 모의고사"
+                className="w-full px-5 py-3 border-2 border-slate-200 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300"
+              />
+            </div>
             <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl w-fit">
               {([['text', '✏️ 텍스트 직접 입력'], ['image', '📷 사진 등록']] as const).map(([mode, label]) => (
                 <button key={mode} onClick={() => { setInputMode(mode); setError(null); }}
@@ -599,7 +685,7 @@ export default function PdfEditorPage() {
                   </div>
                 </SectionCard>
 
-                <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T 5개 F 5개"
+                <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T F 문제"
                   color="bg-violet-500" onCopy={() => copy(buildTFText(), 'tf')} copied={copiedSection === 'tf'}>
                   <div className="space-y-1.5 mb-3">
                     {result.tf_questions.map((q) => (
@@ -609,22 +695,37 @@ export default function PdfEditorPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="border-t border-violet-100 pt-4">
+                  <div className="pdf-answer-area border-t border-violet-100 pt-4">
                     <button onClick={() => setShowAnswerKey(!showAnswerKey)}
                       className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors">
                       <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
                       해설지 {showAnswerKey ? '닫기' : '보기'}
                     </button>
                     {showAnswerKey && (
-                      <div className="mt-3 p-4 bg-violet-50 rounded-2xl border border-violet-100">
-                        <div className="flex justify-between mb-2">
-                          <span className="font-black text-violet-700">정답</span>
-                          <button onClick={() => copy(result.answer_key, 'answer_key')}
-                            className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
-                            {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
-                          </button>
+                      <div className="mt-3 space-y-3">
+                        <div className="p-4 bg-violet-50 rounded-2xl border border-violet-100">
+                          <div className="flex justify-between mb-2">
+                            <span className="font-black text-violet-700">정답</span>
+                            <button onClick={() => copy(result.answer_key, 'answer_key')}
+                              className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
+                              {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
+                            </button>
+                          </div>
+                          <p className="font-black text-slate-700 tracking-wide">{result.answer_key}</p>
                         </div>
-                        <p className="font-black text-slate-700 tracking-wide">{result.answer_key}</p>
+                        {result.tf_questions.some(q => q.explanation) && (
+                          <div className="p-4 bg-violet-50 rounded-2xl border border-violet-100">
+                            <span className="font-black text-violet-700 block mb-3">해설</span>
+                            <div className="space-y-2">
+                              {result.tf_questions.map(q => q.explanation && (
+                                <div key={q.number} className="flex gap-2 text-sm">
+                                  <span className="font-black text-violet-600 shrink-0 w-12">{q.number}. {q.answer}</span>
+                                  <p className="text-slate-600 font-bold leading-relaxed flex-1 min-w-0">{q.explanation}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -730,9 +831,13 @@ export default function PdfEditorPage() {
                 </div>
               )}
               <div className="flex gap-3">
-                <button onClick={handleDownloadPDF} disabled={pdfLoading}
+                <button onClick={handleDownloadProblemPDF} disabled={pdfLoading !== false}
                   className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
-                  {pdfLoading ? '⏳ 생성 중...' : '⬇️ PDF 저장'}
+                  {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 PDF'}
+                </button>
+                <button onClick={handleDownloadAnswerPDF} disabled={pdfLoading !== false}
+                  className="bg-violet-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-violet-700 active:scale-95 transition-all disabled:opacity-50">
+                  {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안·해설 PDF'}
                 </button>
               </div>
             </div>
@@ -816,16 +921,16 @@ export default function PdfEditorPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              <div className="grid grid-cols-[40px_160px_80px_60px_1fr_52px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
+              <div className="grid grid-cols-[40px_150px_72px_56px_160px_1fr_80px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
                 <input type="checkbox" checked={selectedIds.size === historyList.length && historyList.length > 0}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
-                {['날짜', '유형', '난이도', '지문 요약', 'PDF'].map((h, i) => (
-                  <span key={i} className={`text-xs font-black text-slate-500 ${i === 4 ? 'text-center' : ''}`}>{h}</span>
+                {['날짜', '유형', '난이도', '제목', '지문 요약', 'PDF'].map((h, i) => (
+                  <span key={i} className={`text-xs font-black text-slate-500 ${i === 5 ? 'text-center' : ''}`}>{h}</span>
                 ))}
               </div>
               {historyList.map((item, i) => (
                 <div key={item.id}
-                  className={`grid grid-cols-[40px_160px_80px_60px_1fr_52px] gap-3 px-5 py-4 items-center
+                  className={`grid grid-cols-[40px_150px_72px_56px_160px_1fr_80px] gap-3 px-5 py-4 items-center
                     ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
                     border-b border-slate-100 last:border-0 hover:bg-indigo-50/60 transition-colors`}>
                   <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)}
@@ -839,20 +944,29 @@ export default function PdfEditorPage() {
                   <span className={`text-xs font-black px-2 py-1 rounded-full w-fit ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
                     {item.difficulty || '-'}
                   </span>
+                  <span className="text-sm font-bold text-slate-700 truncate" title={item.title || ''}>
+                    {item.title || <span className="text-slate-300">-</span>}
+                  </span>
                   <button onClick={() => setPassageModal(item)}
                     className="text-sm text-slate-600 font-bold truncate text-left hover:text-indigo-600 hover:underline transition-colors w-full">
                     {item.passage_excerpt}
                   </button>
-                  {item.pdf_path ? (
-                    <button onClick={() => downloadFromHistory(item.pdf_path, item.created_at)} title="PDF 다운로드"
-                      className="flex items-center justify-center w-10 h-10 bg-indigo-100 hover:bg-indigo-200 text-indigo-600 rounded-xl transition-all active:scale-90 mx-auto">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 4v11" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-300 font-bold text-center mx-auto">저장중</span>
-                  )}
+                  <div className="flex flex-col gap-1 items-center">
+                    {item.pdf_path ? (
+                      <button onClick={() => downloadFromHistory(item.pdf_path, `${item.title || '영어문제'}_문제.pdf`)} title="문제지 다운로드"
+                        className="flex items-center gap-1 px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all active:scale-90 w-full justify-center">
+                        문제
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-300 font-bold">저장중</span>
+                    )}
+                    {item.answer_pdf_path && (
+                      <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '영어문제'}_답안해설.pdf`)} title="답안·해설 다운로드"
+                        className="flex items-center gap-1 px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all active:scale-90 w-full justify-center">
+                        해설
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
