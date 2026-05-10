@@ -6,7 +6,11 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import './globals.css';
 
-const menuItems = [
+type FlatMenuItem = { href: string; label: string; icon: string; children?: never };
+type GroupMenuItem = { label: string; icon: string; children: FlatMenuItem[]; href?: never };
+type MenuItem = FlatMenuItem | GroupMenuItem;
+
+const menuItems: MenuItem[] = [
   { href: '/admin',              label: '홈 대시보드',     icon: '🏠' },
   { href: '/admin/student',      label: '학생 등록 관리',  icon: '👤' },
   { href: '/admin/class',        label: '클래스 관리',     icon: '🏫' },
@@ -15,7 +19,14 @@ const menuItems = [
   { href: '/admin/report',       label: '성적표 발행',     icon: '📈' },
   { href: '/admin/attendance',   label: '일정 및 출석관리', icon: '✅' },
   { href: '/admin/sms',          label: '문자 발송',       icon: '📱' },
-  { href: '/admin/pdf-editor',   label: '영어 문제 생성',  icon: '📝' },
+  {
+    label: 'AI 문제 생성',
+    icon: '🤖',
+    children: [
+      { href: '/admin/pdf-editor',   label: '지문분석 툴/워크북', icon: '📝' },
+      { href: '/admin/ai-questions', label: '실전 변형 문제',     icon: '🎯' },
+    ],
+  },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
   { href: '/admin/inquiries',    label: '문의하기',        icon: '💬' },
 ];
@@ -27,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [points, setPoints] = useState<number>(0);
   const [isDark, setIsDark] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -68,6 +80,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }
     };
     getAcademyInfo();
+  }, [pathname]);
+
+  // ── AI 문제 생성 그룹 자동 펼침 ─────────────────
+  useEffect(() => {
+    const aiPaths = ['/admin/pdf-editor', '/admin/ai-questions'];
+    if (aiPaths.some(p => pathname.startsWith(p))) setExpandedGroup('AI 문제 생성');
   }, [pathname]);
 
   // ── 외부 클릭 시 메뉴 닫기 ──────────────────────
@@ -136,6 +154,54 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="flex-1 overflow-y-auto custom-scrollbar py-4 px-3">
               <div className="space-y-0.5">
                 {menuItems.map((item) => {
+                  if (item.children) {
+                    const isAnyChildActive = item.children.some(c => pathname.startsWith(c.href));
+                    const isExpanded = expandedGroup === item.label || isAnyChildActive;
+                    return (
+                      <div key={item.label}>
+                        <button
+                          onClick={() => setExpandedGroup(isExpanded ? null : item.label)}
+                          className={`
+                            w-full flex items-center gap-3 px-4 py-3 rounded-xl
+                            text-base font-bold transition-all whitespace-nowrap
+                            ${isAnyChildActive
+                              ? 'text-gray-900 bg-gray-50'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            }
+                          `}
+                        >
+                          <span className="text-lg flex-shrink-0">{item.icon}</span>
+                          <span className="flex-1 text-left">{item.label}</span>
+                          <span className="text-xs text-gray-400">{isExpanded ? '▾' : '▸'}</span>
+                        </button>
+                        {isExpanded && (
+                          <div className="ml-4 mt-0.5 space-y-0.5">
+                            {item.children.map((child) => {
+                              const isChildActive = pathname === child.href;
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={() => setSidebarOpen(false)}
+                                  className={`
+                                    flex items-center gap-3 pl-4 pr-4 py-2.5 rounded-xl
+                                    text-sm font-bold transition-all whitespace-nowrap
+                                    ${isChildActive
+                                      ? 'bg-gray-900 text-white shadow-sm'
+                                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                                    }
+                                  `}
+                                >
+                                  <span className="text-base flex-shrink-0">{child.icon}</span>
+                                  <span>{child.label}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
                   const isActive = pathname === item.href;
                   return (
                     <Link

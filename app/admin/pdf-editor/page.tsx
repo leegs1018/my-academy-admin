@@ -437,7 +437,13 @@ export default function PdfEditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: textToSend, difficulty }),
       });
-      const json = await res.json();
+      const rawText = await res.text();
+      let json: { data?: GeneratedMaterials; error?: string };
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        throw new Error('AI 응답을 처리할 수 없습니다. 다시 시도해주세요.');
+      }
       if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
       const generated = json.data as GeneratedMaterials;
       setOriginalPassageText(textToSend);
@@ -512,7 +518,7 @@ export default function PdfEditorPage() {
       )}
 
       <div className="no-print mb-6">
-        <h1 className="text-4xl font-black text-slate-900 tracking-tighter">📝 영어 문제 생성</h1>
+        <h1 className="text-4xl font-black text-slate-900 tracking-tighter">📝 지문분석 툴/워크북</h1>
         <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 5가지 교육 자료를 만들어드려요</p>
       </div>
 
@@ -625,7 +631,7 @@ export default function PdfEditorPage() {
 
             <div className="mt-6 flex flex-wrap items-center gap-4">
               <span className="font-black text-slate-700 text-lg">난이도 선택:</span>
-              {(['상', '중', '하'] as const).map((d) => (
+              {(['하', '중', '상'] as const).map((d) => (
                 <button key={d} onClick={() => setDifficulty(d)}
                   className={`px-8 py-3 rounded-2xl font-black text-xl transition-all
                     ${difficulty === d ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>

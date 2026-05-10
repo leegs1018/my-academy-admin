@@ -89,7 +89,7 @@ ${text}
     {"english": "A third summary emphasizing **another aspect**.", "korean": "한국어 번역"}
   ],
   "vocabulary_table": [
-    {"word": "표제어", "meaning": "한글뜻", "syn1": "유의어1", "syn1_m": "뜻", "syn2": "유의어2", "syn2_m": "뜻", "syn3": "유의어3", "syn3_m": "뜻", "antonym": "반의어", "antonym_m": "뜻"}
+    {"word": "English_word", "meaning": "한글뜻", "syn1": "English_syn1", "syn1_m": "한글뜻1", "syn2": "English_syn2", "syn2_m": "한글뜻2", "syn3": "English_syn3", "syn3_m": "한글뜻3", "antonym": "English_antonym", "antonym_m": "한글뜻"}
   ]
 }
 
@@ -105,7 +105,15 @@ ${text}
 3. answer_key: "1. T  2. F ..." 형식. 괄호 없음. 번호 복사가 깔끔하게.
 4. english_titles: 지문 내용에 알맞은 영어 제목 3가지. 조금 길게 (시험 문제 대비용). 괄호 안에 한글 번역 포함. 총 3개.
 5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역도 괄호 안에 포함. 요약문에서 중요 어휘는 **볼드** 처리. 총 3개.
-6. vocabulary_table: 지문 내에서 주제와 관련된 어휘를 10개 추출 (지문에 쓰인 어휘 그대로, 소문자 변환). 각 어휘마다 동의어 3개, 반의어 1개 생성. 한글 뜻 포함. 모두 소문자. 형식: word ( 한글뜻 ) — 괄호 안 양쪽에 한 칸 공백. 총 10행 × (표제어+동의어3+반의어1) = 50항목, 동의어+반의어만 합산 시 40개.`;
+6. vocabulary_table: 지문 내에서 주제와 관련된 어휘를 10개 추출 (지문에 쓰인 어휘 그대로, 소문자 변환). 각 어휘마다 동의어 3개, 반의어 1개 생성. 모두 소문자.
+   필드별 언어 규칙 (반드시 준수):
+   - word: 반드시 영어 단어 (English only)
+   - meaning: 반드시 한글 뜻 (Korean only)
+   - syn1, syn2, syn3: 반드시 영어 유의어 (English only)
+   - syn1_m, syn2_m, syn3_m: 반드시 한글 뜻 (Korean only)
+   - antonym: 반드시 영어 반의어 (English only)
+   - antonym_m: 반드시 한글 뜻 (Korean only)
+   영어 필드에 한글 입력 금지. 한글 필드에 영어 입력 금지. 총 10행.`;
 }
 
 function extractJson(text: string): string {
