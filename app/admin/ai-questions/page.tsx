@@ -863,7 +863,7 @@ export default function AiQuestionsPage() {
                 { key: 'b1', label: '중등',    sub: 'B1', active: 'border-sky-400 bg-sky-50 text-sky-700' },
                 { key: 'b2', label: '고등 중', sub: 'B2', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
                 { key: 'c1', label: '고등 중상', sub: 'C1', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-                { key: 'c2', label: '고등 상', sub: 'C2', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+                { key: 'c2', label: '고등 최상', sub: 'C2', active: 'border-rose-500 bg-rose-50 text-rose-700' },
               ] as const).map(d => (
                 <button key={d.key} onClick={() => setDifficulty(d.key)}
                   className={`flex-1 py-4 rounded-xl font-black text-sm transition-all border-2
@@ -1207,7 +1207,7 @@ export default function AiQuestionsPage() {
                               b1: { label: '중등',    cls: 'bg-sky-50 text-sky-700 border-sky-300' },
                               b2: { label: '고등 중', cls: 'bg-emerald-50 text-emerald-700 border-emerald-300' },
                               c1: { label: '고등 중상', cls: 'bg-orange-50 text-orange-700 border-orange-300' },
-                              c2: { label: '고등 상', cls: 'bg-rose-50 text-rose-700 border-rose-300' },
+                              c2: { label: '고등 최상', cls: 'bg-rose-50 text-rose-700 border-rose-300' },
                             };
                             const d = diffMap[item.difficulty] ?? { label: item.difficulty, cls: 'bg-gray-50 text-gray-600 border-gray-200' };
                             return <span className={`text-xs font-black px-2 py-0.5 rounded-full border ${d.cls}`}>{d.label}</span>;
