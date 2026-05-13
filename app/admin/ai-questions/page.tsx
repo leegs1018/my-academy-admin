@@ -238,16 +238,16 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 
   const buildHtml = (q: ExamQuestion, num: number) => {
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
-    let html = `<div style="font-size:10.5px;font-weight:900;color:#1e293b;margin-bottom:4px;">${num}. <span style="font-size:9px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 5px;border-radius:3px;">${esc(typeLabel)}</span></div>`;
+    let html = `<div style="font-size:9px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:4px;">${esc(typeLabel)}</div>\n`;
 
     if (q.type === 'vocab_paraphrase') {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
       if (q.modified_passage) html += passageBox(escGrammar(q.modified_passage, q.choices, true));
     } else if (q.type === 'summary') {
       const pts = q.question_text.split('\n\n');
       const instr = pts[0]?.trim() || '';
       const sumText = pts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
-      html += instrP(esc(instr));
+      html += instrP(`${num}. ${esc(instr)}`);
       if (originalPassage) html += passageBox(escP(originalPassage));
       if (sumText) {
         html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:10px;">`;
@@ -255,22 +255,22 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
         html += `<div style="font-size:12px;line-height:1.8;color:#334155;">${escP(sumText)}</div></div>`;
       }
     } else if (q.type === 'topic_title' && originalPassage) {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escP(originalPassage));
     } else if (q.modified_passage && q.type === 'grammar') {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escGrammar(q.modified_passage.replace(/\[([^\]]+)\]/g, '$1'), q.choices));
     } else if (q.modified_passage && q.type === 'flow') {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escFlow(q.modified_passage));
     } else if (q.modified_passage && q.type === 'phrase_meaning') {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escWithUnderline(q.modified_passage));
     } else if (q.modified_passage) {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escP(q.modified_passage));
     } else {
-      html += instrP(esc(q.question_text));
+      html += instrP(`${num}. ${esc(q.question_text)}`);
     }
 
     if (q.type !== 'flow' && q.type !== 'grammar') {

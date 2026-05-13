@@ -47,7 +47,7 @@ function buildPrompt(text: string, difficulty: string): string {
     'c2': '고등 최상 수준. 수능 상위권, 원어민 수준 어휘 사용.',
   };
 
-  const tfLengthRule = `각 statement는 반드시 영문 기준 200자(character) 이상 & 단어(word) 20개 이상이어야 한다. 절대로 짧은 단문 금지. 종속절(although, while, whereas, even though 등), 분사구문, 관계절, 삽입구 등을 적극 활용하여 문장을 충분히 길고 복잡하게 만들 것. 예시 수준: "Although it is commonly assumed that creating a convincing sense of depth in artwork requires a wide range of colors and complex techniques, skilled artists have demonstrated that, by carefully applying gradations of a single hue alongside controlled use of black, one can effectively convey three-dimensional space on a two-dimensional surface." 이 예시처럼 긴 문장을 작성할 것. 어휘는 지문 난이도에 맞게 선택.`;
+  const tfLengthRule = `각 statement는 반드시 영문 기준 150자(character) 이상이어야 한다. 150자 미만 절대 금지. 종속절(although, while, whereas, even though 등), 분사구문, 관계절, 삽입구 등을 반드시 포함하여 문장을 충분히 길고 복잡하게 만들 것. 예시 수준: "Although scientists have long debated the mechanisms by which certain organisms adapt to extreme environmental conditions, recent research suggests that epigenetic modifications, rather than permanent genetic mutations, play a more significant role in enabling rapid physiological responses." 이 예시처럼 150자 이상의 복문을 작성할 것. 어휘는 지문 난이도에 맞게 선택.`;
 
   return `당신은 한국 영어학원의 전문 영어 교사 AI입니다.
 아래 영어 지문을 분석하여 6가지 교육 자료를 생성해주세요.

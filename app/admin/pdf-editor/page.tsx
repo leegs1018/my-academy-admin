@@ -757,7 +757,6 @@ export default function PdfEditorPage() {
                     <span className="text-white/70 font-black text-2xl leading-none">00</span>
                     <div>
                       <h2 className="text-white font-black text-lg leading-tight">원문 지문</h2>
-                      <p className="text-white/80 font-bold text-sm mt-0.5">Original Passage</p>
                     </div>
                   </div>
                   <div className="p-4">
@@ -766,7 +765,7 @@ export default function PdfEditorPage() {
                 </div>
 
                 {/* 01 변형 지문 */}
-                <SectionCard number="01" title="변형 지문" subtitle="다른 어휘로 만든 같은 내용 다른 표현"
+                <SectionCard number="01" title="변형 지문"
                   color="bg-teal-600"
                   onCopy={() => copy(d.paraphrased_passage ?? '', 'paraphrase')}
                   copied={copiedSection === 'paraphrase'}>
@@ -782,7 +781,7 @@ export default function PdfEditorPage() {
                 </SectionCard>
 
                 {/* 02 한글 요약 */}
-                <SectionCard number="02" title="한글 요약" subtitle="지문 유형별 구조 · 고등 시험 대비용"
+                <SectionCard number="02" title="한글 요약"
                   color="bg-indigo-500"
                   onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
                   copied={copiedSection === 'korean'}>
@@ -819,7 +818,7 @@ export default function PdfEditorPage() {
                 </SectionCard>
 
                 {/* 03 영어 제목 */}
-                <SectionCard number="03" title="영어 제목 3가지" subtitle="한글 번역 포함 · 시험 대비용"
+                <SectionCard number="03" title="영어 제목 3가지"
                   color="bg-amber-500"
                   onCopy={() => copy(d.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')}
                   copied={copiedSection === 'titles'}>
@@ -858,7 +857,7 @@ export default function PdfEditorPage() {
               <div id="pdf-page-2" className="space-y-3">
 
                 {/* 04 1문장 영어 요약 */}
-                <SectionCard number="04" title="1문장 영어 요약 3가지" subtitle="본문에 없는 단어 사용 · 핵심 어휘 볼드체"
+                <SectionCard number="04" title="1문장 영어 요약 3가지"
                   color="bg-rose-500" onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                   <div className="space-y-2">
                     {d.one_sentence_summaries.map((s, i) => (
@@ -903,7 +902,7 @@ export default function PdfEditorPage() {
                 </SectionCard>
 
                 {/* 05 T/F 문제 */}
-                <SectionCard number="05" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T F 문제"
+                <SectionCard number="05" title="T/F 문제 10개"
                   color="bg-violet-500" onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
                   <div className="space-y-1 mb-2">
                     {d.tf_questions.map((q) => (
@@ -963,7 +962,7 @@ export default function PdfEditorPage() {
                 </SectionCard>
 
                 {/* 06 관련 어휘 */}
-                <SectionCard number="06" title="관련 어휘 10개" subtitle="지문 내 어휘 추출 · 동의어 3개 · 반의어 1개 · 한글 뜻 포함 (총 40개)"
+                <SectionCard number="06" title="관련 어휘 10개"
                   color="bg-slate-700" onCopy={() => copy(d.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
                   <div>
                     <table id="vocab-table" className="w-full text-base border-collapse table-fixed">
