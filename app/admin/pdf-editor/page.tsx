@@ -1257,7 +1257,7 @@ export default function PdfEditorPage() {
 }
 
 function SectionCard({ number, title, subtitle, color, onCopy, copied, children }: {
-  number: string; title: string; subtitle: string; color: string;
+  number: string; title: string; subtitle?: string; color: string;
   onCopy: () => void; copied: boolean; children: React.ReactNode;
 }) {
   return (
@@ -1267,7 +1267,7 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children 
           <span className="text-white/70 font-black text-2xl leading-none">{number}</span>
           <div>
             <h2 className="text-white font-black text-lg leading-tight">{title}</h2>
-            <p className="text-white/80 font-bold text-sm mt-0.5">{subtitle}</p>
+            {subtitle && <p className="text-white/80 font-bold text-sm mt-0.5">{subtitle}</p>}
           </div>
         </div>
         <button onClick={onCopy}
