@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import ConInsufficientModal from '@/components/ConInsufficientModal';
 
 // SMS: 한글 기준 80자 이하, 초과 시 LMS
 const SMS_LIMIT = 80;
@@ -41,6 +42,10 @@ export default function SMSPage() {
   const [sendResult, setSendResult] = useState<{ total: number; success: number; fail: number } | null>(null);
   const [showResultToast, setShowResultToast] = useState(false);
 
+  // CON 관련
+  const [smsPricePerUnit, setSmsPricePerUnit] = useState<number | null>(null);
+  const [conModal, setConModal] = useState<{ required: number; balance: number } | null>(null);
+
   // 탭
   const [activeTab, setActiveTab] = useState<'send' | 'logs'>('send');
 
@@ -49,6 +54,17 @@ export default function SMSPage() {
   const [selectedLog, setSelectedLog] = useState<any>(null);
   const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
   const [isDeletingLogs, setIsDeletingLogs] = useState(false);
+
+  // SMS 단가 로드
+  useEffect(() => {
+    fetch('/api/credits/pricing')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const sms = data?.pricing?.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'sms');
+        if (sms) setSmsPricePerUnit(sms.cost_per_use);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── 초기 데이터 로드 ────────────────────────────
   useEffect(() => {
@@ -181,6 +197,12 @@ export default function SMSPage() {
         body: JSON.stringify({ message, recipients, academy_id: userId }),
       });
       const result = await res.json();
+
+      if (result.error === 'INSUFFICIENT_CON') {
+        setConModal({ required: result.required, balance: result.balance });
+        setIsSending(false);
+        return;
+      }
 
       // 발송 이력 저장
       const { data: logData } = await supabase.from('sms_logs').insert([{
@@ -700,6 +722,17 @@ export default function SMSPage() {
                 </div>
               </div>
 
+              {/* CON 차감 안내 */}
+              {smsPricePerUnit !== null && smsPricePerUnit > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
+                  <p className="text-xs font-black text-yellow-700 mb-1">⭐ CON 차감 안내</p>
+                  <p className="text-sm font-black text-yellow-800">
+                    {smsPricePerUnit} C × {validRecipients.length}명 ={' '}
+                    <span className="text-base">{(smsPricePerUnit * validRecipients.length).toLocaleString()} CON</span> 차감 예정
+                  </p>
+                </div>
+              )}
+
               {/* 번호 없는 학생 경고 */}
               {noPhoneStudents.length > 0 && (
                 <div className="bg-red-50 rounded-2xl p-4">
@@ -791,6 +824,14 @@ export default function SMSPage() {
           </div>
         </div>
       )}
+
+      {/* CON 부족 모달 */}
+      <ConInsufficientModal
+        isOpen={!!conModal}
+        onClose={() => setConModal(null)}
+        required={conModal?.required ?? 0}
+        balance={conModal?.balance ?? 0}
+      />
     </div>
   );
 }

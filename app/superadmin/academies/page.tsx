@@ -14,12 +14,23 @@ interface Academy {
   created_at: string;
   student_count: number;
   sms_count: number;
+  role: 'ai_only' | 'admin';
+}
+
+interface ChargeModal {
+  academy: Academy;
+  amount: string;
+  description: string;
+  loading: boolean;
+  result: string;
 }
 
 export default function AcademiesPage() {
   const [academies, setAcademies] = useState<Academy[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [chargeModal, setChargeModal] = useState<ChargeModal | null>(null);
+  const [roleLoading, setRoleLoading] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/superadmin/academies')
@@ -36,6 +47,70 @@ export default function AcademiesPage() {
     ),
     [academies, search]
   );
+
+  const handleRoleChange = async (academy: Academy, newRole: 'ai_only' | 'admin') => {
+    if (roleLoading) return;
+    setRoleLoading(academy.user_id);
+    try {
+      const res = await fetch('/api/superadmin/users/role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: academy.user_id, role: newRole }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string };
+      if (data.success) {
+        setAcademies(prev => prev.map(a =>
+          a.user_id === academy.user_id ? { ...a, role: newRole } : a
+        ));
+      } else {
+        alert(data.error || '역할 변경 실패');
+      }
+    } catch {
+      alert('서버 오류가 발생했습니다.');
+    } finally {
+      setRoleLoading(null);
+    }
+  };
+
+  const openChargeModal = (academy: Academy) => {
+    setChargeModal({ academy, amount: '', description: '', loading: false, result: '' });
+  };
+
+  const handleCharge = async () => {
+    if (!chargeModal || !chargeModal.amount) return;
+    const amount = parseInt(chargeModal.amount, 10);
+    if (isNaN(amount) || amount <= 0) return;
+
+    setChargeModal(prev => prev ? { ...prev, loading: true, result: '' } : null);
+
+    try {
+      const res = await fetch('/api/superadmin/credits/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          academy_id: chargeModal.academy.user_id,
+          amount,
+          description: chargeModal.description || `슈퍼어드민 충전 (${amount} CON)`,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setAcademies(prev =>
+          prev.map(a =>
+            a.user_id === chargeModal.academy.user_id
+              ? { ...a, points: data.new_balance }
+              : a
+          )
+        );
+        setChargeModal(prev => prev ? { ...prev, loading: false, result: `충전 완료! 새 잔액: ${data.new_balance.toLocaleString()} CON` } : null);
+      } else {
+        setChargeModal(prev => prev ? { ...prev, loading: false, result: `오류: ${data.error}` } : null);
+      }
+    } catch {
+      setChargeModal(prev => prev ? { ...prev, loading: false, result: '서버 오류가 발생했습니다.' } : null);
+    }
+  };
 
   if (loading) {
     return (
@@ -80,7 +155,9 @@ export default function AcademiesPage() {
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">잔여 콘</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">학생수</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">역할</th>
                 <th className="py-3 px-4 text-right text-xs font-black text-slate-500">가입일</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">CON</th>
               </tr>
             </thead>
             <tbody>
@@ -105,17 +182,109 @@ export default function AcademiesPage() {
                     </td>
                     <td className="py-3 px-4 text-center font-black text-emerald-400">{a.student_count}</td>
                     <td className="py-3 px-4 text-center font-black text-indigo-400">{a.sms_count}</td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex flex-col items-center gap-1.5">
+                        {/* 현재 역할 뱃지 */}
+                        <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${
+                          a.role === 'admin'
+                            ? 'bg-indigo-900/60 text-indigo-300'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {a.role === 'admin' ? '전체기능' : 'AI전용'}
+                        </span>
+                        {/* 변경 버튼 */}
+                        <button
+                          onClick={() => handleRoleChange(a, a.role === 'admin' ? 'ai_only' : 'admin')}
+                          disabled={roleLoading === a.user_id}
+                          className={`px-2 py-0.5 text-[9px] font-black rounded-md transition-all disabled:opacity-50 ${
+                            a.role === 'admin'
+                              ? 'bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white'
+                              : 'bg-indigo-700 hover:bg-indigo-600 text-indigo-200'
+                          }`}
+                        >
+                          {roleLoading === a.user_id ? '변경 중...' : a.role === 'admin' ? '→ AI전용' : '→ 전체기능'}
+                        </button>
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-right text-xs font-bold text-slate-500">{dateStr}</td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => openChargeModal(a)}
+                        className="px-3 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all"
+                      >
+                        충전
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={10} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* CON 충전 모달 */}
+      {chargeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !chargeModal.loading && setChargeModal(null)} />
+          <div className="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-800">
+              <h3 className="text-base font-black text-white">⭐ CON 충전</h3>
+              <p className="text-xs text-slate-400 mt-1 font-bold">{chargeModal.academy.academy_name || chargeModal.academy.email}</p>
+              <p className="text-xs text-slate-500 mt-0.5">현재 잔액: <span className="text-yellow-400 font-black">{(chargeModal.academy.points || 0).toLocaleString()} C</span></p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-400 mb-2">충전량 (CON)</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="예: 1000"
+                  value={chargeModal.amount}
+                  onChange={e => setChargeModal(prev => prev ? { ...prev, amount: e.target.value } : null)}
+                  className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-black focus:border-yellow-500 focus:outline-none text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-1.5 font-bold">100 CON = 10,000원</p>
+              </div>
+              <div>
+                <label className="block text-xs font-black text-slate-400 mb-2">메모 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="예: 1만원 결제 충전"
+                  value={chargeModal.description}
+                  onChange={e => setChargeModal(prev => prev ? { ...prev, description: e.target.value } : null)}
+                  className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-bold focus:border-yellow-500 focus:outline-none text-sm placeholder:text-slate-600"
+                />
+              </div>
+
+              {chargeModal.result && (
+                <div className={`rounded-xl px-4 py-3 text-sm font-bold ${chargeModal.result.startsWith('오류') || chargeModal.result.startsWith('서버') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
+                  {chargeModal.result}
+                </div>
+              )}
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setChargeModal(null)}
+                disabled={chargeModal.loading}
+                className="flex-1 py-3 text-sm font-black text-slate-400 bg-slate-800 rounded-xl hover:bg-slate-700 transition-all disabled:opacity-50"
+              >
+                닫기
+              </button>
+              <button
+                onClick={handleCharge}
+                disabled={chargeModal.loading || !chargeModal.amount}
+                className="flex-1 py-3 text-sm font-black text-slate-900 bg-yellow-500 hover:bg-yellow-400 rounded-xl transition-all disabled:opacity-50"
+              >
+                {chargeModal.loading ? '처리 중...' : '충전하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

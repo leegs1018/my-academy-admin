@@ -30,6 +30,7 @@ interface KoreanSummary {
 }
 
 interface GeneratedMaterials {
+  paraphrased_passage: string;
   tf_questions: TFQuestion[];
   answer_key: string;
   korean_summary: KoreanSummary;
@@ -40,15 +41,18 @@ interface GeneratedMaterials {
 
 function buildPrompt(text: string, difficulty: string): string {
   const difficultyGuide: Record<string, string> = {
-    '상': '수능/내신 상위권 수준. 고급 어휘와 복잡한 구문 사용.',
-    '중': '일반 고등학교 내신 수준. 중간 난이도 어휘 사용.',
-    '하': '중학교~고등학교 초급 수준. 기본 어휘 위주로 사용.',
+    'b1': '중등~고등 하 수준. 기본 어휘 위주로 사용.',
+    'b2': '고등 중 수준. 중간 난이도 어휘 사용.',
+    'c1': '고등 상 수준. 고급 어휘와 복잡한 구문 사용.',
+    'c2': '고등 최상 수준. 수능 상위권, 원어민 수준 어휘 사용.',
   };
 
-  return `당신은 한국 영어학원의 전문 영어 교사 AI입니다.
-아래 영어 지문을 분석하여 5가지 교육 자료를 생성해주세요.
+  const tfLengthRule = `각 statement는 반드시 영문 기준 200자(character) 이상 & 단어(word) 20개 이상이어야 한다. 절대로 짧은 단문 금지. 종속절(although, while, whereas, even though 등), 분사구문, 관계절, 삽입구 등을 적극 활용하여 문장을 충분히 길고 복잡하게 만들 것. 예시 수준: "Although it is commonly assumed that creating a convincing sense of depth in artwork requires a wide range of colors and complex techniques, skilled artists have demonstrated that, by carefully applying gradations of a single hue alongside controlled use of black, one can effectively convey three-dimensional space on a two-dimensional surface." 이 예시처럼 긴 문장을 작성할 것. 어휘는 지문 난이도에 맞게 선택.`;
 
-난이도: ${difficulty} (${difficultyGuide[difficulty] || difficultyGuide['중']})
+  return `당신은 한국 영어학원의 전문 영어 교사 AI입니다.
+아래 영어 지문을 분석하여 6가지 교육 자료를 생성해주세요.
+
+난이도: ${difficulty} (${difficultyGuide[difficulty] || difficultyGuide['b2']})
 
 === 영어 지문 ===
 ${text}
@@ -57,6 +61,7 @@ ${text}
 반드시 아래 JSON 형식으로만 반환하세요. 마크다운 코드블록 없이 순수 JSON만 출력하세요.
 
 {
+  "paraphrased_passage": "C1 레벨 어휘로 paraphrase한 변형 지문",
   "korean_summary": {
     "type": "일반",
     "rows": [
@@ -94,6 +99,7 @@ ${text}
 }
 
 생성 규칙:
+0. paraphrased_passage: 원문 지문을 C1 레벨 어휘(elicit, perpetuate, cognitive, nuanced, alleviate, paradigm, scrutinize, facilitate, inherent, albeit, trajectory, discern 등)로 paraphrase. 같은 내용을 다른 어휘와 구문으로 새롭게 표현. 문장 수와 전체 길이는 원문과 비슷하게 유지. 원문 어휘 그대로 복사 금지. 의역 허용.
 1. korean_summary: 고등 시험대비용. 지문 종류를 먼저 파악한 후 아래 구조로 작성.
    - type 값: "일반" | "논쟁" | "문제" 중 하나를 반드시 설정.
    - rows 배열: 각 행은 label(항목명)과 content(한글 1~2문장)로 구성.
@@ -101,10 +107,10 @@ ${text}
      - 논쟁 지문 → rows 3개: label = "주장", "근거", "결론"
      - 문제 지문 → rows 3개: label = "현상", "문제", "해결"
    - content는 각 행당 한글 1~2문장으로 명확하게 작성. 원문 직역 금지.
-2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자. 각 문장은 반드시 100자 이상의 충분한 길이로 작성할 것 (짧은 문장 금지). explanation은 해당 문장이 왜 T 또는 F인지 한글 1~2문장으로 설명. 지문의 어느 내용을 근거로 판단했는지 포함.
+2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자. ${tfLengthRule} explanation은 해당 문장이 왜 T 또는 F인지 한글 1~2문장으로 설명. 지문의 어느 내용을 근거로 판단했는지 포함.
 3. answer_key: "1. T  2. F ..." 형식. 괄호 없음. 번호 복사가 깔끔하게.
 4. english_titles: 지문 내용에 알맞은 영어 제목 3가지. 조금 길게 (시험 문제 대비용). 괄호 안에 한글 번역 포함. 총 3개.
-5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역도 괄호 안에 포함. 요약문에서 중요 어휘는 **볼드** 처리. 총 3개.
+5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역은 괄호(( ))나 이중 괄호 없이 순수 한글 텍스트로만 작성. 요약문에서 중요 어휘는 **볼드** 처리. 한글 번역에서 중요 어휘는 *이탤릭* 처리 (별표 1개). 총 3개.
 6. vocabulary_table: 지문 내에서 주제와 관련된 어휘를 10개 추출 (지문에 쓰인 어휘 그대로, 소문자 변환). 각 어휘마다 동의어 3개, 반의어 1개 생성. 모두 소문자.
    필드별 언어 규칙 (반드시 준수):
    - word: 반드시 영어 단어 (English only)

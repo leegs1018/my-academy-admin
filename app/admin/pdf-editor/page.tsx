@@ -25,6 +25,7 @@ interface KoreanSummary {
 }
 
 interface GeneratedMaterials {
+  paraphrased_passage?: string;
   tf_questions: TFQuestion[];
   answer_key: string;
   korean_summary: KoreanSummary;
@@ -141,15 +142,37 @@ function renderBold(text: string) {
   );
 }
 
+function cleanKorean(s: string) {
+  return s.replace(/^\(\(|\)\)$/g, '').replace(/\*\*/g, '*').trim();
+}
+
+function parseTitleKorean(title: string): { english: string; korean: string } {
+  const match = title.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (match) return { english: match[1].trim(), korean: match[2].trim() };
+  return { english: title, korean: '' };
+}
+
+function renderSingleBold(text: string) {
+  return text.split(/(\*[^*]+\*)/g).map((part, i) =>
+    part.startsWith('*') && part.endsWith('*') && part.length > 2
+      ? <em key={i} className="not-italic font-black text-rose-600">{part.slice(1, -1)}</em>
+      : <span key={i}>{part}</span>
+  );
+}
+
 const TYPE_COLORS: Record<string, string> = {
   '일반': 'bg-indigo-100 text-indigo-700',
   '논쟁': 'bg-amber-100 text-amber-700',
   '문제': 'bg-rose-100 text-rose-700',
 };
 const DIFF_COLORS: Record<string, string> = {
-  '상': 'bg-red-100 text-red-700',
-  '중': 'bg-yellow-100 text-yellow-700',
+  'b1': 'bg-sky-100 text-sky-700',
+  'b2': 'bg-emerald-100 text-emerald-700',
+  'c1': 'bg-orange-100 text-orange-700',
+  'c2': 'bg-rose-100 text-rose-700',
   '하': 'bg-green-100 text-green-700',
+  '중': 'bg-yellow-100 text-yellow-700',
+  '상': 'bg-red-100 text-red-700',
 };
 
 export default function PdfEditorPage() {
@@ -165,7 +188,7 @@ export default function PdfEditorPage() {
   const [ocrDone, setOcrDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  const [difficulty, setDifficulty] = useState<'상' | '중' | '하'>('중');
+  const [difficulty, setDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [result, setResult] = useState<GeneratedMaterials | null>(null);
@@ -179,13 +202,16 @@ export default function PdfEditorPage() {
   const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [editMode, setEditMode] = useState(false);
+  const [editedResult, setEditedResult] = useState<GeneratedMaterials | null>(null);
+  const [editSaveStatus, setEditSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
 
   const [historyList, setHistoryList] = useState<PdfHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
@@ -219,7 +245,7 @@ export default function PdfEditorPage() {
   }, []);
 
   // ── 이력 조회 ──
-  const fetchHistory = useCallback(async (query = searchQuery, type = searchType, date = searchDate) => {
+  const fetchHistory = useCallback(async (query = searchQuery, date = searchDate) => {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
@@ -232,7 +258,6 @@ export default function PdfEditorPage() {
         .eq('academy_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (type) q = q.eq('passage_type', type);
       if (date) q = q.gte('created_at', date).lte('created_at', date + 'T23:59:59');
       if (query) q = q.ilike('passage_full', `%${query}%`);
 
@@ -244,7 +269,7 @@ export default function PdfEditorPage() {
     } finally {
       setHistoryLoading(false);
     }
-  }, [searchQuery, searchType, searchDate]);
+  }, [searchQuery, searchDate]);
 
   useEffect(() => {
     if (activeTab === 'history') fetchHistory();
@@ -477,13 +502,20 @@ export default function PdfEditorPage() {
   // ── 문제 PDF 다운로드 ──
   const handleDownloadProblemPDF = async () => {
     setPdfLoading('문제');
+    const wasEditing = editMode;
     try {
+      if (wasEditing) {
+        setEditMode(false);
+        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => requestAnimationFrame(r));
+      }
       const blob = await generatePdfBlob(true);
       if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
       triggerDownload(blob, `${baseName}_문제.pdf`);
     } catch (e) {
       alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
     } finally {
+      if (wasEditing) setEditMode(true);
       setPdfLoading(false);
     }
   };
@@ -499,6 +531,52 @@ export default function PdfEditorPage() {
       alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
     } finally {
       setPdfLoading(false);
+    }
+  };
+
+  // ── 편집본 PDF 저장 ──
+  const handleEditSave = async () => {
+    if (!editedResult) return;
+    setEditSaveStatus('saving');
+    const wasEditing = editMode;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setEditSaveStatus('error'); return; }
+      if (wasEditing) {
+        setEditMode(false);
+        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => requestAnimationFrame(r));
+      }
+      const [pdfBlob, answerBlob] = await Promise.all([
+        generatePdfBlob(true),
+        buildAnswerPdfBlob(editedResult, pdfTitle.trim()),
+      ]);
+      if (wasEditing) setEditMode(true);
+      if (!pdfBlob) { setEditSaveStatus('error'); return; }
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
+      const res = await fetch('/api/save-pdf-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          pdfBase64, answerPdfBase64,
+          title: (pdfTitle.trim() ? '[편집본] ' + pdfTitle.trim() : '[편집본]'),
+          passageExcerpt: originalPassageText.slice(0, 150),
+          passageFull: originalPassageText,
+          passageType: editedResult.korean_summary.type,
+          difficulty,
+        }),
+      });
+      const json = await res.json() as { success?: boolean };
+      setEditSaveStatus(res.ok && json.success ? 'done' : 'error');
+    } catch {
+      if (wasEditing) setEditMode(true);
+      setEditSaveStatus('error');
     }
   };
 
@@ -519,7 +597,7 @@ export default function PdfEditorPage() {
 
       <div className="no-print mb-6">
         <h1 className="text-4xl font-black text-slate-900 tracking-tighter">📝 지문분석 툴/워크북</h1>
-        <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 5가지 교육 자료를 만들어드려요</p>
+        <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 6가지 교육 자료를 만들어드려요</p>
       </div>
 
       <div className="no-print flex gap-2 mb-6 border-b-2 border-slate-100">
@@ -629,18 +707,24 @@ export default function PdfEditorPage() {
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap items-center gap-4">
-              <span className="font-black text-slate-700 text-lg">난이도 선택:</span>
-              {(['하', '중', '상'] as const).map((d) => (
-                <button key={d} onClick={() => setDifficulty(d)}
-                  className={`px-8 py-3 rounded-2xl font-black text-xl transition-all
-                    ${difficulty === d ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
-                  {d}
-                </button>
-              ))}
-              <span className="text-sm text-slate-400 font-bold">
-                {difficulty === '상' ? '수능/내신 상위권' : difficulty === '중' ? '일반 고등학교 내신' : '중학교~고등 초급'}
-              </span>
+            <div className="mt-6">
+              <span className="font-black text-slate-700 text-lg block mb-3">난이도 선택:</span>
+              <div className="flex gap-2">
+                {([
+                  { key: 'b1', level: 'B1', label: '중등/고등 하', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+                  { key: 'b2', level: 'B2', label: '고등 중',      icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+                  { key: 'c1', level: 'C1', label: '고등 상',      icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                  { key: 'c2', level: 'C2', label: '고등 최상',    icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+                ] as const).map(d => (
+                  <button key={d.key} onClick={() => setDifficulty(d.key)}
+                    className={`flex-1 py-4 rounded-xl font-black transition-all border-2
+                      ${difficulty === d.key ? d.active : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
+                    <div className="text-2xl mb-1">{d.icon}</div>
+                    <div className="text-xs font-bold opacity-70 mb-0.5">{d.level}</div>
+                    <div className="text-sm">{d.label}</div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <button onClick={handleGenerate} disabled={!canGenerate}
@@ -651,12 +735,23 @@ export default function PdfEditorPage() {
 
           {/* ── 결과 영역 ── */}
           {result && (
+            <>
             <div id="print-area" className="space-y-0">
+              {(() => {
+                const d = editedResult ?? result;
+                return (
+                  <>
+              {/* ── 1페이지: pdfTitle + 00 원문 + 01 변형지문 + 02 한글요약 ── */}
+              <div id="pdf-page-1" className="space-y-3 mb-4">
 
-              {/* ── 1페이지: 원문 + 01 + 02 ── */}
-              <div id="pdf-page-1" className="space-y-4 mb-4">
+                {/* 제목 */}
+                {pdfTitle.trim() && (
+                  <div className="mb-3 pb-2 border-b-2 border-slate-200">
+                    <h1 className="text-2xl font-black text-slate-900">{pdfTitle.trim()}</h1>
+                  </div>
+                )}
 
-                {/* 원문 */}
+                {/* 00 원문 */}
                 <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
                   <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
                     <span className="text-white/70 font-black text-2xl leading-none">00</span>
@@ -670,20 +765,52 @@ export default function PdfEditorPage() {
                   </div>
                 </div>
 
-                <SectionCard number="01" title="한글 요약" subtitle="지문 유형별 구조 · 고등 시험 대비용"
+                {/* 01 변형 지문 */}
+                <SectionCard number="01" title="변형 지문" subtitle="다른 어휘로 만든 같은 내용 다른 표현"
+                  color="bg-teal-600"
+                  onCopy={() => copy(d.paraphrased_passage ?? '', 'paraphrase')}
+                  copied={copiedSection === 'paraphrase'}>
+                  {editMode ? (
+                    <textarea
+                      className="w-full p-3 border-2 border-teal-200 rounded-xl font-bold text-slate-700 text-base leading-relaxed resize-y focus:outline-none focus:border-teal-400 min-h-[120px]"
+                      value={editedResult?.paraphrased_passage ?? ''}
+                      onChange={(e) => setEditedResult(prev => prev ? { ...prev, paraphrased_passage: e.target.value } : prev)}
+                    />
+                  ) : (
+                    <p className="text-slate-700 font-bold leading-loose whitespace-pre-wrap text-xl">{d.paraphrased_passage}</p>
+                  )}
+                </SectionCard>
+
+                {/* 02 한글 요약 */}
+                <SectionCard number="02" title="한글 요약" subtitle="지문 유형별 구조 · 고등 시험 대비용"
                   color="bg-indigo-500"
-                  onCopy={() => copy(result.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
+                  onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
                   copied={copiedSection === 'korean'}>
                   <div>
-                    <span className="inline-block mb-4 bg-indigo-100 text-indigo-700 text-base font-black px-3 py-1 rounded-full">
-                      {result.korean_summary.type === '일반' ? '일반 지문' : result.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
+                    <span className="inline-block mb-3 bg-indigo-100 text-indigo-700 text-base font-black px-3 py-1 rounded-full">
+                      {d.korean_summary.type === '일반' ? '일반 지문' : d.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
                     </span>
                     <table className="w-full border-collapse">
                       <tbody>
-                        {result.korean_summary.rows.map((row, i) => (
+                        {d.korean_summary.rows.map((row, i) => (
                           <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
-                            <td className="w-28 p-2 font-black text-indigo-700 text-base border border-indigo-100 whitespace-nowrap align-top">{row.label}</td>
-                            <td className="p-2 text-slate-700 font-bold text-xl leading-loose border border-indigo-100">{row.content}</td>
+                            <td className="w-28 p-2.5 font-black text-indigo-700 text-base border border-indigo-100 whitespace-nowrap align-top">{row.label}</td>
+                            <td className="p-2.5 border border-indigo-100">
+                              {editMode ? (
+                                <textarea
+                                  className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
+                                  value={row.content}
+                                  onChange={(e) => setEditedResult(prev => {
+                                    if (!prev) return prev;
+                                    const rows = [...prev.korean_summary.rows];
+                                    rows[i] = { ...rows[i], content: e.target.value };
+                                    return { ...prev, korean_summary: { ...prev.korean_summary, rows } };
+                                  })}
+                                />
+                              ) : (
+                                <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -691,39 +818,137 @@ export default function PdfEditorPage() {
                   </div>
                 </SectionCard>
 
-                <SectionCard number="02" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T F 문제"
-                  color="bg-violet-500" onCopy={() => copy(buildTFText(), 'tf')} copied={copiedSection === 'tf'}>
-                  <div className="space-y-1.5 mb-3">
-                    {result.tf_questions.map((q) => (
-                      <div key={q.number} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-violet-50 transition-colors">
-                        <span className="font-black text-violet-600 w-8 shrink-0 text-xl">{q.number}.</span>
-                        <p className="text-slate-700 font-bold leading-relaxed flex-1 text-xl">{q.statement}</p>
+                {/* 03 영어 제목 */}
+                <SectionCard number="03" title="영어 제목 3가지" subtitle="한글 번역 포함 · 시험 대비용"
+                  color="bg-amber-500"
+                  onCopy={() => copy(d.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')}
+                  copied={copiedSection === 'titles'}>
+                  <div className="space-y-2">
+                    {d.english_titles.map((title, i) => (
+                      <div key={i} className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 rounded-xl border border-amber-100">
+                        <span className="font-black text-amber-600 w-8 shrink-0 text-lg">{i + 1}.</span>
+                        {editMode ? (
+                          <input
+                            className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
+                            value={title}
+                            onChange={(e) => setEditedResult(prev => {
+                              if (!prev) return prev;
+                              const titles = [...prev.english_titles];
+                              titles[i] = e.target.value;
+                              return { ...prev, english_titles: titles };
+                            })}
+                          />
+                        ) : (() => {
+                          const { english, korean } = parseTitleKorean(title);
+                          return (
+                            <div className="flex-1">
+                              <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
+                              {korean && <p className="text-slate-500 font-bold text-base mt-1">{korean}</p>}
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
-                  <div className="pdf-answer-area border-t border-violet-100 pt-4">
+                </SectionCard>
+
+              </div>
+
+              {/* ── 2페이지: 04 1문장요약 + 05 T/F + 06 관련어휘 + 로고 ── */}
+              <div id="pdf-page-2" className="space-y-3">
+
+                {/* 04 1문장 영어 요약 */}
+                <SectionCard number="04" title="1문장 영어 요약 3가지" subtitle="본문에 없는 단어 사용 · 핵심 어휘 볼드체"
+                  color="bg-rose-500" onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
+                  <div className="space-y-2">
+                    {d.one_sentence_summaries.map((s, i) => (
+                      <div key={i} className="px-3 py-2.5 bg-rose-50 rounded-xl border border-rose-100">
+                        <div className="flex items-start gap-2">
+                          <span className="font-black text-rose-600 w-8 shrink-0 text-lg">{i + 1}.</span>
+                          <div className="flex-1">
+                            {editMode ? (
+                              <>
+                                <input
+                                  className="w-full border border-rose-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-rose-400 mb-1"
+                                  value={s.english}
+                                  onChange={(e) => setEditedResult(prev => {
+                                    if (!prev) return prev;
+                                    const sums = [...prev.one_sentence_summaries];
+                                    sums[i] = { ...sums[i], english: e.target.value };
+                                    return { ...prev, one_sentence_summaries: sums };
+                                  })}
+                                />
+                                <input
+                                  className="w-full border border-rose-200 rounded p-1 font-bold text-slate-500 text-sm focus:outline-none focus:border-rose-400"
+                                  value={s.korean}
+                                  onChange={(e) => setEditedResult(prev => {
+                                    if (!prev) return prev;
+                                    const sums = [...prev.one_sentence_summaries];
+                                    sums[i] = { ...sums[i], korean: e.target.value };
+                                    return { ...prev, one_sentence_summaries: sums };
+                                  })}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
+                                <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SectionCard>
+
+                {/* 05 T/F 문제 */}
+                <SectionCard number="05" title="T/F 문제 10개" subtitle="본문에 사용되지 않은 어휘 · T F 문제"
+                  color="bg-violet-500" onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
+                  <div className="space-y-1 mb-2">
+                    {d.tf_questions.map((q) => (
+                      <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-violet-50 transition-colors">
+                        <span className="font-black text-violet-600 w-7 shrink-0 text-base">{q.number}.</span>
+                        {editMode ? (
+                          <textarea
+                            className="flex-1 border border-violet-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-violet-400 min-h-[36px]"
+                            value={q.statement}
+                            onChange={(e) => setEditedResult(prev => {
+                              if (!prev) return prev;
+                              const tf = [...prev.tf_questions];
+                              tf[q.number - 1] = { ...tf[q.number - 1], statement: e.target.value };
+                              return { ...prev, tf_questions: tf };
+                            })}
+                          />
+                        ) : (
+                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-base">{q.statement}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pdf-answer-area border-t border-violet-100 pt-3">
                     <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                      className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors">
+                      className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors text-sm">
                       <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
                       해설지 {showAnswerKey ? '닫기' : '보기'}
                     </button>
                     {showAnswerKey && (
                       <div className="mt-3 space-y-3">
-                        <div className="p-4 bg-violet-50 rounded-2xl border border-violet-100">
+                        <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
                           <div className="flex justify-between mb-2">
-                            <span className="font-black text-violet-700">정답</span>
-                            <button onClick={() => copy(result.answer_key, 'answer_key')}
+                            <span className="font-black text-violet-700 text-sm">정답</span>
+                            <button onClick={() => copy(d.answer_key, 'answer_key')}
                               className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
                               {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
                             </button>
                           </div>
-                          <p className="font-black text-slate-700 tracking-wide">{result.answer_key}</p>
+                          <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
                         </div>
-                        {result.tf_questions.some(q => q.explanation) && (
-                          <div className="p-4 bg-violet-50 rounded-2xl border border-violet-100">
-                            <span className="font-black text-violet-700 block mb-3">해설</span>
+                        {d.tf_questions.some(q => q.explanation) && (
+                          <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
+                            <span className="font-black text-violet-700 block mb-2 text-sm">해설</span>
                             <div className="space-y-2">
-                              {result.tf_questions.map(q => q.explanation && (
+                              {d.tf_questions.map(q => q.explanation && (
                                 <div key={q.number} className="flex gap-2 text-sm">
                                   <span className="font-black text-violet-600 shrink-0 w-12">{q.number}. {q.answer}</span>
                                   <p className="text-slate-600 font-bold leading-relaxed flex-1 min-w-0">{q.explanation}</p>
@@ -736,72 +961,71 @@ export default function PdfEditorPage() {
                     )}
                   </div>
                 </SectionCard>
-              </div>
 
-              {/* ── 2페이지: 03 + 04 + 05 + 로고 ── */}
-              <div id="pdf-page-2" className="space-y-4">
-
-                <SectionCard number="03" title="영어 제목 3가지" subtitle="한글 번역 포함 · 시험 대비용"
-                  color="bg-amber-500"
-                  onCopy={() => copy(result.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')}
-                  copied={copiedSection === 'titles'}>
-                  <div className="space-y-2">
-                    {result.english_titles.map((title, i) => (
-                      <div key={i} className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl border border-amber-100">
-                        <span className="font-black text-amber-600 w-8 shrink-0 text-xl">{i + 1}.</span>
-                        <p className="text-slate-700 font-bold leading-relaxed text-xl">{title}</p>
-                      </div>
-                    ))}
-                  </div>
-                </SectionCard>
-
-                <SectionCard number="04" title="1문장 영어 요약 3가지" subtitle="본문에 없는 단어 사용 · 핵심 어휘 볼드체"
-                  color="bg-rose-500" onCopy={() => copy(buildOneSentenceText(), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
-                  <div className="space-y-2">
-                    {result.one_sentence_summaries.map((s, i) => (
-                      <div key={i} className="px-3 py-2 bg-rose-50 rounded-xl border border-rose-100">
-                        <div className="flex items-start gap-2">
-                          <span className="font-black text-rose-600 w-8 shrink-0 text-xl">{i + 1}.</span>
-                          <div className="flex-1">
-                            <p className="text-slate-700 font-bold leading-relaxed text-xl mb-1">{renderBold(s.english)}</p>
-                            <p className="text-slate-500 font-bold text-lg">({s.korean})</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </SectionCard>
-
-                <SectionCard number="05" title="관련 어휘 10개" subtitle="지문 내 어휘 추출 · 동의어 3개 · 반의어 1개 · 한글 뜻 포함 (총 40개)"
-                  color="bg-slate-700" onCopy={() => copy(buildVocabText(), 'vocab')} copied={copiedSection === 'vocab'}>
-                  <div className="overflow-x-auto">
-                    <table id="vocab-table" className="w-full text-lg border-collapse">
+                {/* 06 관련 어휘 */}
+                <SectionCard number="06" title="관련 어휘 10개" subtitle="지문 내 어휘 추출 · 동의어 3개 · 반의어 1개 · 한글 뜻 포함 (총 40개)"
+                  color="bg-slate-700" onCopy={() => copy(d.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
+                  <div>
+                    <table id="vocab-table" className="w-full text-base border-collapse table-fixed">
+                      <colgroup>
+                        <col style={{width:'22%'}} />
+                        <col style={{width:'19%'}} />
+                        <col style={{width:'19%'}} />
+                        <col style={{width:'19%'}} />
+                        <col style={{width:'21%'}} />
+                      </colgroup>
                       <thead>
                         <tr className="bg-slate-800 text-white">
                           {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                            <th key={i} className={`px-2 py-2 text-left font-black whitespace-nowrap ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
+                            <th key={i} className={`px-2 py-2 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {result.vocabulary_table.map((row, i) => (
+                        {d.vocabulary_table.map((row, i) => {
+                          const updateVocab = (patch: Partial<VocabRow>) => setEditedResult(prev => {
+                            if (!prev) return prev;
+                            const vocab = [...prev.vocabulary_table];
+                            vocab[i] = { ...vocab[i], ...patch };
+                            return { ...prev, vocabulary_table: vocab };
+                          });
+                          return (
                           <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                             <td className="px-2 py-2 border-b border-slate-100">
-                              <span className="font-black text-indigo-700">{row.word}</span>
-                              <span className="text-slate-400 text-sm ml-1">({row.meaning})</span>
+                              {editMode ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
+                                  <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
+                                </div>
+                              ) : (
+                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-400 text-sm ml-1">({row.meaning})</span></>
+                              )}
                             </td>
-                            {[[row.syn1, row.syn1_m], [row.syn2, row.syn2_m], [row.syn3, row.syn3_m]].map(([w, m], j) => (
+                            {([['syn1','syn1_m'], ['syn2','syn2_m'], ['syn3','syn3_m']] as const).map(([wk, mk], j) => (
                               <td key={j} className="px-2 py-2 border-b border-slate-100">
-                                <span className="font-bold text-slate-700">{w}</span>
-                                <span className="text-slate-400 text-base ml-1">({m})</span>
+                                {editMode ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
+                                    <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
+                                  </div>
+                                ) : (
+                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-400 text-sm ml-1">({row[mk]})</span></>
+                                )}
                               </td>
                             ))}
                             <td className="px-2 py-2 border-b border-slate-100">
-                              <span className="font-black text-rose-600">{row.antonym}</span>
-                              <span className="text-slate-400 text-base ml-1">({row.antonym_m})</span>
+                              {editMode ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
+                                  <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
+                                </div>
+                              ) : (
+                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-400 text-sm ml-1">({row.antonym_m})</span></>
+                              )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -815,7 +1039,11 @@ export default function PdfEditorPage() {
                   </div>
                 )}
               </div>
+                  </>
+                );
+              })()}
             </div>
+            </>
           )}
 
           {result && (
@@ -836,7 +1064,33 @@ export default function PdfEditorPage() {
                   ⚠️ 이력 저장 실패: {saveErrorMsg}
                 </div>
               )}
+              {editMode && editSaveStatus !== 'idle' && (
+                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-lg border
+                  ${editSaveStatus === 'saving' ? 'bg-white border-slate-200 text-slate-500' : editSaveStatus === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
+                  {editSaveStatus === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : editSaveStatus === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
+                </div>
+              )}
               <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    if (!editMode) {
+                      if (!editedResult) setEditedResult(JSON.parse(JSON.stringify(result)));
+                      setEditSaveStatus('idle');
+                      setEditMode(true);
+                    } else {
+                      setEditMode(false);
+                    }
+                  }}
+                  className={`px-6 py-4 rounded-2xl font-black text-lg shadow-2xl transition-all active:scale-95
+                    ${editMode ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
+                  {editMode ? '✏️ 편집 종료' : '✏️ 편집'}
+                </button>
+                {editMode && (
+                  <button onClick={handleEditSave} disabled={editSaveStatus === 'saving'}
+                    className="bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50">
+                    {editSaveStatus === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
+                  </button>
+                )}
                 <button onClick={handleDownloadProblemPDF} disabled={pdfLoading !== false}
                   className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
                   {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 PDF'}
@@ -861,16 +1115,6 @@ export default function PdfEditorPage() {
                 <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)}
                   className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-indigo-400 transition-colors" />
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-black text-slate-500">지문 유형</label>
-                <select value={searchType} onChange={(e) => setSearchType(e.target.value)}
-                  className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-indigo-400 transition-colors bg-white">
-                  <option value="">전체</option>
-                  <option value="일반">일반</option>
-                  <option value="논쟁">논쟁</option>
-                  <option value="문제">문제</option>
-                </select>
-              </div>
               <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
                 <label className="text-xs font-black text-slate-500">지문 내 단어 검색</label>
                 <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
@@ -882,8 +1126,8 @@ export default function PdfEditorPage() {
                 className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
                 🔍 검색
               </button>
-              {(searchDate || searchType || searchQuery) && (
-                <button onClick={() => { setSearchDate(''); setSearchType(''); setSearchQuery(''); fetchHistory('', '', ''); }}
+              {(searchDate || searchQuery) && (
+                <button onClick={() => { setSearchDate(''); setSearchQuery(''); fetchHistory('', ''); }}
                   className="px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">
                   초기화
                 </button>
@@ -927,25 +1171,22 @@ export default function PdfEditorPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              <div className="grid grid-cols-[40px_150px_72px_56px_160px_1fr_80px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
+              <div className="grid grid-cols-[40px_150px_56px_220px_1fr_80px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
                 <input type="checkbox" checked={selectedIds.size === historyList.length && historyList.length > 0}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
-                {['날짜', '유형', '난이도', '제목', '지문 요약', 'PDF'].map((h, i) => (
-                  <span key={i} className={`text-xs font-black text-slate-500 ${i === 5 ? 'text-center' : ''}`}>{h}</span>
+                {['날짜', '난이도', '제목', '지문 요약', 'PDF'].map((h, i) => (
+                  <span key={i} className={`text-xs font-black text-slate-500 ${i === 4 ? 'text-center' : ''}`}>{h}</span>
                 ))}
               </div>
               {historyList.map((item, i) => (
                 <div key={item.id}
-                  className={`grid grid-cols-[40px_150px_72px_56px_160px_1fr_80px] gap-3 px-5 py-4 items-center
+                  className={`grid grid-cols-[40px_150px_56px_220px_1fr_80px] gap-3 px-5 py-4 items-center
                     ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
                     border-b border-slate-100 last:border-0 hover:bg-indigo-50/60 transition-colors`}>
                   <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)}
                     className="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
                   <span className="text-sm font-bold text-slate-600 whitespace-nowrap">
                     {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <span className={`text-xs font-black px-2 py-1 rounded-full w-fit ${TYPE_COLORS[item.passage_type] ?? 'bg-slate-100 text-slate-600'}`}>
-                    {item.passage_type || '-'}
                   </span>
                   <span className={`text-xs font-black px-2 py-1 rounded-full w-fit ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
                     {item.difficulty || '-'}
@@ -987,7 +1228,10 @@ export default function PdfEditorPage() {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {passageModal.title && (
+                  <span className="font-black text-slate-800 text-sm mr-1">{passageModal.title}</span>
+                )}
                 <span className={`text-xs font-black px-2 py-1 rounded-full ${TYPE_COLORS[passageModal.passage_type] ?? 'bg-slate-100 text-slate-600'}`}>
                   {passageModal.passage_type || '-'}
                 </span>

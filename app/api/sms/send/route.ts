@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
 import { createClient } from '@supabase/supabase-js';
+import { getFeaturePrice, getConBalance } from '@/lib/credits';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 interface Recipient {
   student_id: string;
@@ -17,6 +19,45 @@ export async function POST(req: Request) {
 
   if (!message || !recipients || recipients.length === 0) {
     return NextResponse.json({ error: '메시지와 수신자를 입력해주세요.' }, { status: 400 });
+  }
+
+  // CON 잔액 확인 및 차감
+  if (academy_id) {
+    const pricePerSms = await getFeaturePrice('sms');
+    const totalCost = pricePerSms * recipients.length;
+
+    if (totalCost > 0) {
+      const balance = await getConBalance(academy_id);
+      if (balance < totalCost) {
+        return NextResponse.json({
+          error: 'INSUFFICIENT_CON',
+          required: totalCost,
+          balance,
+          price_per_sms: pricePerSms,
+        }, { status: 402 });
+      }
+
+      // 원자적 차감 (RPC)
+      const supabaseAdmin = createAdminClient();
+      const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
+        p_academy_id: academy_id,
+        p_amount: totalCost,
+        p_feature_key: 'sms',
+        p_description: `SMS 발송 ${recipients.length}건`,
+      });
+
+      if (deductError) {
+        if (deductError.message?.includes('INSUFFICIENT_CON')) {
+          return NextResponse.json({
+            error: 'INSUFFICIENT_CON',
+            required: totalCost,
+            balance,
+            price_per_sms: pricePerSms,
+          }, { status: 402 });
+        }
+        return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
+      }
+    }
   }
 
   const apiKey = process.env.SOLAPI_API_KEY;

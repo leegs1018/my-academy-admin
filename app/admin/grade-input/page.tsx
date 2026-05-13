@@ -44,6 +44,8 @@ export default function GradeInputPage() {
   const [sendAvailableCategories, setSendAvailableCategories] = useState<{id: string, name: string}[]>([]);
   const [sendSelectedCategoryIds, setSendSelectedCategoryIds] = useState<Set<string>>(new Set());
   const [sendGradeMap, setSendGradeMap] = useState<Record<string, number>>({});
+  const [sendMaxScoreMap, setSendMaxScoreMap] = useState<Record<string, number>>({});
+  const [sendShowMaxScore, setSendShowMaxScore] = useState(false);
   const [sendMessagePreviews, setSendMessagePreviews] = useState<any[]>([]);
   const [sendRecipientType, setSendRecipientType] = useState<'parent' | 'student' | 'both'>('parent');
   const [sendIsSending, setSendIsSending] = useState(false);
@@ -141,13 +143,18 @@ export default function GradeInputPage() {
   // ── 탭2: selectedSession 변경 시 ─────────────────
   useEffect(() => {
     if (!sendSelectedSession || !sendClassId) return;
-    supabase.from('grades').select('student_id,category_id,score')
+    supabase.from('grades').select('student_id,category_id,score,max_score')
       .eq('class_id', parseInt(sendClassId)).eq('academy_id', userId).eq('test_date', sendSelectedSession)
       .then(({ data }) => {
         if (!data) return;
         const gradeMap: Record<string, number> = {};
-        data.forEach((g: any) => { gradeMap[`${g.student_id}__${g.category_id}`] = g.score; });
+        const maxScoreMap: Record<string, number> = {};
+        data.forEach((g: any) => {
+          gradeMap[`${g.student_id}__${g.category_id}`] = g.score;
+          if (g.max_score != null) maxScoreMap[g.category_id] = g.max_score;
+        });
         setSendGradeMap(gradeMap);
+        setSendMaxScoreMap(maxScoreMap);
 
         const currentClass = classList.find(c => c.id.toString() === sendClassId);
         const classCats = Array.isArray(currentClass?.test_categories) ? currentClass.test_categories : [];
@@ -172,11 +179,15 @@ export default function GradeInputPage() {
         const scoreEntries = selectedCats
           .map(cat => {
             const score = sendGradeMap[`${student.id}__${cat.id}`];
-            return score !== undefined ? { name: cat.name, score } : null;
+            const maxScore = sendMaxScoreMap[cat.id] ?? 100;
+            return score !== undefined ? { name: cat.name, score, maxScore } : null;
           })
-          .filter(Boolean) as { name: string; score: number }[];
+          .filter(Boolean) as { name: string; score: number; maxScore: number }[];
         const message = scoreEntries.length > 0
-          ? `[${academyName || '학원'}]\n${dateLabel} ${student.name}\n${scoreEntries.map((e, i) => i === scoreEntries.length - 1 ? `${e.name}: ${e.score}점 입니다.` : `${e.name}: ${e.score}점`).join('\n')}`
+          ? `[${academyName || '학원'}]\n${dateLabel} ${student.name}\n${scoreEntries.map((e, i) => {
+              const scoreStr = sendShowMaxScore ? `${e.score}/${e.maxScore}점` : `${e.score}점`;
+              return i === scoreEntries.length - 1 ? `${e.name}: ${scoreStr} 입니다.` : `${e.name}: ${scoreStr}`;
+            }).join('\n')}`
           : null;
         return {
           studentId: student.id,
@@ -187,7 +198,7 @@ export default function GradeInputPage() {
         };
       });
     setSendMessagePreviews(previews);
-  }, [sendSelectedStudentIds, sendSelectedCategoryIds, sendGradeMap, sendSelectedSession, academyName, sendStudents, sendAvailableCategories]);
+  }, [sendSelectedStudentIds, sendSelectedCategoryIds, sendGradeMap, sendMaxScoreMap, sendShowMaxScore, sendSelectedSession, academyName, sendStudents, sendAvailableCategories]);
 
   // ── 탭1 함수들 ────────────────────────────────────
   const fetchMaxScore = async (catId: string) => {
@@ -629,6 +640,19 @@ export default function GradeInputPage() {
 
           {/* 오른쪽 (1/3) */}
           <div className="space-y-4">
+
+            {/* 점수 형식 */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-black text-gray-600 mb-3">점수 표시 형식</h3>
+              <label className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${sendShowMaxScore ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                <input type="checkbox" checked={sendShowMaxScore} onChange={e => setSendShowMaxScore(e.target.checked)}
+                  className="w-4 h-4 accent-indigo-600 cursor-pointer" />
+                <div>
+                  <p className="text-sm font-black text-gray-700">점수/만점 형식으로 발송</p>
+                  <p className="text-[10px] text-gray-400">{sendShowMaxScore ? '예) 영어: 80/100점' : '예) 영어: 80점'}</p>
+                </div>
+              </label>
+            </div>
 
             {/* 수신자 유형 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">

@@ -26,7 +26,11 @@ export async function GET(request: NextRequest) {
     : await academiesQuery;
 
   const emailMap: Record<string, string> = {};
-  allUsers.forEach((u: any) => { emailMap[u.id] = u.email || ''; });
+  const roleMap: Record<string, string> = {};
+  allUsers.forEach((u: any) => {
+    emailMap[u.id] = u.email || '';
+    roleMap[u.id] = u.user_metadata?.role ?? 'ai_only';
+  });
 
   const studentCount: Record<string, number> = {};
   (studentsRes.data || []).forEach((r: any) => {
@@ -41,6 +45,7 @@ export async function GET(request: NextRequest) {
   const academies = (academiesRes.data || []).map((a: any) => ({
     ...a,
     email: emailMap[a.user_id] || '',
+    role: roleMap[a.user_id] ?? 'ai_only',
     student_count: studentCount[a.user_id] || 0,
     sms_count: smsCount[a.user_id] || 0,
   }));

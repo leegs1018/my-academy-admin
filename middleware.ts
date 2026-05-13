@@ -40,27 +40,36 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // 1. 유저 세션 확인 (이 부분이 유저 정보를 서버에서 안전하게 읽어옵니다)
+  // 1. 유저 세션 확인
   const { data: { user } } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname;
+  const isSuperAdmin = user?.email === process.env.SUPER_ADMIN_EMAIL;
+  const role = user?.user_metadata?.role ?? 'ai_only';
 
   // 2. 미인증 접근 차단
-  if (!user && pathname.startsWith('/admin')) {
+  if (!user && (pathname.startsWith('/admin') || pathname.startsWith('/tool'))) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   if (!user && pathname.startsWith('/superadmin')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // 3. 일반 학원 원장의 /superadmin 접근 차단
-  if (user && pathname.startsWith('/superadmin') && user.email !== process.env.SUPER_ADMIN_EMAIL) {
-    return NextResponse.redirect(new URL('/admin', request.url))
+  // 3. 권한 초과 접근 차단
+  // 일반 사용자의 /superadmin 접근 차단
+  if (user && pathname.startsWith('/superadmin') && !isSuperAdmin) {
+    return NextResponse.redirect(new URL(role === 'admin' ? '/admin' : '/tool', request.url))
+  }
+  // ai_only 사용자의 /admin 접근 차단
+  if (user && pathname.startsWith('/admin') && role === 'ai_only' && !isSuperAdmin) {
+    return NextResponse.redirect(new URL('/tool', request.url))
   }
 
-  // 4. 로그인 후 리다이렉트 분기 (슈퍼어드민 vs 학원 원장)
+  // 4. 로그인 후 리다이렉트 분기
   if (user && (pathname === '/login' || pathname === '/register')) {
-    const dest = user.email === process.env.SUPER_ADMIN_EMAIL ? '/superadmin' : '/admin'
+    let dest = '/tool';
+    if (isSuperAdmin) dest = '/superadmin';
+    else if (role === 'admin') dest = '/admin';
     return NextResponse.redirect(new URL(dest, request.url))
   }
 

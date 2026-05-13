@@ -53,6 +53,7 @@ export default function RegisterPage() {
           // 💡 메타데이터에 학원명을 미리 넣어두면 나중에 관리하기 편합니다.
           data: {
             academy_name: formData.academyName,
+            role: 'ai_only',
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },

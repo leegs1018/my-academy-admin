@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import ConInsufficientModal from '@/components/ConInsufficientModal';
 
 interface ExamChoice {
   number: number;
@@ -37,12 +38,14 @@ interface QuestionTypeOption {
 }
 
 const QUESTION_TYPE_OPTIONS: QuestionTypeOption[] = [
-  { key: 'topic_title',      label: '주제/제목 유형',         description: '글의 주제나 제목 파악',          color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'grammar',          label: '어법 유형',              description: '어법상 틀린 것 찾기 ①~⑤',        color: 'bg-green-100 text-green-700 border-green-200' },
-  { key: 'vocab_paraphrase', label: '어휘 - 낱말 쓰임 유형',  description: '문맥상 적절하지 않은 낱말 찾기',  color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { key: 'vocab_blank',      label: '어휘 (a)(b) 빈칸 유형', description: '두 빈칸에 알맞은 어휘 쌍',         color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  { key: 'fill_blank',       label: '빈칸 추론 유형',         description: '핵심 빈칸에 들어갈 표현',          color: 'bg-rose-100 text-rose-700 border-rose-200' },
-  { key: 'summary',          label: '요약문 완성 유형',       description: '요약문의 (A)(B) 빈칸 완성',       color: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { key: 'topic_title',      label: '주제/제목 유형',         description: '글의 주제나 제목 파악',             color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'grammar',          label: '어법 유형',              description: '어법상 틀린 것 찾기 ①~⑤',           color: 'bg-green-100 text-green-700 border-green-200' },
+  { key: 'vocab_paraphrase', label: '어휘 - 낱말 쓰임 유형',  description: '문맥상 적절하지 않은 낱말 찾기',     color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { key: 'vocab_blank',      label: '어휘 (a)(b) 빈칸 유형', description: '두 빈칸에 알맞은 어휘 쌍',            color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { key: 'fill_blank',       label: '빈칸 추론 유형',         description: '핵심 빈칸에 들어갈 표현',             color: 'bg-rose-100 text-rose-700 border-rose-200' },
+  { key: 'summary',          label: '요약문 완성 유형',       description: '요약문의 (A)(B) 빈칸 완성',          color: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { key: 'flow',             label: '흐름 유형',              description: '전체 흐름과 관계 없는 문장 찾기',    color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { key: 'phrase_meaning',   label: '어구 의미 추론 유형',    description: '밑줄 어구의 문맥 속 의미 추론',      color: 'bg-orange-100 text-orange-700 border-orange-200' },
 ];
 
 const TYPE_COLOR_MAP: Record<string, string> = {};
@@ -114,6 +117,20 @@ function renderWithUnderline(text: string) {
   );
 }
 
+// flow형 지문 — ①~⑤ 인라인 마킹, 줄바꿈 제거하여 단락 흐름으로 표시
+function renderFlowPassage(text: string) {
+  const CIRCLES = ['①','②','③','④','⑤'];
+  // 줄바꿈을 공백으로 통일, ①~⑤ 앞 공백 정리
+  const normalized = text.replace(/\n+/g, ' ').replace(/\s*(①|②|③|④|⑤)/g, ' $1').trim();
+  const parts = normalized.split(/(①|②|③|④|⑤)/g);
+  return parts.map((part, i) => {
+    if (CIRCLES.includes(part)) {
+      return <span key={i} style={{fontWeight: 900, color: '#7c3aed'}}>{part}</span>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 // 어휘 (a)(b) 빈칸형 지문 — (a)/(b) 배지 + 밑줄 공간 표시
 function renderVocabBlankPassage(text: string) {
   const normalized = text.replace(/\(([ab])\)\s*_+/gi, '($1)');
@@ -147,11 +164,11 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   const { toJpeg } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
 
-  const W = 210, M = 10, GAP = 5;
-  const colW = (W - 2 * M - GAP) / 2; // 92.5mm per column
+  const W = 210, M = 8, GAP = 4;
+  const colW = (W - 2 * M - GAP) / 2; // ~95mm per column
   const A4_H = 297;
-  const BOTTOM = A4_H - M - 10; // bottom content limit
-  const RENDER_W = 370; // px width per question element
+  const BOTTOM = A4_H - M - 8; // bottom content limit
+  const RENDER_W = 400; // px width per question element
 
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
@@ -191,15 +208,37 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     }).join('');
   };
 
+  const escFlow = (s: string | null | undefined) => {
+    const CG = ['①','②','③','④','⑤'];
+    const raw = s ?? '';
+    const parts = raw.split(/(①|②|③|④|⑤)/g);
+    const ss = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n+/g, ' ');
+    return parts.map(part =>
+      CG.includes(part)
+        ? `<span style="font-weight:900;color:#7c3aed;">${part}</span>`
+        : ss(part)
+    ).join('');
+  };
+
+  const escWithUnderline = (s: string | null | undefined) => {
+    const raw = s ?? '';
+    const parts = raw.split(/(\[[^\]]+\])/g);
+    const ss = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n+/g, ' ');
+    return parts.map(part =>
+      part.startsWith('[') && part.endsWith(']')
+        ? `<span style="text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:700;color:#111827;">${ss(part.slice(1, -1))}</span>`
+        : ss(part)
+    ).join('');
+  };
+
   const passageBox = (content: string) =>
-    `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:10px;font-size:12px;line-height:1.8;color:#334155;">${content}</div>`;
+    `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:6px 8px;margin-bottom:7px;font-size:13px;line-height:1.65;color:#1e293b;">${content}</div>`;
   const instrP = (content: string) =>
-    `<p style="font-size:12px;font-weight:700;color:#1e293b;margin:0 0 8px;line-height:1.6;white-space:pre-wrap;">${content}</p>`;
+    `<p style="font-size:13px;font-weight:700;color:#1e293b;margin:0 0 5px;line-height:1.5;white-space:pre-wrap;">${content}</p>`;
 
   const buildHtml = (q: ExamQuestion, num: number) => {
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
-    let html = `<div style="margin-bottom:3px;"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:#f1f5f9;color:#64748b;">${esc(typeLabel)}</span></div>`;
-    html += `<div style="font-size:13px;font-weight:900;color:#1e293b;margin:4px 0 8px;">문제 ${num}</div>`;
+    let html = `<div style="font-size:10.5px;font-weight:900;color:#1e293b;margin-bottom:4px;">${num}. <span style="font-size:9px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 5px;border-radius:3px;">${esc(typeLabel)}</span></div>`;
 
     if (q.type === 'vocab_paraphrase') {
       html += instrP(esc(q.question_text));
@@ -220,7 +259,13 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       html += passageBox(escP(originalPassage));
     } else if (q.modified_passage && q.type === 'grammar') {
       html += instrP(esc(q.question_text));
-      html += passageBox(escGrammar(q.modified_passage, q.choices));
+      html += passageBox(escGrammar(q.modified_passage.replace(/\[([^\]]+)\]/g, '$1'), q.choices));
+    } else if (q.modified_passage && q.type === 'flow') {
+      html += instrP(esc(q.question_text));
+      html += passageBox(escFlow(q.modified_passage));
+    } else if (q.modified_passage && q.type === 'phrase_meaning') {
+      html += instrP(esc(q.question_text));
+      html += passageBox(escWithUnderline(q.modified_passage));
     } else if (q.modified_passage) {
       html += instrP(esc(q.question_text));
       html += passageBox(escP(q.modified_passage));
@@ -228,19 +273,21 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       html += instrP(esc(q.question_text));
     }
 
-    html += `<div style="display:flex;flex-direction:column;gap:6px;">`;
-    for (let j = 0; j < q.choices.length; j++) {
-      const c = q.choices[j];
-      if (q.type === 'grammar' || q.type === 'vocab_paraphrase') {
-        const gm = c.text.match(/^([①②③④⑤])\s*(.+)$/);
-        const ch = gm ? gm[1] : (CIRCLE_NUMS[c.number - 1] ?? '');
-        const wd = gm ? gm[2] : c.text;
-        html += `<div style="display:flex;gap:6px;align-items:center;"><span style="font-size:13px;font-weight:900;color:#111827;">${esc(ch)}</span><span style="font-size:11px;font-weight:600;color:#1f2937;">${esc(wd)}</span></div>`;
-      } else {
-        html += `<div style="display:flex;gap:6px;align-items:flex-start;"><span style="font-weight:900;color:#475569;flex-shrink:0;min-width:18px;font-size:12px;">${CIRCLE_NUMS[j] ?? (j+1)}</span><span style="font-size:11px;color:#334155;line-height:1.6;">${esc(c.text)}</span></div>`;
+    if (q.type !== 'flow' && q.type !== 'grammar') {
+      html += `<div style="display:flex;flex-direction:column;gap:3px;">`;
+      for (let j = 0; j < q.choices.length; j++) {
+        const c = q.choices[j];
+        if (q.type === 'vocab_paraphrase') {
+          const gm = c.text.match(/^([①②③④⑤])\s*(.+)$/);
+          const ch = gm ? gm[1] : (CIRCLE_NUMS[c.number - 1] ?? '');
+          const wd = gm ? gm[2] : c.text;
+          html += `<div style="display:flex;gap:4px;align-items:center;"><span style="font-size:12px;font-weight:900;color:#111827;">${esc(ch)}</span><span style="font-size:13px;font-weight:600;color:#1f2937;">${esc(wd)}</span></div>`;
+        } else {
+          html += `<div style="display:flex;gap:4px;align-items:flex-start;"><span style="font-weight:900;color:#475569;flex-shrink:0;min-width:14px;font-size:13px;">${CIRCLE_NUMS[j] ?? (j+1)}</span><span style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</span></div>`;
+        }
       }
+      html += `</div>`;
     }
-    html += `</div>`;
     return html;
   };
 
@@ -263,7 +310,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     if (currentCol === 'left') {
       if (leftY + h_mm <= BOTTOM) {
         pdf.addImage(url, 'JPEG', M, leftY, colW, h_mm);
-        leftY += h_mm + 4;
+        leftY += h_mm + 2;
         return;
       }
       currentCol = 'right';
@@ -271,7 +318,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     if (currentCol === 'right') {
       if (rightY + h_mm <= BOTTOM) {
         pdf.addImage(url, 'JPEG', M + colW + GAP, rightY, colW, h_mm);
-        rightY += h_mm + 4;
+        rightY += h_mm + 2;
         return;
       }
       finalizePage();
@@ -280,13 +327,13 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       leftY = M; rightY = M; currentCol = 'left';
       lineTopY = M;
       pdf.addImage(url, 'JPEG', M, leftY, colW, h_mm);
-      leftY += h_mm + 4;
+      leftY += h_mm + 2;
     }
   };
 
   const renderEl = async (html: string, w: number, padding: number) => {
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;z-index:-9999;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:-9999;`;
     el.innerHTML = html;
     document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r));
@@ -300,22 +347,22 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   // Title spanning both columns
   if (title) {
     const { url: titleUrl, ratio: titleRatio } = await renderEl(
-      `<div style="text-align:center;border-bottom:3px double #334155;padding-bottom:12px;">
-        <div style="font-size:18px;font-weight:900;color:#1e293b;letter-spacing:-0.5px;">${esc(title)}</div>
+      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
+        <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div>
       </div>`,
-      760, 16
+      760, 8
     );
     const fullW = W - 2 * M;
     const titleMmH = fullW * titleRatio;
     pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-    leftY = M + titleMmH + 5;
+    leftY = M + titleMmH + 3;
     rightY = leftY;
     lineTopY = leftY;
   }
 
   // Questions in 2-column layout
   for (let i = 0; i < questions.length; i++) {
-    const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 16);
+    const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
     placeImage(url, colW * ratio);
   }
 
@@ -327,11 +374,11 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   const { toJpeg } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
 
-  const W = 210, M = 10, GAP = 5;
+  const W = 210, M = 8, GAP = 4;
   const colW = (W - 2 * M - GAP) / 2;
   const A4_H = 297;
-  const BOTTOM = A4_H - M - 10;
-  const RENDER_W = 370;
+  const BOTTOM = A4_H - M - 8;
+  const RENDER_W = 400;
 
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
@@ -356,7 +403,7 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     if (currentCol === 'left') {
       if (leftY + h_mm <= BOTTOM) {
         pdf.addImage(url, 'JPEG', M, leftY, colW, h_mm);
-        leftY += h_mm + 4;
+        leftY += h_mm + 2;
         return;
       }
       currentCol = 'right';
@@ -364,7 +411,7 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     if (currentCol === 'right') {
       if (rightY + h_mm <= BOTTOM) {
         pdf.addImage(url, 'JPEG', M + colW + GAP, rightY, colW, h_mm);
-        rightY += h_mm + 4;
+        rightY += h_mm + 2;
         return;
       }
       finalizePage();
@@ -373,13 +420,13 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
       leftY = M; rightY = M; currentCol = 'left';
       lineTopY = M;
       pdf.addImage(url, 'JPEG', M, leftY, colW, h_mm);
-      leftY += h_mm + 4;
+      leftY += h_mm + 2;
     }
   };
 
   const renderEl = async (html: string, w: number, padding: number) => {
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;z-index:-9999;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:-9999;`;
     el.innerHTML = html;
     document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r));
@@ -393,15 +440,15 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   // Title spanning both columns
   if (title) {
     const { url: titleUrl, ratio: titleRatio } = await renderEl(
-      `<div style="text-align:center;border-bottom:3px double #334155;padding-bottom:12px;">
-        <div style="font-size:18px;font-weight:900;color:#1e293b;letter-spacing:-0.5px;">${esc(title)} — 정답 및 해설</div>
+      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
+        <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div>
       </div>`,
-      760, 16
+      760, 8
     );
     const fullW = W - 2 * M;
     const titleMmH = fullW * titleRatio;
     pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-    leftY = M + titleMmH + 5;
+    leftY = M + titleMmH + 3;
     rightY = leftY;
     lineTopY = leftY;
   }
@@ -410,31 +457,31 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
-    const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase')
+    const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
       ? CIRCLE_NUMS[q.answer - 1]
       : `${q.answer}번`;
 
-    let html = `<div style="border-left:3px solid #4338ca;padding:10px 12px;border-radius:0 6px 6px 0;background:#fafafa;">`;
-    html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">`;
-    html += `<div style="display:flex;align-items:center;gap:8px;">`;
-    html += `<span style="font-size:14px;font-weight:900;color:#1e293b;">${i + 1}번</span>`;
-    html += `<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#e0e7ff;color:#4338ca;">${esc(typeLabel)}</span>`;
+    let html = `<div style="border-left:3px solid #4338ca;padding:6px 8px;border-radius:0 4px 4px 0;background:#fafafa;">`;
+    html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">`;
+    html += `<div style="display:flex;align-items:center;gap:6px;">`;
+    html += `<span style="font-size:11px;font-weight:900;color:#1e293b;">${i + 1}번</span>`;
+    html += `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#e0e7ff;color:#4338ca;">${esc(typeLabel)}</span>`;
     html += `</div>`;
-    html += `<span style="font-size:13px;font-weight:900;color:#7c3aed;">정답 ${answerCircle}</span>`;
+    html += `<span style="font-size:11px;font-weight:900;color:#7c3aed;">정답 ${answerCircle}</span>`;
     html += `</div>`;
 
     if (q.type === 'summary') {
       const pts = q.question_text.split('\n\n');
       const sumText = pts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
       if (sumText) {
-        html += `<div style="font-size:10px;color:#475569;margin-bottom:8px;padding:8px 10px;background:#f0f4ff;border-radius:4px;line-height:1.7;border:1px solid #c7d2fe;">${esc(sumText)}</div>`;
+        html += `<div style="font-size:9px;color:#475569;margin-bottom:6px;padding:5px 7px;background:#f0f4ff;border-radius:3px;line-height:1.6;border:1px solid #c7d2fe;">${esc(sumText)}</div>`;
       }
     }
 
-    html += `<p style="font-size:11px;color:#374151;line-height:1.75;margin:0;">${esc(q.explanation)}</p>`;
+    html += `<p style="font-size:9.5px;color:#374151;line-height:1.65;margin:0;">${esc(q.explanation)}</p>`;
     html += `</div>`;
 
-    const { url, ratio } = await renderEl(html, RENDER_W, 12);
+    const { url, ratio } = await renderEl(html, RENDER_W, 6);
     placeImage(url, colW * ratio);
   }
 
@@ -456,7 +503,7 @@ export default function AiQuestionsPage() {
   const [pdfTitle, setPdfTitle] = useState('');
 
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(['topic_title']));
-  const [difficulty, setDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('c2');
+  const [difficulty, setDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
 
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
@@ -472,6 +519,10 @@ export default function AiQuestionsPage() {
   const [historyList, setHistoryList] = useState<ExamHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const [userId, setUserId] = useState('');
+  const [aiPrice, setAiPrice] = useState<number | null>(null);
+  const [conModal, setConModal] = useState<{ required: number; balance: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -482,6 +533,20 @@ export default function AiQuestionsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const textToSend = inputMode === 'text' ? manualText : ocrText;
+
+  // 세션 + AI 단가 로드
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) setUserId(session.user.id);
+    });
+    fetch('/api/credits/pricing')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const ai = data?.pricing?.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question');
+        if (ai) setAiPrice(ai.cost_per_use);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── 이력 조회 ──
   const fetchHistory = useCallback(async (query = searchQuery, date = searchDate) => {
@@ -641,9 +706,13 @@ export default function AiQuestionsPage() {
       const res = await fetch('/api/generate-exam-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSend.trim(), questionTypes: [...selectedTypes], difficulty }),
+        body: JSON.stringify({ text: textToSend.trim(), questionTypes: [...selectedTypes], difficulty, academy_id: userId || undefined }),
       });
-      const json = await res.json() as { questions?: ExamQuestion[]; error?: string };
+      const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
+      if (json.error === 'INSUFFICIENT_CON') {
+        setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 });
+        return;
+      }
       if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
       setOriginalPassageText(textToSend.trim());
       setQuestions(json.questions ?? []);
@@ -860,17 +929,18 @@ export default function AiQuestionsPage() {
             <h2 className="text-base font-black text-gray-800 mb-4">📊 난이도 설정</h2>
             <div className="flex gap-2">
               {([
-                { key: 'b1', label: '중등',    sub: 'B1', active: 'border-sky-400 bg-sky-50 text-sky-700' },
-                { key: 'b2', label: '고등 중', sub: 'B2', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
-                { key: 'c1', label: '고등 중상', sub: 'C1', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-                { key: 'c2', label: '고등 최상', sub: 'C2', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+                { key: 'b1', label: '중등/고등 하', sub: 'B1', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+                { key: 'b2', label: '고등 중',      sub: 'B2', icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+                { key: 'c1', label: '고등 상',      sub: 'C1', icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                { key: 'c2', label: '고등 최상',    sub: 'C2', icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
               ] as const).map(d => (
                 <button key={d.key} onClick={() => setDifficulty(d.key)}
-                  className={`flex-1 py-4 rounded-xl font-black text-sm transition-all border-2
+                  className={`flex-1 py-4 rounded-xl font-black transition-all border-2
                     ${difficulty === d.key
                       ? d.active
                       : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
-                  <div className="text-xs font-bold mb-0.5 opacity-60">{d.sub}</div>
+                  <div className="text-2xl mb-1">{d.icon}</div>
+                  <div className="text-xs font-bold opacity-60 mb-0.5">{d.sub}</div>
                   <div className="text-sm">{d.label}</div>
                 </button>
               ))}
@@ -902,6 +972,14 @@ export default function AiQuestionsPage() {
             <p className="mt-3 text-xs text-gray-400">선택된 유형: {selectedTypes.size}개 ({[...selectedTypes].map(k => TYPE_LABEL_MAP[k]).join(', ')})</p>
           </div>
 
+          {/* CON 차감 안내 */}
+          {aiPrice !== null && aiPrice > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-yellow-50 border border-yellow-200 rounded-2xl">
+              <span className="text-sm">⭐</span>
+              <span className="text-xs font-black text-yellow-700">1세트 생성 시 {aiPrice} CON 차감됩니다</span>
+            </div>
+          )}
+
           {/* 생성 버튼 */}
           <button
             onClick={handleGenerate}
@@ -931,24 +1009,12 @@ export default function AiQuestionsPage() {
                 {saveStatus === 'error' && `❌ 저장 실패: ${saveErrorMsg}`}
               </div>
 
-              {/* 다운로드 버튼 */}
-              <div className="flex gap-3">
-                <button onClick={handleDownloadQuestion} disabled={!!pdfLoading}
-                  className="flex-1 py-3 rounded-xl font-black text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all">
-                  {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 다운로드'}
-                </button>
-                <button onClick={handleDownloadAnswer} disabled={!!pdfLoading}
-                  className="flex-1 py-3 rounded-xl font-black text-sm bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 transition-all">
-                  {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안지/해설지 다운로드'}
-                </button>
-              </div>
-
               {/* 문제 카드 */}
               <div id="exam-print-area" className="space-y-6">
                 {questions.map((q, idx) => {
                   const typeOpt = QUESTION_TYPE_OPTIONS.find(o => o.key === q.type);
                   const isRevealed = revealedAnswers.has(idx);
-                  const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase') ? CIRCLE_NUMS[q.answer - 1] : `${q.answer}번`;
+                  const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow') ? CIRCLE_NUMS[q.answer - 1] : `${q.answer}번`;
                   return (
                     <div key={idx} id={`exam-q-${idx}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                       {/* 카드 헤더 */}
@@ -1017,7 +1083,7 @@ export default function AiQuestionsPage() {
                           </div>
                           {q.modified_passage && (
                             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
-                              {renderPassageWithCircles(q.modified_passage, q.choices, true)}
+                              {renderPassageWithCircles(q.modified_passage.replace(/\[([^\]]+)\]/g, '$1'), q.choices, false)}
                             </div>
                           )}
                         </>
@@ -1049,41 +1115,71 @@ export default function AiQuestionsPage() {
                         </>
                       )}
 
+                      {/* flow: [질문] + [①~⑤ 문장 지문] */}
+                      {q.type === 'flow' && (
+                        <>
+                          <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
+                            {q.question_text}
+                          </div>
+                          {q.modified_passage && (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed font-medium">
+                              {renderFlowPassage(q.modified_passage)}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* phrase_meaning: [질문] + [밑줄 지문] */}
+                      {q.type === 'phrase_meaning' && (
+                        <>
+                          <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
+                            {q.question_text}
+                          </div>
+                          {q.modified_passage && (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
+                              {renderWithUnderline(q.modified_passage)}
+                            </div>
+                          )}
+                        </>
+                      )}
+
                       {/* 문제 지시문 (아래 유형은 위에서 이미 처리) */}
-                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && (
+                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && (
                         <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
                           {q.question_text}
                         </div>
                       )}
 
                       {/* 선지 */}
-                      <div className="space-y-2.5 mb-5">
-                        {q.choices.map((c, ci) => {
-                          const isCorrect = isRevealed && (c.number === q.answer || ci + 1 === q.answer);
-                          return (
-                            <div key={ci}
-                              className={`flex gap-3 items-start p-3 rounded-xl transition-all
-                                ${isCorrect
-                                  ? 'bg-indigo-50 border border-indigo-200'
-                                  : 'bg-gray-50 border border-transparent'}`}>
-                              {(q.type === 'grammar' || q.type === 'vocab_paraphrase') ? (
-                                renderGrammarChoice(c.text, isCorrect, c.number)
-                              ) : (
-                                <>
-                                  <span className={`font-black flex-shrink-0 text-sm pt-0.5 min-w-[20px]
-                                    ${isCorrect ? 'text-indigo-600' : 'text-gray-600'}`}>
-                                    {CIRCLE_NUMS[ci]}
-                                  </span>
-                                  <span className={`text-sm leading-relaxed
-                                    ${isCorrect ? 'font-black text-indigo-700' : 'font-medium text-gray-700'}`}>
-                                    {c.text}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {q.type !== 'flow' && q.type !== 'grammar' && (
+                        <div className="space-y-2.5 mb-5">
+                          {q.choices.map((c, ci) => {
+                            const isCorrect = isRevealed && (c.number === q.answer || ci + 1 === q.answer);
+                            return (
+                              <div key={ci}
+                                className={`flex gap-3 items-start p-3 rounded-xl transition-all
+                                  ${isCorrect
+                                    ? 'bg-indigo-50 border border-indigo-200'
+                                    : 'bg-gray-50 border border-transparent'}`}>
+                                {(q.type === 'grammar' || q.type === 'vocab_paraphrase') ? (
+                                  renderGrammarChoice(c.text, isCorrect, c.number)
+                                ) : (
+                                  <>
+                                    <span className={`font-black flex-shrink-0 text-sm pt-0.5 min-w-[20px]
+                                      ${isCorrect ? 'text-indigo-600' : 'text-gray-600'}`}>
+                                      {CIRCLE_NUMS[ci]}
+                                    </span>
+                                    <span className={`text-sm leading-relaxed
+                                      ${isCorrect ? 'font-black text-indigo-700' : 'font-medium text-gray-700'}`}>
+                                      {c.text}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* 정답/해설 토글 */}
                       <div className="exam-answer">
@@ -1270,6 +1366,28 @@ export default function AiQuestionsPage() {
               <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{passageModal.passage_full}</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CON 부족 모달 */}
+      <ConInsufficientModal
+        isOpen={!!conModal}
+        onClose={() => setConModal(null)}
+        required={conModal?.required ?? 0}
+        balance={conModal?.balance ?? 0}
+      />
+
+      {/* 고정 다운로드 버튼 */}
+      {questions && questions.length > 0 && (
+        <div className="no-print fixed bottom-8 right-8 flex flex-row items-end gap-3 z-50">
+          <button onClick={handleDownloadQuestion} disabled={!!pdfLoading}
+            className="px-7 py-4 rounded-2xl font-black text-base bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-xl">
+            {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 다운로드'}
+          </button>
+          <button onClick={handleDownloadAnswer} disabled={!!pdfLoading}
+            className="px-7 py-4 rounded-2xl font-black text-base bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 transition-all shadow-xl">
+            {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안지/해설지 다운로드'}
+          </button>
         </div>
       )}
     </div>
