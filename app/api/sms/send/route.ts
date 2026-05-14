@@ -21,10 +21,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '메시지와 수신자를 입력해주세요.' }, { status: 400 });
   }
 
+  // SMS / LMS 자동 구분 (90바이트 초과 시 LMS)
+  const byteLength = Buffer.byteLength(message, 'utf8');
+  const messageType = byteLength > 90 ? 'lms' : 'sms';
+
   // CON 잔액 확인 및 차감
   if (academy_id) {
-    const pricePerSms = await getFeaturePrice('sms');
-    const totalCost = pricePerSms * recipients.length;
+    const pricePerMsg = await getFeaturePrice(messageType);
+    const totalCost = pricePerMsg * recipients.length;
 
     if (totalCost > 0) {
       const balance = await getConBalance(academy_id);
@@ -33,7 +37,8 @@ export async function POST(req: Request) {
           error: 'INSUFFICIENT_CON',
           required: totalCost,
           balance,
-          price_per_sms: pricePerSms,
+          price_per_sms: pricePerMsg,
+          message_type: messageType,
         }, { status: 402 });
       }
 
@@ -42,8 +47,8 @@ export async function POST(req: Request) {
       const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
         p_academy_id: academy_id,
         p_amount: totalCost,
-        p_feature_key: 'sms',
-        p_description: `SMS 발송 ${recipients.length}건`,
+        p_feature_key: messageType,
+        p_description: `${messageType.toUpperCase()} 발송 ${recipients.length}건 × ${pricePerMsg}C`,
       });
 
       if (deductError) {
@@ -52,7 +57,8 @@ export async function POST(req: Request) {
             error: 'INSUFFICIENT_CON',
             required: totalCost,
             balance,
-            price_per_sms: pricePerSms,
+            price_per_sms: pricePerMsg,
+            message_type: messageType,
           }, { status: 402 });
         }
         return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });

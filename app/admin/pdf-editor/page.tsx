@@ -457,10 +457,11 @@ export default function PdfEditorPage() {
     msgIntervalRef.current = setInterval(() => { idx = (idx + 1) % msgs.length; setLoadingMsg(msgs[idx]); }, 8000);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       const res = await fetch('/api/process-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSend, difficulty }),
+        body: JSON.stringify({ text: textToSend, difficulty, academy_id: user?.id }),
       });
       const rawText = await res.text();
       let json: { data?: GeneratedMaterials; error?: string };

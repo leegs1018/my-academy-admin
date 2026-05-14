@@ -12,6 +12,27 @@ interface PricingItem {
   updated_at: string;
 }
 
+const SECTION_ORDER: { key: string; label: string; color: string; keys: string[] }[] = [
+  {
+    key: 'exam',
+    label: '실전변형 문제',
+    color: 'text-blue-400',
+    keys: ['ai_question_per_type'],
+  },
+  {
+    key: 'pdf',
+    label: '지문분석 툴 / 워크북',
+    color: 'text-teal-400',
+    keys: ['pdf_analysis'],
+  },
+  {
+    key: 'sms',
+    label: 'SMS 문자 발송',
+    color: 'text-violet-400',
+    keys: ['sms', 'lms'],
+  },
+];
+
 export default function ConPricingPage() {
   const [pricing, setPricing] = useState<PricingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,27 +50,20 @@ export default function ConPricingPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const startEdit = (item: PricingItem) => {
-    setEditing(prev => ({ ...prev, [item.feature_key]: String(item.cost_per_use) }));
+  const pricingMap = Object.fromEntries(pricing.map(p => [p.feature_key, p]));
+
+  const startEdit = (featureKey: string, current: number) => {
+    setEditing(prev => ({ ...prev, [featureKey]: String(current) }));
   };
 
   const cancelEdit = (featureKey: string) => {
-    setEditing(prev => {
-      const next = { ...prev };
-      delete next[featureKey];
-      return next;
-    });
-    setSaveMsg(prev => {
-      const next = { ...prev };
-      delete next[featureKey];
-      return next;
-    });
+    setEditing(prev => { const n = { ...prev }; delete n[featureKey]; return n; });
+    setSaveMsg(prev => { const n = { ...prev }; delete n[featureKey]; return n; });
   };
 
   const handleSave = async (featureKey: string) => {
     const newCost = parseInt(editing[featureKey] ?? '', 10);
     if (isNaN(newCost) || newCost < 0) return;
-
     setSaving(featureKey);
     try {
       const res = await fetch('/api/superadmin/credits/pricing', {
@@ -59,13 +73,9 @@ export default function ConPricingPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setPricing(prev =>
-          prev.map(p =>
-            p.feature_key === featureKey ? { ...p, cost_per_use: newCost } : p
-          )
-        );
+        setPricing(prev => prev.map(p => p.feature_key === featureKey ? { ...p, cost_per_use: newCost } : p));
         cancelEdit(featureKey);
-        setSaveMsg(prev => ({ ...prev, [featureKey]: '저장되었습니다.' }));
+        setSaveMsg(prev => ({ ...prev, [featureKey]: '저장됨' }));
         setTimeout(() => setSaveMsg(prev => { const n = { ...prev }; delete n[featureKey]; return n; }), 2000);
       } else {
         setSaveMsg(prev => ({ ...prev, [featureKey]: `오류: ${data.error}` }));
@@ -76,6 +86,71 @@ export default function ConPricingPage() {
       setSaving(null);
     }
   };
+
+  const renderRow = (item: PricingItem) => {
+    const editValue = editing[item.feature_key];
+    const isSavingThis = saving === item.feature_key;
+    const msg = saveMsg[item.feature_key];
+    return (
+      <tr key={item.id} className="border-t border-slate-800 hover:bg-slate-800/20 transition-colors">
+        <td className="py-4 px-6">
+          <p className="font-black text-white">{item.feature_name}</p>
+          <p className="text-xs text-slate-500 font-bold mt-0.5">{item.feature_key}</p>
+        </td>
+        <td className="py-4 px-6 text-slate-400 font-bold text-sm">{item.unit_description}</td>
+        <td className="py-4 px-6 text-center">
+          {editValue !== undefined ? (
+            <input
+              type="number"
+              min="0"
+              value={editValue}
+              onChange={e => setEditing(prev => ({ ...prev, [item.feature_key]: e.target.value }))}
+              className="w-24 text-center px-3 py-2 bg-slate-800 border-2 border-yellow-500 rounded-lg text-white font-black focus:outline-none text-sm"
+              autoFocus
+            />
+          ) : (
+            <span className="font-black text-yellow-400 text-base">{item.cost_per_use} C</span>
+          )}
+          {msg && (
+            <p className={`text-xs font-bold mt-1 ${msg.startsWith('오류') || msg === '서버 오류' ? 'text-red-400' : 'text-green-400'}`}>
+              {msg}
+            </p>
+          )}
+        </td>
+        <td className="py-4 px-6 text-center">
+          {editValue !== undefined ? (
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => handleSave(item.feature_key)}
+                disabled={isSavingThis}
+                className="px-4 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all disabled:opacity-50"
+              >
+                {isSavingThis ? '저장 중...' : '저장'}
+              </button>
+              <button
+                onClick={() => cancelEdit(item.feature_key)}
+                className="px-4 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => startEdit(item.feature_key, item.cost_per_use)}
+              className="px-4 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
+            >
+              수정
+            </button>
+          )}
+        </td>
+        <td className="py-4 px-6 text-right text-xs text-slate-500 font-bold">
+          {new Date(item.updated_at).toLocaleDateString('ko-KR')}
+        </td>
+      </tr>
+    );
+  };
+
+  const examPrice = pricingMap['ai_question_per_type']?.cost_per_use ?? 20;
 
   return (
     <div className="space-y-6">
@@ -93,83 +168,68 @@ export default function ConPricingPage() {
       {loading ? (
         <div className="text-center py-16 text-slate-400 font-bold">불러오는 중...</div>
       ) : (
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-800/50">
-              <tr>
-                <th className="py-3 px-6 text-left text-xs font-black text-slate-500">기능</th>
-                <th className="py-3 px-6 text-left text-xs font-black text-slate-500">단위</th>
-                <th className="py-3 px-6 text-center text-xs font-black text-slate-500">현재 단가 (CON)</th>
-                <th className="py-3 px-6 text-center text-xs font-black text-slate-500">수정</th>
-                <th className="py-3 px-6 text-right text-xs font-black text-slate-500">마지막 수정</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pricing.map(item => {
-                const editValue = editing[item.feature_key];
-                const isSavingThis = saving === item.feature_key;
-                const msg = saveMsg[item.feature_key];
+        <div className="space-y-4">
+          {SECTION_ORDER.map(section => {
+            const items = section.keys.map(k => pricingMap[k]).filter(Boolean);
+            if (items.length === 0) return null;
+            return (
+              <div key={section.key} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+                <div className="px-6 py-3 bg-slate-800/60 flex items-center justify-between">
+                  <h2 className={`text-sm font-black ${section.color}`}>{section.label}</h2>
+                  {section.key === 'exam' && (
+                    <span className="text-xs font-bold text-slate-400">
+                      8유형 모두 선택 시 최대 <span className="text-yellow-400 font-black">{examPrice * 8} C</span>
+                    </span>
+                  )}
+                  {section.key === 'sms' && (
+                    <span className="text-xs font-bold text-slate-400">
+                      90바이트 이하 SMS · 초과 시 LMS 자동 적용
+                    </span>
+                  )}
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-800/30">
+                    <tr>
+                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">기능</th>
+                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">단위</th>
+                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">현재 단가 (CON)</th>
+                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">수정</th>
+                      <th className="py-2.5 px-6 text-right text-xs font-black text-slate-500">마지막 수정</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map(item => renderRow(item))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
 
-                return (
-                  <tr key={item.id} className="border-t border-slate-800 hover:bg-slate-800/20 transition-colors">
-                    <td className="py-4 px-6">
-                      <p className="font-black text-white">{item.feature_name}</p>
-                      <p className="text-xs text-slate-500 font-bold mt-0.5">{item.feature_key}</p>
-                    </td>
-                    <td className="py-4 px-6 text-slate-400 font-bold">{item.unit_description}</td>
-                    <td className="py-4 px-6 text-center">
-                      {editValue !== undefined ? (
-                        <input
-                          type="number"
-                          min="0"
-                          value={editValue}
-                          onChange={e => setEditing(prev => ({ ...prev, [item.feature_key]: e.target.value }))}
-                          className="w-28 text-center px-3 py-2 bg-slate-800 border-2 border-yellow-500 rounded-lg text-white font-black focus:outline-none text-sm"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="font-black text-yellow-400 text-base">{item.cost_per_use} C</span>
-                      )}
-                      {msg && (
-                        <p className={`text-xs font-bold mt-1 ${msg.startsWith('오류') || msg === '서버 오류' ? 'text-red-400' : 'text-green-400'}`}>
-                          {msg}
-                        </p>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-center">
-                      {editValue !== undefined ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => handleSave(item.feature_key)}
-                            disabled={isSavingThis}
-                            className="px-4 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all disabled:opacity-50"
-                          >
-                            {isSavingThis ? '저장 중...' : '저장'}
-                          </button>
-                          <button
-                            onClick={() => cancelEdit(item.feature_key)}
-                            className="px-4 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
-                          >
-                            취소
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startEdit(item)}
-                          className="px-4 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
-                        >
-                          수정
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-right text-xs text-slate-500 font-bold">
-                      {new Date(item.updated_at).toLocaleDateString('ko-KR')}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {/* 미분류 항목 */}
+          {(() => {
+            const knownKeys = SECTION_ORDER.flatMap(s => s.keys);
+            const others = pricing.filter(p => !knownKeys.includes(p.feature_key) && p.is_active);
+            if (others.length === 0) return null;
+            return (
+              <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+                <div className="px-6 py-3 bg-slate-800/60">
+                  <h2 className="text-sm font-black text-slate-400">기타</h2>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-800/30">
+                    <tr>
+                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">기능</th>
+                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">단위</th>
+                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">현재 단가 (CON)</th>
+                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">수정</th>
+                      <th className="py-2.5 px-6 text-right text-xs font-black text-slate-500">마지막 수정</th>
+                    </tr>
+                  </thead>
+                  <tbody>{others.map(item => renderRow(item))}</tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       )}
 

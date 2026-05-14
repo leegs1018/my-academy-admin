@@ -958,28 +958,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `유효하지 않은 문제 유형: ${invalid.join(', ')}` }, { status: 400 });
     }
 
-    // CON 잔액 확인 및 차감
+    // CON 잔액 확인 및 차감 (유형당 과금)
     if (academy_id) {
-      const price = await getFeaturePrice('ai_question');
-      if (price > 0) {
+      const pricePerType = await getFeaturePrice('ai_question_per_type');
+      const totalCost = pricePerType * questionTypes.length;
+      if (totalCost > 0) {
         const balance = await getConBalance(academy_id);
-        if (balance < price) {
+        if (balance < totalCost) {
           return NextResponse.json({
             error: 'INSUFFICIENT_CON',
-            required: price,
+            required: totalCost,
             balance,
+            price_per_type: pricePerType,
           }, { status: 402 });
         }
         const supabaseAdmin = createAdminClient();
         const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
           p_academy_id: academy_id,
-          p_amount: price,
-          p_feature_key: 'ai_question',
-          p_description: `AI 문제 생성 (${questionTypes.length}유형)`,
+          p_amount: totalCost,
+          p_feature_key: 'ai_question_per_type',
+          p_description: `실전변형 문제 생성 (${questionTypes.length}유형 × ${pricePerType}C)`,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {
-            return NextResponse.json({ error: 'INSUFFICIENT_CON', required: price, balance }, { status: 402 });
+            return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance }, { status: 402 });
           }
           return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
         }

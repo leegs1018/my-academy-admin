@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getFeaturePrice, getConBalance } from '@/lib/credits';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 export const maxDuration = 60;
 
@@ -133,13 +135,37 @@ function extractJson(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { text, difficulty } = await request.json() as { text: string; difficulty: string };
+    const { text, difficulty, academy_id } = await request.json() as { text: string; difficulty: string; academy_id?: string };
 
     if (!text || text.trim().length < 50) {
       return NextResponse.json(
         { error: '지문 텍스트가 너무 짧습니다.' },
         { status: 400 }
       );
+    }
+
+    // CON 잔액 확인 및 차감
+    if (academy_id) {
+      const price = await getFeaturePrice('pdf_analysis');
+      if (price > 0) {
+        const balance = await getConBalance(academy_id);
+        if (balance < price) {
+          return NextResponse.json({ error: 'INSUFFICIENT_CON', required: price, balance }, { status: 402 });
+        }
+        const supabaseAdmin = createAdminClient();
+        const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
+          p_academy_id: academy_id,
+          p_amount: price,
+          p_feature_key: 'pdf_analysis',
+          p_description: `지문분석 툴/워크북 생성`,
+        });
+        if (deductError) {
+          if (deductError.message?.includes('INSUFFICIENT_CON')) {
+            return NextResponse.json({ error: 'INSUFFICIENT_CON', required: price, balance }, { status: 402 });
+          }
+          return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
+        }
+      }
     }
 
     console.log('[debug] KEY_PREFIX:', process.env.OPENAI_API_KEY?.slice(0, 12), '| KEY_SUFFIX:', process.env.OPENAI_API_KEY?.slice(-6), '| LENGTH:', process.env.OPENAI_API_KEY?.length);
