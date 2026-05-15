@@ -542,7 +542,7 @@ export default function AiQuestionsPage() {
     fetch('/api/credits/pricing')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const ai = data?.pricing?.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question');
+        const ai = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question_per_type');
         if (ai) setAiPrice(ai.cost_per_use);
       })
       .catch(() => {});
@@ -974,9 +974,17 @@ export default function AiQuestionsPage() {
 
           {/* CON 차감 안내 */}
           {aiPrice !== null && aiPrice > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2.5 bg-yellow-50 border border-yellow-200 rounded-2xl">
-              <span className="text-sm">⭐</span>
-              <span className="text-xs font-black text-yellow-700">1세트 생성 시 {aiPrice} CON 차감됩니다</span>
+            <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">⭐</span>
+                <span className="text-xs font-black text-yellow-700">유형당 {aiPrice} CON 차감</span>
+              </div>
+              {selectedTypes.size > 0 && (
+                <p className="text-xs font-black text-yellow-800 ml-6">
+                  {selectedTypes.size}유형 선택 시 총{' '}
+                  <span className="text-yellow-900">{(aiPrice * selectedTypes.size).toLocaleString()} CON</span> 차감 예정
+                </p>
+              )}
             </div>
           )}
 

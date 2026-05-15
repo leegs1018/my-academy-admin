@@ -217,6 +217,18 @@ export default function PdfEditorPage() {
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [passageModal, setPassageModal] = useState<PdfHistoryItem | null>(null);
+  const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
+
+  // ── 지문분석 CON 단가 로드 ──
+  useEffect(() => {
+    fetch('/api/credits/pricing')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
+        if (item) setPdfAnalysisPrice(item.cost_per_use);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── 로고 로드 ──
   useEffect(() => {
@@ -728,8 +740,13 @@ export default function PdfEditorPage() {
               </div>
             </div>
 
+            {pdfAnalysisPrice !== null && pdfAnalysisPrice > 0 && (
+              <p className="mt-4 text-center text-sm font-bold text-slate-400">
+                분석 1회당 <span className="text-yellow-500 font-black">{pdfAnalysisPrice} CON</span> 사용
+              </p>
+            )}
             <button onClick={handleGenerate} disabled={!canGenerate}
-              className="mt-6 w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              className="mt-3 w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
               AI로 문제 생성하기 🚀
             </button>
           </div>

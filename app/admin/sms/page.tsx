@@ -44,6 +44,7 @@ export default function SMSPage() {
 
   // CON 관련
   const [smsPricePerUnit, setSmsPricePerUnit] = useState<number | null>(null);
+  const [lmsPricePerUnit, setLmsPricePerUnit] = useState<number | null>(null);
   const [conModal, setConModal] = useState<{ required: number; balance: number } | null>(null);
 
   // 탭
@@ -55,13 +56,16 @@ export default function SMSPage() {
   const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
   const [isDeletingLogs, setIsDeletingLogs] = useState(false);
 
-  // SMS 단가 로드
+  // SMS/LMS 단가 로드
   useEffect(() => {
     fetch('/api/credits/pricing')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const sms = data?.pricing?.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'sms');
+        const list: { feature_key: string; cost_per_use: number }[] = data?.pricing ?? [];
+        const sms = list.find(p => p.feature_key === 'sms');
+        const lms = list.find(p => p.feature_key === 'lms');
         if (sms) setSmsPricePerUnit(sms.cost_per_use);
+        if (lms) setLmsPricePerUnit(lms.cost_per_use);
       })
       .catch(() => {});
   }, []);
@@ -588,6 +592,30 @@ export default function SMSPage() {
                     <span className="font-black text-red-400">{noPhoneStudents.length}명</span>
                   </div>
                 )}
+                {validRecipients.length > 0 && (smsPricePerUnit !== null || lmsPricePerUnit !== null) && (() => {
+                  const pricePerUnit = messageType === 'SMS' ? smsPricePerUnit : lmsPricePerUnit;
+                  const total = pricePerUnit !== null ? pricePerUnit * validRecipients.length : null;
+                  return (
+                    <>
+                      <div className="border-t border-gray-100 pt-1.5 mt-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400 font-bold">
+                            {messageType} × {validRecipients.length}건
+                          </span>
+                          <span className="font-black text-yellow-600">
+                            {pricePerUnit !== null ? `${(pricePerUnit * validRecipients.length).toLocaleString()} C` : '-'}
+                          </span>
+                        </div>
+                      </div>
+                      {total !== null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="font-black text-gray-700">합계</span>
+                          <span className="font-black text-yellow-500 text-base">{total.toLocaleString()} C</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <button
@@ -723,15 +751,24 @@ export default function SMSPage() {
               </div>
 
               {/* CON 차감 안내 */}
-              {smsPricePerUnit !== null && smsPricePerUnit > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
-                  <p className="text-xs font-black text-yellow-700 mb-1">⭐ CON 차감 안내</p>
-                  <p className="text-sm font-black text-yellow-800">
-                    {smsPricePerUnit} C × {validRecipients.length}명 ={' '}
-                    <span className="text-base">{(smsPricePerUnit * validRecipients.length).toLocaleString()} CON</span> 차감 예정
-                  </p>
-                </div>
-              )}
+              {(smsPricePerUnit !== null || lmsPricePerUnit !== null) && (() => {
+                const pricePerUnit = messageType === 'SMS' ? smsPricePerUnit : lmsPricePerUnit;
+                if (pricePerUnit === null || pricePerUnit === 0) return null;
+                const total = pricePerUnit * validRecipients.length;
+                return (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-1">
+                    <p className="text-xs font-black text-yellow-700">⭐ CON 차감 안내</p>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-yellow-700 font-bold">{messageType} × {validRecipients.length}건</span>
+                      <span className="font-black text-yellow-800">{(pricePerUnit * validRecipients.length).toLocaleString()} C</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t border-yellow-200 pt-1">
+                      <span className="font-black text-yellow-800">합계</span>
+                      <span className="font-black text-yellow-900 text-base">{total.toLocaleString()} CON 차감 예정</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 번호 없는 학생 경고 */}
               {noPhoneStudents.length > 0 && (

@@ -17,6 +17,15 @@ const formatSendDate = (dateStr: string) => {
 
 type ActiveTab = 'input' | 'send' | 'logs';
 
+const DEFAULT_GRADE_HEADER = '[{학원}]\n{날짜} {이름} 성적 리포트';
+
+interface GradeTemplate {
+  id: string;
+  title: string;
+  header_template: string;
+  created_at: string;
+}
+
 export default function GradeInputPage() {
   // ── 공통 ──────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ActiveTab>('input');
@@ -57,6 +66,17 @@ export default function GradeInputPage() {
   const [gradeLogs, setGradeLogs] = useState<any[]>([]);
   const [selectedGradeLog, setSelectedGradeLog] = useState<any>(null);
 
+  // ── 성적 발송 템플릿 ──────────────────────────────
+  const [gradeTemplates, setGradeTemplates] = useState<GradeTemplate[]>([]);
+  const [selectedGradeTemplateId, setSelectedGradeTemplateId] = useState('');
+  const [gradeHeaderTemplate, setGradeHeaderTemplate] = useState(DEFAULT_GRADE_HEADER);
+  const [showSaveGradeTemplate, setShowSaveGradeTemplate] = useState(false);
+  const [newGradeTemplateName, setNewGradeTemplateName] = useState('');
+
+  // ── CON 단가 ──────────────────────────────────────
+  const [smsPricePerUnit, setSmsPricePerUnit] = useState<number | null>(null);
+  const [lmsPricePerUnit, setLmsPricePerUnit] = useState<number | null>(null);
+
   // ── 초기: userId + academyName + 로그 로드 ─────────
   useEffect(() => {
     const getUser = async () => {
@@ -74,11 +94,27 @@ export default function GradeInputPage() {
     getUser();
   }, []);
 
+  // ── SMS/LMS 단가 로드 ─────────────────────────────
+  useEffect(() => {
+    fetch('/api/credits/pricing')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const list: { feature_key: string; cost_per_use: number }[] = data?.pricing ?? [];
+        const sms = list.find(p => p.feature_key === 'sms');
+        const lms = list.find(p => p.feature_key === 'lms');
+        if (sms) setSmsPricePerUnit(sms.cost_per_use);
+        if (lms) setLmsPricePerUnit(lms.cost_per_use);
+      })
+      .catch(() => {});
+  }, []);
+
   // ── 탭1: 클래스 목록 로드 ─────────────────────────
   useEffect(() => {
     if (!userId) return;
     supabase.from('classes').select('*').eq('academy_id', userId).order('class_name')
       .then(({ data }) => { if (data) setClassList(data); });
+    supabase.from('grade_message_templates').select('*').eq('academy_id', userId).order('created_at', { ascending: false })
+      .then(({ data }) => { if (data) setGradeTemplates(data); });
   }, [userId]);
 
   // ── 탭1: 클래스/월/과목 변경 시 데이터 로드 ───────
@@ -183,22 +219,27 @@ export default function GradeInputPage() {
             return score !== undefined ? { name: cat.name, score, maxScore } : null;
           })
           .filter(Boolean) as { name: string; score: number; maxScore: number }[];
-        const message = scoreEntries.length > 0
-          ? `[${academyName || '학원'}]\n${dateLabel} ${student.name}\n${scoreEntries.map((e, i) => {
-              const scoreStr = sendShowMaxScore ? `${e.score}/${e.maxScore}점` : `${e.score}점`;
-              return i === scoreEntries.length - 1 ? `${e.name}: ${scoreStr} 입니다.` : `${e.name}: ${scoreStr}`;
-            }).join('\n')}`
-          : null;
+        if (scoreEntries.length === 0) {
+          return { studentId: student.id, studentName: student.name, parentPhone: student.parent_phone || null, studentPhone: student.student_phone || null, message: null };
+        }
+        const header = gradeHeaderTemplate
+          .replace('{학원}', academyName || '학원')
+          .replace('{이름}', student.name)
+          .replace('{날짜}', dateLabel);
+        const scoreLines = scoreEntries.map((e, i) => {
+          const scoreStr = sendShowMaxScore ? `${e.score}/${e.maxScore}점` : `${e.score}점`;
+          return i === scoreEntries.length - 1 ? `${e.name}: ${scoreStr} 입니다.` : `${e.name}: ${scoreStr}`;
+        }).join('\n');
         return {
           studentId: student.id,
           studentName: student.name,
           parentPhone: student.parent_phone || null,
           studentPhone: student.student_phone || null,
-          message,
+          message: `${header}\n\n${scoreLines}`,
         };
       });
     setSendMessagePreviews(previews);
-  }, [sendSelectedStudentIds, sendSelectedCategoryIds, sendGradeMap, sendMaxScoreMap, sendShowMaxScore, sendSelectedSession, academyName, sendStudents, sendAvailableCategories]);
+  }, [sendSelectedStudentIds, sendSelectedCategoryIds, sendGradeMap, sendMaxScoreMap, sendShowMaxScore, sendSelectedSession, academyName, sendStudents, sendAvailableCategories, gradeHeaderTemplate]);
 
   // ── 탭1 함수들 ────────────────────────────────────
   const fetchMaxScore = async (catId: string) => {
@@ -310,6 +351,36 @@ export default function GradeInputPage() {
     finally { setLoading(false); }
   };
 
+  // ── 성적 템플릿 핸들러 ────────────────────────────
+  const handleGradeTemplateSelect = (id: string) => {
+    setSelectedGradeTemplateId(id);
+    const tpl = gradeTemplates.find(t => t.id === id);
+    if (tpl) setGradeHeaderTemplate(tpl.header_template);
+  };
+
+  const handleSaveGradeTemplate = async () => {
+    if (!newGradeTemplateName.trim()) return;
+    const { data, error } = await supabase.from('grade_message_templates').insert([{
+      academy_id: userId,
+      title: newGradeTemplateName.trim(),
+      header_template: gradeHeaderTemplate,
+    }]).select().single();
+    if (!error && data) {
+      setGradeTemplates(prev => [data, ...prev]);
+      setNewGradeTemplateName('');
+      setShowSaveGradeTemplate(false);
+    }
+  };
+
+  const handleDeleteGradeTemplate = async () => {
+    if (!selectedGradeTemplateId) return;
+    if (!confirm('선택한 템플릿을 삭제할까요?')) return;
+    await supabase.from('grade_message_templates').delete().eq('id', selectedGradeTemplateId);
+    setGradeTemplates(prev => prev.filter(t => t.id !== selectedGradeTemplateId));
+    setSelectedGradeTemplateId('');
+    setGradeHeaderTemplate(DEFAULT_GRADE_HEADER);
+  };
+
   // ── 탭2 헬퍼 함수들 ───────────────────────────────
   const toggleSendStudent = (id: string) => {
     const next = new Set(sendSelectedStudentIds);
@@ -336,6 +407,23 @@ export default function GradeInputPage() {
 
   const validSendPreviews = sendMessagePreviews.filter(p => p.message && getPhoneForRecipient(p, sendRecipientType));
   const noPhoneCount = sendMessagePreviews.filter(p => p.message && !getPhoneForRecipient(p, sendRecipientType)).length;
+
+  // CON 계산: 각 메시지 발송 건수 × 단가 합산
+  const sendConBreakdown = (() => {
+    let smsCount = 0;
+    let lmsCount = 0;
+    for (const p of validSendPreviews) {
+      const isLMS = p.message && p.message.length > 80;
+      let phones = 0;
+      if ((sendRecipientType === 'parent' || sendRecipientType === 'both') && p.parentPhone) phones++;
+      if ((sendRecipientType === 'student' || sendRecipientType === 'both') && p.studentPhone) phones++;
+      if (isLMS) lmsCount += phones; else smsCount += phones;
+    }
+    const smsCon = smsPricePerUnit !== null ? smsCount * smsPricePerUnit : null;
+    const lmsCon = lmsPricePerUnit !== null ? lmsCount * lmsPricePerUnit : null;
+    const total = smsCon !== null && lmsCon !== null ? smsCon + lmsCon : null;
+    return { smsCount, lmsCount, smsCon, lmsCon, total };
+  })();
 
   const handleGradeSend = async () => {
     setSendIsSending(true);
@@ -654,6 +742,68 @@ export default function GradeInputPage() {
               </label>
             </div>
 
+            {/* 메시지 템플릿 */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-black text-gray-600 mb-3">메시지 템플릿</h3>
+              <div className="flex gap-2 mb-3">
+                <select
+                  value={selectedGradeTemplateId}
+                  onChange={e => handleGradeTemplateSelect(e.target.value)}
+                  className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-indigo-400 focus:outline-none bg-white"
+                >
+                  <option value="">템플릿 선택...</option>
+                  {gradeTemplates.map(t => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
+                {selectedGradeTemplateId && (
+                  <button
+                    onClick={handleDeleteGradeTemplate}
+                    className="px-3 py-2 text-xs font-black text-red-400 hover:text-red-600 border-2 border-red-100 hover:border-red-300 rounded-xl transition-all"
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-400 font-bold mb-1.5">
+                사용 가능 변수: <span className="text-indigo-400">{'{학원}'} {'{이름}'} {'{날짜}'}</span>
+              </p>
+              <textarea
+                value={gradeHeaderTemplate}
+                onChange={e => { setGradeHeaderTemplate(e.target.value); setSelectedGradeTemplateId(''); }}
+                rows={3}
+                className="w-full border-2 border-gray-200 rounded-xl p-3 text-xs font-bold focus:border-indigo-400 focus:outline-none resize-none text-gray-700 leading-relaxed"
+              />
+              {!showSaveGradeTemplate ? (
+                <button
+                  onClick={() => setShowSaveGradeTemplate(true)}
+                  className="w-full mt-2 py-2 text-xs font-black text-indigo-400 hover:text-indigo-600 border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-xl transition-all"
+                >
+                  + 현재 형식을 템플릿으로 저장
+                </button>
+              ) : (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    placeholder="템플릿 이름..."
+                    value={newGradeTemplateName}
+                    onChange={e => setNewGradeTemplateName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveGradeTemplate()}
+                    className="flex-1 border-2 border-indigo-300 rounded-xl px-3 py-2 text-xs font-bold focus:border-indigo-500 focus:outline-none"
+                    autoFocus
+                  />
+                  <button onClick={handleSaveGradeTemplate}
+                    className="px-3 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all">
+                    저장
+                  </button>
+                  <button onClick={() => { setShowSaveGradeTemplate(false); setNewGradeTemplateName(''); }}
+                    className="px-3 py-2 text-xs font-black text-gray-400 border-2 border-gray-200 rounded-xl hover:border-gray-300 transition-all">
+                    취소
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* 수신자 유형 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
               <h3 className="text-sm font-black text-gray-600 mb-3">발송 대상</h3>
@@ -721,9 +871,35 @@ export default function GradeInputPage() {
 
             {/* 발송 버튼 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
-              <div className="flex justify-between text-sm mb-4">
-                <span className="text-gray-500 font-bold">발송 가능</span>
-                <span className="font-black text-indigo-600">{validSendPreviews.length}건</span>
+              <div className="space-y-1.5 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-bold">발송 가능</span>
+                  <span className="font-black text-indigo-600">{validSendPreviews.length}건</span>
+                </div>
+                {validSendPreviews.length > 0 && (smsPricePerUnit !== null || lmsPricePerUnit !== null) && (
+                  <>
+                    <div className="border-t border-gray-100 pt-1.5">
+                      {sendConBreakdown.smsCount > 0 && smsPricePerUnit !== null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400 font-bold">SMS × {sendConBreakdown.smsCount}건</span>
+                          <span className="font-black text-yellow-600">{(sendConBreakdown.smsCount * smsPricePerUnit).toLocaleString()} C</span>
+                        </div>
+                      )}
+                      {sendConBreakdown.lmsCount > 0 && lmsPricePerUnit !== null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-400 font-bold">LMS × {sendConBreakdown.lmsCount}건</span>
+                          <span className="font-black text-yellow-600">{(sendConBreakdown.lmsCount * lmsPricePerUnit).toLocaleString()} C</span>
+                        </div>
+                      )}
+                      {sendConBreakdown.total !== null && (
+                        <div className="flex justify-between text-sm mt-1">
+                          <span className="font-black text-gray-700">합계</span>
+                          <span className="font-black text-yellow-500 text-base">{sendConBreakdown.total.toLocaleString()} C</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
               <button onClick={() => setSendShowConfirmModal(true)}
                 disabled={sendIsSending || validSendPreviews.length === 0}
@@ -811,6 +987,27 @@ export default function GradeInputPage() {
                   {noPhoneCount > 0 && <span className="text-red-400 ml-2">({noPhoneCount}명 번호없음 제외)</span>}
                 </p>
               </div>
+              {sendConBreakdown.total !== null && sendConBreakdown.total > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-1">
+                  <p className="text-xs font-black text-yellow-700">⭐ CON 차감 안내</p>
+                  {sendConBreakdown.smsCount > 0 && smsPricePerUnit !== null && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-yellow-700 font-bold">SMS × {sendConBreakdown.smsCount}건</span>
+                      <span className="font-black text-yellow-800">{(sendConBreakdown.smsCount * smsPricePerUnit).toLocaleString()} C</span>
+                    </div>
+                  )}
+                  {sendConBreakdown.lmsCount > 0 && lmsPricePerUnit !== null && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-yellow-700 font-bold">LMS × {sendConBreakdown.lmsCount}건</span>
+                      <span className="font-black text-yellow-800">{(sendConBreakdown.lmsCount * lmsPricePerUnit).toLocaleString()} C</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm border-t border-yellow-200 pt-1">
+                    <span className="font-black text-yellow-800">합계</span>
+                    <span className="font-black text-yellow-900 text-base">{sendConBreakdown.total.toLocaleString()} CON 차감 예정</span>
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-black text-gray-400 mb-2">수신자별 메시지</p>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
