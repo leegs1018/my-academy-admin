@@ -32,7 +32,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const VALID_TYPES = new Set(Object.keys(TYPE_LABELS));
 
-function buildExamPrompt(text: string, questionTypes: string[], difficulty: 'b1' | 'b2' | 'c1' | 'c2' = 'c2'): string {
+function buildExamPrompt(text: string, questionTypes: string[], difficulty: 'b1' | 'b2' | 'c1' | 'c2' = 'c2', targetAnswer?: number): string {
   const typeRules: Record<string, string> = 
   {
   common_principles: `
@@ -563,7 +563,7 @@ STEP 3. 나머지 4개 distractor가 실제로 모두 맞는가?
 [KICE 실전 낱말 쓰임 설계 원칙 — PDF 분석 기반]
 - 오류 단어는 반드시 정답 단어의 의미상 반의어 또는 논리적 반대어여야 함
   · 예: disrupt → reinforce / separate → combined / declining → increasing / less → more / uniformly → variably
-- 오류 위치는 ②③ 중앙 위치를 우선으로 배치할 것 — ①과 ⑤ 위치는 가장 눈에 띄므로 가능하면 피할 것
+- 오류 위치는 ①~⑤ 중 고르게 배치할 것 — 특정 번호에 편중되지 않도록 한다
 - 오류 단어는 LOCAL 문장 안에서는 자연스럽게 읽히지만 GLOBAL 단락 논리와 충돌하게 설계할 것
   · 예: "emotion can reinforce this understanding" → 문장 자체는 자연스럽지만 전체 글에서 emotion은 이해를 방해함
 - 4개 정답 단어는 원문 단어 그대로 복사 금지 — 반드시 동의어·상위어·paraphrase로 교체할 것
@@ -931,7 +931,10 @@ ${selectedRules}
 - flow 유형만: choices text 필드에 "①"~"⑤" 기호 단독 사용 허용.
 - 그 외 모든 유형(topic_title, fill_blank, phrase_meaning, summary, vocab_blank): choices text 필드에 반드시 완전한 영어 명사구/절/문장을 작성할 것. ①②③④⑤ 기호만 있는 선지 절대 금지.
 
-반드시 요청된 유형 순서대로 questions 배열에 포함하라. 요청되지 않은 유형은 생성하지 마라.`;
+반드시 요청된 유형 순서대로 questions 배열에 포함하라. 요청되지 않은 유형은 생성하지 마라.${targetAnswer != null ? `
+
+[정답 위치 지정 — 절대 준수]
+이번 문제의 정답(answer) 번호는 반드시 ${targetAnswer}번이어야 한다. 다른 번호는 정답이 될 수 없다.` : ''}`;
 }
 
 function extractJson(text: string): string {
@@ -995,13 +998,14 @@ export async function POST(request: Request) {
     // 유형별 개별 생성 + 검증 (병렬 실행으로 토큰 한계 우회)
     const generateForType = async (questionType: string): Promise<ExamQuestion | null> => {
       const MAX_RETRIES = 3;
+      const targetAnswer = Math.floor(Math.random() * 5) + 1;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         let q: ExamQuestion | undefined;
         try {
           const response = await client.chat.completions.create({
             model: 'gpt-4o',
             max_tokens: 4000,
-            messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty) }],
+            messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }],
           });
           const rawText = response.choices[0]?.message?.content ?? '';
           const parsed = JSON.parse(extractJson(rawText)) as { questions: ExamQuestion[] };

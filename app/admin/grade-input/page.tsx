@@ -369,6 +369,8 @@ export default function GradeInputPage() {
       setGradeTemplates(prev => [data, ...prev]);
       setNewGradeTemplateName('');
       setShowSaveGradeTemplate(false);
+    } else {
+      alert(`저장 실패: ${error?.message || '오류'}\n\nSupabase에서 grade_message_templates 테이블을 먼저 생성해주세요.`);
     }
   };
 
@@ -729,19 +731,6 @@ export default function GradeInputPage() {
           {/* 오른쪽 (1/3) */}
           <div className="space-y-4">
 
-            {/* 점수 형식 */}
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
-              <h3 className="text-sm font-black text-gray-600 mb-3">점수 표시 형식</h3>
-              <label className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${sendShowMaxScore ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100 hover:border-gray-200'}`}>
-                <input type="checkbox" checked={sendShowMaxScore} onChange={e => setSendShowMaxScore(e.target.checked)}
-                  className="w-4 h-4 accent-indigo-600 cursor-pointer" />
-                <div>
-                  <p className="text-sm font-black text-gray-700">점수/만점 형식으로 발송</p>
-                  <p className="text-[10px] text-gray-400">{sendShowMaxScore ? '예) 영어: 80/100점' : '예) 영어: 80점'}</p>
-                </div>
-              </label>
-            </div>
-
             {/* 메시지 템플릿 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
               <h3 className="text-sm font-black text-gray-600 mb-3">메시지 템플릿</h3>
@@ -804,6 +793,19 @@ export default function GradeInputPage() {
               )}
             </div>
 
+            {/* 점수 형식 */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-black text-gray-600 mb-3">점수 표시 형식</h3>
+              <label className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${sendShowMaxScore ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                <input type="checkbox" checked={sendShowMaxScore} onChange={e => setSendShowMaxScore(e.target.checked)}
+                  className="w-4 h-4 accent-indigo-600 cursor-pointer" />
+                <div>
+                  <p className="text-sm font-black text-gray-700">점수/만점 형식으로 발송</p>
+                  <p className="text-[10px] text-gray-400">{sendShowMaxScore ? '예) 영어: 80/100점' : '예) 영어: 80점'}</p>
+                </div>
+              </label>
+            </div>
+
             {/* 수신자 유형 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
               <h3 className="text-sm font-black text-gray-600 mb-3">발송 대상</h3>
@@ -850,18 +852,18 @@ export default function GradeInputPage() {
                       <div key={p.studentId} className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black text-indigo-600">{p.studentName}</span>
-                            <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${isLMS ? 'bg-orange-100 text-orange-500' : 'bg-green-100 text-green-600'}`}>
+                            <span className="text-base font-black text-indigo-600">{p.studentName}</span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-xs font-black ${isLMS ? 'bg-orange-100 text-orange-500' : 'bg-green-100 text-green-600'}`}>
                               {isLMS ? 'LMS' : 'SMS'}
                             </span>
                           </div>
-                          <span className="text-[9px] text-gray-400 font-bold">
+                          <span className="text-xs text-gray-400 font-bold">
                             {sendRecipientType === 'parent' ? p.parentPhone :
                              sendRecipientType === 'student' ? p.studentPhone :
                              [p.parentPhone, p.studentPhone].filter(Boolean).join(' / ')}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-700 font-bold whitespace-pre-wrap leading-relaxed">{p.message}</p>
+                        <p className="text-base text-gray-700 font-bold whitespace-pre-wrap leading-relaxed">{p.message}</p>
                       </div>
                     );
                   })}
@@ -1014,14 +1016,14 @@ export default function GradeInputPage() {
                   {validSendPreviews.map(p => (
                     <div key={p.studentId} className="bg-gray-50 rounded-2xl p-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-black text-indigo-600">{p.studentName}</span>
-                        <span className="text-[9px] text-gray-400 font-bold">
+                        <span className="text-base font-black text-indigo-600">{p.studentName}</span>
+                        <span className="text-xs text-gray-400 font-bold">
                           {sendRecipientType === 'parent' ? p.parentPhone :
                            sendRecipientType === 'student' ? p.studentPhone :
                            [p.parentPhone, p.studentPhone].filter(Boolean).join(' / ')}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-700 font-bold whitespace-pre-wrap">{p.message}</p>
+                      <p className="text-base text-gray-700 font-bold whitespace-pre-wrap">{p.message}</p>
                     </div>
                   ))}
                 </div>

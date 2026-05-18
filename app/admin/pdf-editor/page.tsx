@@ -201,6 +201,7 @@ export default function PdfEditorPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [editMode, setEditMode] = useState(false);
   const [editedResult, setEditedResult] = useState<GeneratedMaterials | null>(null);
@@ -461,6 +462,11 @@ export default function PdfEditorPage() {
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true); setError(null); setResult(null); setShowAnswerKey(false);
 
     const msgs = ['AI가 지문을 읽고 있어요... 🤖', '문제를 생성하고 있어요... ✍️', '어휘 표를 만들고 있어요... 📚', '거의 완성됐어요! 잠시만요... ✨'];
@@ -474,6 +480,7 @@ export default function PdfEditorPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: textToSend, difficulty, academy_id: user?.id }),
+        signal: controller.signal,
       });
       const rawText = await res.text();
       let json: { data?: GeneratedMaterials; error?: string };
@@ -490,6 +497,7 @@ export default function PdfEditorPage() {
       // DOM 렌더링 대기 후 자동 저장
       setTimeout(() => autoSavePdf(generated, textToSend, difficulty, pdfTitle), 800);
     } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
       if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);
@@ -652,7 +660,7 @@ export default function PdfEditorPage() {
                 <p className="text-sm font-bold text-slate-500 mb-3">영어 지문을 복사(Ctrl+C)한 뒤 아래에 붙여넣기(Ctrl+V) 해주세요</p>
                 <textarea
                   value={manualText}
-                  onChange={(e) => { setManualText(e.target.value); setResult(null); }}
+                  onChange={(e) => { setManualText(e.target.value); setResult(null); abortControllerRef.current?.abort(); }}
                   placeholder="여기에 영어 지문을 붙여넣어 주세요..."
                   rows={12}
                   className="w-full p-5 border-2 border-slate-200 rounded-2xl font-mono text-sm text-slate-700 resize-y focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300"
@@ -759,7 +767,7 @@ export default function PdfEditorPage() {
                 const d = editedResult ?? result;
                 return (
                   <>
-              {/* ── 1페이지: pdfTitle + 00 원문 + 01 변형지문 + 02 한글요약 ── */}
+              {/* ── 1페이지: 00 원문 + 01 변형지문 + 02 T/F 문제 ── */}
               <div id="pdf-page-1" className="space-y-3 mb-4">
 
                 {/* 제목 */}
@@ -798,8 +806,73 @@ export default function PdfEditorPage() {
                   )}
                 </SectionCard>
 
-                {/* 02 한글 요약 */}
-                <SectionCard number="02" title="한글 요약"
+                {/* 02 T/F 문제 */}
+                <SectionCard number="02" title="T/F 문제 10개"
+                  color="bg-violet-500" onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
+                  <div className="space-y-1 mb-2">
+                    {d.tf_questions.map((q) => (
+                      <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-violet-50 transition-colors">
+                        <span className="font-black text-violet-600 w-7 shrink-0 text-base">{q.number}.</span>
+                        {editMode ? (
+                          <textarea
+                            className="flex-1 border border-violet-200 rounded p-1 font-bold text-slate-700 text-lg resize-none focus:outline-none focus:border-violet-400 min-h-[36px]"
+                            value={q.statement}
+                            onChange={(e) => setEditedResult(prev => {
+                              if (!prev) return prev;
+                              const tf = [...prev.tf_questions];
+                              tf[q.number - 1] = { ...tf[q.number - 1], statement: e.target.value };
+                              return { ...prev, tf_questions: tf };
+                            })}
+                          />
+                        ) : (
+                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-lg">{q.statement}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pdf-answer-area border-t border-violet-100 pt-3">
+                    <button onClick={() => setShowAnswerKey(!showAnswerKey)}
+                      className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors text-sm">
+                      <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
+                      해설지 {showAnswerKey ? '닫기' : '보기'}
+                    </button>
+                    {showAnswerKey && (
+                      <div className="mt-3 space-y-3">
+                        <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
+                          <div className="flex justify-between mb-2">
+                            <span className="font-black text-violet-700 text-sm">정답</span>
+                            <button onClick={() => copy(d.answer_key, 'answer_key')}
+                              className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
+                              {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
+                            </button>
+                          </div>
+                          <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
+                        </div>
+                        {d.tf_questions.some(q => q.explanation) && (
+                          <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
+                            <span className="font-black text-violet-700 block mb-2 text-sm">해설</span>
+                            <div className="space-y-2">
+                              {d.tf_questions.map(q => q.explanation && (
+                                <div key={q.number} className="flex gap-2 text-sm">
+                                  <span className="font-black text-violet-600 shrink-0 w-12">{q.number}. {q.answer}</span>
+                                  <p className="text-slate-600 font-bold leading-relaxed flex-1 min-w-0">{q.explanation}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </SectionCard>
+
+              </div>
+
+              {/* ── 2페이지: 03 한글요약 + 04 영어제목 + 05 1문장요약 + 06 어휘 + 로고 ── */}
+              <div id="pdf-page-2" className="space-y-3">
+
+                {/* 03 한글 요약 */}
+                <SectionCard number="03" title="한글 요약"
                   color="bg-indigo-500"
                   onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
                   copied={copiedSection === 'korean'}>
@@ -835,8 +908,8 @@ export default function PdfEditorPage() {
                   </div>
                 </SectionCard>
 
-                {/* 03 영어 제목 */}
-                <SectionCard number="03" title="영어 제목 3가지"
+                {/* 04 영어 제목 */}
+                <SectionCard number="04" title="영어 제목 3가지"
                   color="bg-amber-500"
                   onCopy={() => copy(d.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')}
                   copied={copiedSection === 'titles'}>
@@ -869,13 +942,8 @@ export default function PdfEditorPage() {
                   </div>
                 </SectionCard>
 
-              </div>
-
-              {/* ── 2페이지: 04 1문장요약 + 05 T/F + 06 관련어휘 + 로고 ── */}
-              <div id="pdf-page-2" className="space-y-3">
-
-                {/* 04 1문장 영어 요약 */}
-                <SectionCard number="04" title="1문장 영어 요약 3가지"
+                {/* 05 1문장 영어 요약 */}
+                <SectionCard number="05" title="1문장 영어 요약 3가지"
                   color="bg-rose-500" onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                   <div className="space-y-2">
                     {d.one_sentence_summaries.map((s, i) => (
@@ -916,66 +984,6 @@ export default function PdfEditorPage() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </SectionCard>
-
-                {/* 05 T/F 문제 */}
-                <SectionCard number="05" title="T/F 문제 10개"
-                  color="bg-violet-500" onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
-                  <div className="space-y-1 mb-2">
-                    {d.tf_questions.map((q) => (
-                      <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-violet-50 transition-colors">
-                        <span className="font-black text-violet-600 w-7 shrink-0 text-base">{q.number}.</span>
-                        {editMode ? (
-                          <textarea
-                            className="flex-1 border border-violet-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-violet-400 min-h-[36px]"
-                            value={q.statement}
-                            onChange={(e) => setEditedResult(prev => {
-                              if (!prev) return prev;
-                              const tf = [...prev.tf_questions];
-                              tf[q.number - 1] = { ...tf[q.number - 1], statement: e.target.value };
-                              return { ...prev, tf_questions: tf };
-                            })}
-                          />
-                        ) : (
-                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-base">{q.statement}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="pdf-answer-area border-t border-violet-100 pt-3">
-                    <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                      className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors text-sm">
-                      <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
-                      해설지 {showAnswerKey ? '닫기' : '보기'}
-                    </button>
-                    {showAnswerKey && (
-                      <div className="mt-3 space-y-3">
-                        <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
-                          <div className="flex justify-between mb-2">
-                            <span className="font-black text-violet-700 text-sm">정답</span>
-                            <button onClick={() => copy(d.answer_key, 'answer_key')}
-                              className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
-                              {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
-                            </button>
-                          </div>
-                          <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
-                        </div>
-                        {d.tf_questions.some(q => q.explanation) && (
-                          <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
-                            <span className="font-black text-violet-700 block mb-2 text-sm">해설</span>
-                            <div className="space-y-2">
-                              {d.tf_questions.map(q => q.explanation && (
-                                <div key={q.number} className="flex gap-2 text-sm">
-                                  <span className="font-black text-violet-600 shrink-0 w-12">{q.number}. {q.answer}</span>
-                                  <p className="text-slate-600 font-bold leading-relaxed flex-1 min-w-0">{q.explanation}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </SectionCard>
 
