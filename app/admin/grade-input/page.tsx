@@ -986,6 +986,8 @@ export default function GradeInputPage() {
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">발송일시</th>
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">내용 미리보기</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신 유형</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">SMS/LMS</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">사용 CON</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신자</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">성공</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">실패</th>
@@ -999,6 +1001,9 @@ export default function GradeInputPage() {
                     const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
                     const typeLabel = log.recipient_type === 'kiosk' ? '키오스크' : log.recipient_type === 'parent' ? '보호자' : log.recipient_type === 'student' ? '학생' : '전체';
                     const typeCls = log.recipient_type === 'kiosk' ? 'bg-emerald-100 text-emerald-600' : log.recipient_type === 'parent' ? 'bg-blue-100 text-blue-600' : log.recipient_type === 'student' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600';
+                    const msgType = log.message ? (getKoreanByteLength(log.message) > 90 ? 'LMS' : 'SMS') : 'SMS';
+                    const pricePerUnit = msgType === 'LMS' ? lmsPricePerUnit : smsPricePerUnit;
+                    const conUsed = pricePerUnit !== null ? pricePerUnit * (log.success_count || 0) : null;
                     return (
                       <tr key={log.id} className={`border-b border-gray-50 transition-colors ${selectedGradeLogIds.has(log.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
                         <td className="py-3 px-4">
@@ -1011,6 +1016,14 @@ export default function GradeInputPage() {
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${typeCls}`}>{typeLabel}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${msgType === 'LMS' ? 'bg-orange-100 text-orange-500' : 'bg-green-100 text-green-600'}`}>
+                            {msgType}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-black text-yellow-600 text-xs">
+                          {conUsed !== null ? `${conUsed.toLocaleString()} C` : '-'}
                         </td>
                         <td className="py-3 px-4 text-center font-black text-gray-600">{log.total_count}</td>
                         <td className="py-3 px-4 text-center font-black text-green-500">{log.success_count}</td>

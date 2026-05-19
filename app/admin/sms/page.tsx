@@ -11,6 +11,16 @@ function getMessageType(text: string) {
   return text.length <= SMS_LIMIT ? 'SMS' : 'LMS';
 }
 
+function getKoreanByteLength(str: string): number {
+  let bytes = 0;
+  for (const ch of str) bytes += ch.charCodeAt(0) > 127 ? 2 : 1;
+  return bytes;
+}
+
+function getMsgType(text: string): 'SMS' | 'LMS' {
+  return getKoreanByteLength(text) > 90 ? 'LMS' : 'SMS';
+}
+
 export default function SMSPage() {
   const [userId, setUserId] = useState('');
 
@@ -673,6 +683,8 @@ export default function SMSPage() {
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">발송일시</th>
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">내용 미리보기</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신 유형</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">SMS/LMS</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">사용 CON</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신자</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">성공</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">실패</th>
@@ -686,6 +698,9 @@ export default function SMSPage() {
                     const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
                     const typeLabel = log.recipient_type === 'kiosk' ? '키오스크' : log.recipient_type === 'parent' ? '보호자' : '학생';
                     const typeCls = log.recipient_type === 'kiosk' ? 'bg-emerald-100 text-emerald-600' : log.recipient_type === 'parent' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600';
+                    const msgType = log.message ? getMsgType(log.message) : 'SMS';
+                    const pricePerUnit = msgType === 'LMS' ? lmsPricePerUnit : smsPricePerUnit;
+                    const conUsed = pricePerUnit !== null ? pricePerUnit * (log.success_count || 0) : null;
                     return (
                       <tr key={log.id} className={`border-b border-gray-50 transition-colors ${selectedLogIds.has(log.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
                         <td className="py-3 px-4">
@@ -704,6 +719,14 @@ export default function SMSPage() {
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${typeCls}`}>
                             {typeLabel}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${msgType === 'LMS' ? 'bg-orange-100 text-orange-500' : 'bg-green-100 text-green-600'}`}>
+                            {msgType}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-black text-yellow-600 text-xs">
+                          {conUsed !== null ? `${conUsed.toLocaleString()} C` : '-'}
                         </td>
                         <td className="py-3 px-4 text-center font-black text-gray-600">{log.total_count}</td>
                         <td className="py-3 px-4 text-center font-black text-green-500">{log.success_count}</td>
