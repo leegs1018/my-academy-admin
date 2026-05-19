@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 type Step = 'academy-code' | 'phone-input' | 'student-select' | 'action' | 'success' | 'error';
 
@@ -95,25 +95,40 @@ export default function KioskPage() {
   const [countdown, setCountdown] = useState(5);
   const [idleTimer, setIdleTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const voiceEnabledRef = useRef(true); // await 이후에도 최신 값 참조
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
-  // localStorage에서 음성 설정 로드
+  // localStorage에서 음성 설정 로드 + 음성 목록 미리 로드
   useEffect(() => {
     const saved = localStorage.getItem('kiosk_voice_enabled');
-    if (saved !== null) setVoiceEnabled(saved === 'true');
+    const enabled = saved === null ? true : saved === 'true';
+    setVoiceEnabled(enabled);
+    voiceEnabledRef.current = enabled;
+
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const loadVoices = () => { voicesRef.current = window.speechSynthesis.getVoices(); };
+    loadVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
   }, []);
 
   const speak = (text: string) => {
-    if (!voiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!voiceEnabledRef.current) return;
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
+    const korVoice = voicesRef.current.find(v => v.lang.startsWith('ko'));
+    if (korVoice) utter.voice = korVoice;
     utter.lang = 'ko-KR';
-    utter.rate = 0.95;
+    utter.rate = 0.9;
+    utter.volume = 1;
     window.speechSynthesis.speak(utter);
   };
 
   const toggleVoice = () => {
     const next = !voiceEnabled;
     setVoiceEnabled(next);
+    voiceEnabledRef.current = next;
     localStorage.setItem('kiosk_voice_enabled', String(next));
   };
 
@@ -236,6 +251,21 @@ export default function KioskPage() {
     if (!selectedStudent) return;
     setLoading(true);
     setErrorMsg('');
+
+    // user gesture 컨텍스트 내(await 이전)에서 utterance 미리 생성
+    let pendingUtter: SpeechSynthesisUtterance | null = null;
+    if (voiceEnabledRef.current && typeof window !== 'undefined' && window.speechSynthesis) {
+      const text = action === '등원'
+        ? `${selectedStudent.name} 학생, 등원하였습니다.`
+        : `${selectedStudent.name} 학생, 하원하였습니다.`;
+      pendingUtter = new SpeechSynthesisUtterance(text);
+      const korVoice = voicesRef.current.find(v => v.lang.startsWith('ko'));
+      if (korVoice) pendingUtter.voice = korVoice;
+      pendingUtter.lang = 'ko-KR';
+      pendingUtter.rate = 0.9;
+      pendingUtter.volume = 1;
+    }
+
     try {
       const res = await fetch('/api/kiosk/attend', {
         method: 'POST',
@@ -252,9 +282,10 @@ export default function KioskPage() {
         setErrorMsg(data.error || '처리 중 오류가 발생했습니다.');
       } else {
         setSelectedStudent((prev) => prev ? { ...prev, today_status: action } : prev);
-        speak(action === '등원'
-          ? `${selectedStudent.name} 학생, 등원하였습니다.`
-          : `${selectedStudent.name} 학생, 하원하였습니다.`);
+        if (pendingUtter) {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(pendingUtter);
+        }
         setStep('success');
       }
     } catch {
@@ -289,7 +320,7 @@ export default function KioskPage() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 flex flex-col items-center justify-center p-6 select-none">
       {/* 음성 ON/OFF 버튼 */}
       <button onClick={toggleVoice}
-        className="fixed top-4 right-4 z-50 w-11 h-11 rounded-full bg-white/70 backdrop-blur-sm shadow text-xl flex items-center justify-center hover:bg-white transition-all"
+        className="fixed top-4 right-4 z-50 w-12 h-12 rounded-full bg-white border-2 border-slate-200 shadow-md text-2xl flex items-center justify-center active:scale-95 transition-all"
         title={voiceEnabled ? '음성 끄기' : '음성 켜기'}>
         {voiceEnabled ? '🔊' : '🔇'}
       </button>
