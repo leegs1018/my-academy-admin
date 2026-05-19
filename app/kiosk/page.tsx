@@ -94,6 +94,28 @@ export default function KioskPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [countdown, setCountdown] = useState(5);
   const [idleTimer, setIdleTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
+  // localStorage에서 음성 설정 로드
+  useEffect(() => {
+    const saved = localStorage.getItem('kiosk_voice_enabled');
+    if (saved !== null) setVoiceEnabled(saved === 'true');
+  }, []);
+
+  const speak = (text: string) => {
+    if (!voiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ko-KR';
+    utter.rate = 0.95;
+    window.speechSynthesis.speak(utter);
+  };
+
+  const toggleVoice = () => {
+    const next = !voiceEnabled;
+    setVoiceEnabled(next);
+    localStorage.setItem('kiosk_voice_enabled', String(next));
+  };
 
   // 쿠키에서 학원 정보 로드
   useEffect(() => {
@@ -230,6 +252,9 @@ export default function KioskPage() {
         setErrorMsg(data.error || '처리 중 오류가 발생했습니다.');
       } else {
         setSelectedStudent((prev) => prev ? { ...prev, today_status: action } : prev);
+        speak(action === '등원'
+          ? `${selectedStudent.name} 학생, 등원하였습니다.`
+          : `${selectedStudent.name} 학생, 하원하였습니다.`);
         setStep('success');
       }
     } catch {
@@ -262,6 +287,12 @@ export default function KioskPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 flex flex-col items-center justify-center p-6 select-none">
+      {/* 음성 ON/OFF 버튼 */}
+      <button onClick={toggleVoice}
+        className="fixed top-4 right-4 z-50 w-11 h-11 rounded-full bg-white/70 backdrop-blur-sm shadow text-xl flex items-center justify-center hover:bg-white transition-all"
+        title={voiceEnabled ? '음성 끄기' : '음성 켜기'}>
+        {voiceEnabled ? '🔊' : '🔇'}
+      </button>
       {/* 헤더 */}
       <div className="text-center mb-8">
         {academyName ? (

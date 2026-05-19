@@ -9,11 +9,21 @@ const formatShortDate = (dateStr: string) => {
   return parts.length === 3 ? `${parts[1]}/${parts[2]}` : dateStr;
 };
 
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const formatSendDate = (dateStr: string) => {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
-  return parts.length === 3 ? `${parseInt(parts[1])}월 ${parseInt(parts[2])}일` : dateStr;
+  if (parts.length !== 3) return dateStr;
+  const d = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`);
+  const day = DAY_LABELS[d.getDay()];
+  return `${parseInt(parts[1])}월 ${parseInt(parts[2])}일(${day})`;
 };
+
+function getKoreanByteLength(str: string): number {
+  let bytes = 0;
+  for (const ch of str) bytes += ch.charCodeAt(0) > 127 ? 2 : 1;
+  return bytes;
+}
 
 type ActiveTab = 'input' | 'send' | 'logs';
 
@@ -65,6 +75,8 @@ export default function GradeInputPage() {
   // ── 탭3: 발송 이력 ────────────────────────────────
   const [gradeLogs, setGradeLogs] = useState<any[]>([]);
   const [selectedGradeLog, setSelectedGradeLog] = useState<any>(null);
+  const [selectedGradeLogIds, setSelectedGradeLogIds] = useState<Set<string>>(new Set());
+  const [isDeletingGradeLogs, setIsDeletingGradeLogs] = useState(false);
 
   // ── 성적 발송 템플릿 ──────────────────────────────
   const [gradeTemplates, setGradeTemplates] = useState<GradeTemplate[]>([]);
@@ -383,6 +395,35 @@ export default function GradeInputPage() {
     setGradeHeaderTemplate(DEFAULT_GRADE_HEADER);
   };
 
+  // ── 탭3: 발송 이력 핸들러 ────────────────────────
+  const toggleSelectGradeLog = (id: string) => {
+    setSelectedGradeLogIds(prev => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  };
+  const allGradeLogsSelected = gradeLogs.length > 0 && gradeLogs.every(l => selectedGradeLogIds.has(l.id));
+  const toggleSelectAllGradeLogs = () => {
+    if (allGradeLogsSelected) setSelectedGradeLogIds(new Set());
+    else setSelectedGradeLogIds(new Set(gradeLogs.map(l => l.id)));
+  };
+  const handleDeleteGradeLogs = async () => {
+    const ids = [...selectedGradeLogIds];
+    if (!confirm(`선택한 ${ids.length}건을 삭제할까요?`)) return;
+    setIsDeletingGradeLogs(true);
+    await supabase.from('sms_logs').delete().in('id', ids);
+    setGradeLogs(prev => prev.filter(l => !selectedGradeLogIds.has(l.id)));
+    setSelectedGradeLogIds(new Set());
+    setIsDeletingGradeLogs(false);
+  };
+  const handleDeleteSingleGradeLog = async (id: string) => {
+    if (!confirm('이 발송 이력을 삭제할까요?')) return;
+    await supabase.from('sms_logs').delete().eq('id', id);
+    setGradeLogs(prev => prev.filter(l => l.id !== id));
+    setSelectedGradeLogIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+  };
+
   // ── 탭2 헬퍼 함수들 ───────────────────────────────
   const toggleSendStudent = (id: string) => {
     const next = new Set(sendSelectedStudentIds);
@@ -415,7 +456,7 @@ export default function GradeInputPage() {
     let smsCount = 0;
     let lmsCount = 0;
     for (const p of validSendPreviews) {
-      const isLMS = p.message && p.message.length > 80;
+      const isLMS = p.message && getKoreanByteLength(p.message) > 90;
       let phones = 0;
       if ((sendRecipientType === 'parent' || sendRecipientType === 'both') && p.parentPhone) phones++;
       if ((sendRecipientType === 'student' || sendRecipientType === 'both') && p.studentPhone) phones++;
@@ -847,7 +888,7 @@ export default function GradeInputPage() {
               ) : (
                 <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
                   {validSendPreviews.map(p => {
-                    const isLMS = p.message && p.message.length > 80;
+                    const isLMS = p.message && getKoreanByteLength(p.message) > 90;
                     return (
                       <div key={p.studentId} className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
                         <div className="flex items-center justify-between mb-1">
@@ -916,9 +957,17 @@ export default function GradeInputPage() {
       {/* ── 탭3: 발송 이력 ────────────────────────────── */}
       {activeTab === 'logs' && (
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-lg font-black text-gray-700">발송 이력</h2>
-            <p className="text-xs text-gray-400 mt-0.5">성적 SMS 발송 기록</p>
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-gray-700">발송 이력</h2>
+              <p className="text-xs text-gray-400 mt-0.5">성적 SMS 발송 기록</p>
+            </div>
+            {selectedGradeLogIds.size > 0 && (
+              <button onClick={handleDeleteGradeLogs} disabled={isDeletingGradeLogs}
+                className="px-4 py-2 text-xs font-black text-red-500 bg-red-50 hover:bg-red-100 border-2 border-red-200 rounded-xl transition-all disabled:opacity-50">
+                {isDeletingGradeLogs ? '삭제 중...' : `선택 ${selectedGradeLogIds.size}건 삭제`}
+              </button>
+            )}
           </div>
           {gradeLogs.length === 0 ? (
             <div className="py-20 text-center">
@@ -930,6 +979,10 @@ export default function GradeInputPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="py-3 px-4 w-10">
+                      <input type="checkbox" checked={allGradeLogsSelected} onChange={toggleSelectAllGradeLogs}
+                        className="w-4 h-4 accent-indigo-600 cursor-pointer" />
+                    </th>
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">발송일시</th>
                     <th className="py-3 px-4 text-left text-xs font-black text-gray-400">내용 미리보기</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신 유형</th>
@@ -937,16 +990,21 @@ export default function GradeInputPage() {
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">성공</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">실패</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">상세</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
                   {gradeLogs.map(log => {
                     const date = new Date(log.created_at);
                     const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                    const typeLabel = log.recipient_type === 'parent' ? '보호자' : log.recipient_type === 'student' ? '학생' : '전체';
-                    const typeCls = log.recipient_type === 'parent' ? 'bg-blue-100 text-blue-600' : log.recipient_type === 'student' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600';
+                    const typeLabel = log.recipient_type === 'kiosk' ? '키오스크' : log.recipient_type === 'parent' ? '보호자' : log.recipient_type === 'student' ? '학생' : '전체';
+                    const typeCls = log.recipient_type === 'kiosk' ? 'bg-emerald-100 text-emerald-600' : log.recipient_type === 'parent' ? 'bg-blue-100 text-blue-600' : log.recipient_type === 'student' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600';
                     return (
-                      <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <tr key={log.id} className={`border-b border-gray-50 transition-colors ${selectedGradeLogIds.has(log.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                        <td className="py-3 px-4">
+                          <input type="checkbox" checked={selectedGradeLogIds.has(log.id)} onChange={() => toggleSelectGradeLog(log.id)}
+                            className="w-4 h-4 accent-indigo-600 cursor-pointer" />
+                        </td>
                         <td className="py-3 px-4 text-xs font-bold text-gray-500 whitespace-nowrap">{dateStr}</td>
                         <td className="py-3 px-4 max-w-[200px]">
                           <span className="text-sm text-gray-700 font-bold truncate block">{log.message}</span>
@@ -961,6 +1019,12 @@ export default function GradeInputPage() {
                           <button onClick={() => setSelectedGradeLog(log)}
                             className="px-3 py-1.5 text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all">
                             상세
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button onClick={() => handleDeleteSingleGradeLog(log.id)}
+                            className="px-3 py-1.5 text-xs font-black text-red-500 bg-red-50 hover:bg-red-100 rounded-xl transition-all">
+                            삭제
                           </button>
                         </td>
                       </tr>

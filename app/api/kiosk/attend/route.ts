@@ -7,6 +7,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 async function sendSMS(to: string, studentName: string, status: string, attendanceDate: string, academyName: string): Promise<{ ok: boolean; error?: string }> {
   const apiKey = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
@@ -143,6 +148,18 @@ export async function POST(req: Request) {
   if (student.parent_phone) {
     smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
     if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
+
+    // 발송 이력 기록
+    const smsMessage = `[${academy_name}] ${student.name} 학생이 ${today.slice(5, 7)}월 ${today.slice(8, 10)}일 수업에 ${action}하였습니다.`;
+    await supabaseAdmin.from('sms_logs').insert({
+      academy_id,
+      message: smsMessage,
+      recipient_type: 'kiosk',
+      recipients: [{ name: student.name, phone: student.parent_phone }],
+      total_count: 1,
+      success_count: smsResult.ok ? 1 : 0,
+      fail_count: smsResult.ok ? 0 : 1,
+    });
   }
 
   return NextResponse.json({

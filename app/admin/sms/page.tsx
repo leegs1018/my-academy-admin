@@ -264,6 +264,13 @@ export default function SMSPage() {
     setIsDeletingLogs(false);
   };
 
+  const handleDeleteSingleLog = async (id: string) => {
+    if (!confirm('이 발송 이력을 삭제할까요?')) return;
+    await supabase.from('sms_logs').delete().eq('id', id);
+    setLogs(prev => prev.filter(l => l.id !== id));
+    setSelectedLogIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+  };
+
   const messageType = getMessageType(message);
   const charCount = message.length;
 
@@ -670,12 +677,15 @@ export default function SMSPage() {
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">성공</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">실패</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">상세</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logs.map(log => {
                     const date = new Date(log.created_at);
                     const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                    const typeLabel = log.recipient_type === 'kiosk' ? '키오스크' : log.recipient_type === 'parent' ? '보호자' : '학생';
+                    const typeCls = log.recipient_type === 'kiosk' ? 'bg-emerald-100 text-emerald-600' : log.recipient_type === 'parent' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600';
                     return (
                       <tr key={log.id} className={`border-b border-gray-50 transition-colors ${selectedLogIds.has(log.id) ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
                         <td className="py-3 px-4">
@@ -691,8 +701,8 @@ export default function SMSPage() {
                           <span className="text-sm text-gray-700 font-bold truncate block">{log.message}</span>
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${log.recipient_type === 'parent' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
-                            {log.recipient_type === 'parent' ? '보호자' : '학생'}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${typeCls}`}>
+                            {typeLabel}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center font-black text-gray-600">{log.total_count}</td>
@@ -704,6 +714,14 @@ export default function SMSPage() {
                             className="px-3 py-1.5 text-xs font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all"
                           >
                             상세
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button
+                            onClick={() => handleDeleteSingleLog(log.id)}
+                            className="px-3 py-1.5 text-xs font-black text-red-500 bg-red-50 hover:bg-red-100 rounded-xl transition-all"
+                          >
+                            삭제
                           </button>
                         </td>
                       </tr>
