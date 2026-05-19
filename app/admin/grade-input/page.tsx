@@ -289,7 +289,7 @@ export default function GradeInputPage() {
       }
 
       const { data: studentData } = await supabase.from('students').select('*').eq('academy_id', userId).eq('class_name', targetClassName);
-      const { data: allGradeData } = await supabase.from('grades').select('*').eq('academy_id', userId).eq('category_id', catId);
+      const { data: allGradeData } = await supabase.from('grades').select('*').eq('academy_id', userId).eq('category_id', catId).eq('class_id', parseInt(classId));
 
       if (studentData) {
         const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
@@ -338,25 +338,43 @@ export default function GradeInputPage() {
     setLoading(true);
     const currentCat = dynamicCategories.find(c => c.id === selectedCategoryId);
     const catName = currentCat?.name || '과목';
-    const upsertGrades: any[] = [];
+
+    const newGrades: any[] = [];
+    const testNames: string[] = [];
     sessionDates.forEach((session, idx) => {
+      const tName = `[${catName}] ${selectedMonth}월 ${idx + 1}회차`;
+      testNames.push(tName);
       students.forEach(student => {
         const score = student.scores[idx];
-        upsertGrades.push({
+        newGrades.push({
           academy_id: userId,
           student_id: student.id,
           category_id: selectedCategoryId,
           class_id: parseInt(selectedClassId),
-          test_name: `[${catName}] ${selectedMonth}월 ${idx + 1}회차`,
+          test_name: tName,
           score: score === '' ? 0 : parseInt(score),
           test_date: session.fullDate,
           max_score: maxScore,
         });
       });
     });
+
     try {
-      const { error } = await supabase.from('grades').upsert(upsertGrades, { onConflict: 'student_id,category_id,test_name' });
-      if (error) throw error;
+      const studentIds = students.map(s => s.id);
+      if (studentIds.length > 0 && testNames.length > 0) {
+        const { error: delError } = await supabase
+          .from('grades')
+          .delete()
+          .eq('academy_id', userId)
+          .eq('category_id', selectedCategoryId)
+          .in('student_id', studentIds)
+          .in('test_name', testNames);
+        if (delError) throw delError;
+      }
+      if (newGrades.length > 0) {
+        const { error: insError } = await supabase.from('grades').insert(newGrades);
+        if (insError) throw insError;
+      }
       alert('성적이 성공적으로 저장되었습니다! ✅');
       fetchMaxScore(selectedCategoryId);
     } catch (err) { console.error(err); alert('저장 중 오류 발생'); }
