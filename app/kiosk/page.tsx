@@ -31,7 +31,7 @@ function setCookie(name: string, value: string, days = 365) {
 function Keypad({ onPress, onDelete, disabled }: { onPress: (n: string) => void; onDelete: () => void; disabled?: boolean }) {
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '←'];
   return (
-    <div className="grid grid-cols-3 gap-3 w-full max-w-xs mx-auto">
+    <div className="grid grid-cols-3 gap-4 w-full max-w-sm mx-auto">
       {keys.map((k, i) =>
         k === '' ? (
           <div key={i} />
@@ -40,7 +40,7 @@ function Keypad({ onPress, onDelete, disabled }: { onPress: (n: string) => void;
             key={i}
             onClick={onDelete}
             disabled={disabled}
-            className="h-16 bg-slate-200 rounded-2xl text-2xl font-bold text-slate-600 active:bg-slate-300 transition-colors disabled:opacity-40"
+            className="h-20 bg-slate-200 rounded-2xl text-2xl font-bold text-slate-600 active:bg-slate-300 transition-colors disabled:opacity-40"
           >
             ←
           </button>
@@ -49,7 +49,7 @@ function Keypad({ onPress, onDelete, disabled }: { onPress: (n: string) => void;
             key={i}
             onClick={() => onPress(k)}
             disabled={disabled}
-            className="h-16 bg-white border-2 border-slate-200 rounded-2xl text-2xl font-bold text-slate-800 active:bg-indigo-50 active:border-indigo-300 transition-colors disabled:opacity-40 shadow-sm"
+            className="h-20 bg-white border-2 border-slate-200 rounded-2xl text-2xl font-bold text-slate-800 active:bg-indigo-50 active:border-indigo-300 transition-colors disabled:opacity-40 shadow-sm"
           >
             {k}
           </button>
@@ -318,24 +318,25 @@ export default function KioskPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 flex flex-col items-center justify-center p-6 select-none">
-      {/* 음성 ON/OFF 버튼 */}
-      <button onClick={toggleVoice}
-        className="fixed top-4 right-4 z-50 w-12 h-12 rounded-full bg-white border-2 border-slate-200 shadow-md text-2xl flex items-center justify-center active:scale-95 transition-all"
-        title={voiceEnabled ? '음성 끄기' : '음성 켜기'}>
-        {voiceEnabled ? '🔊' : '🔇'}
-      </button>
-      {/* 헤더 */}
-      <div className="text-center mb-8">
-        {academyName ? (
-          <h1 className="text-3xl font-black text-indigo-600">{academyName}</h1>
-        ) : (
-          <h1 className="text-3xl font-black text-slate-700">클래스허브 출결</h1>
-        )}
-        <p className="text-slate-400 font-bold mt-1">{dateStr}</p>
+      {/* 헤더 + 음성 버튼 */}
+      <div className="w-full max-w-md flex items-center justify-center mb-8 relative">
+        <div className="text-center">
+          {academyName ? (
+            <h1 className="text-3xl font-black text-indigo-600">{academyName}</h1>
+          ) : (
+            <h1 className="text-3xl font-black text-slate-700">CON EDU 출결</h1>
+          )}
+          <p className="text-slate-400 font-bold mt-1">{dateStr}</p>
+        </div>
+        <button onClick={toggleVoice}
+          className="absolute right-0 w-11 h-11 rounded-full bg-white border-2 border-slate-200 shadow text-xl flex items-center justify-center active:scale-95 transition-all"
+          title={voiceEnabled ? '음성 끄기' : '음성 켜기'}>
+          {voiceEnabled ? '🔊' : '🔇'}
+        </button>
       </div>
 
       {/* 카드 */}
-      <div className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-100 p-8 border border-slate-100">
+      <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-100 p-8 border border-slate-100">
 
         {/* STEP 1: 학원 코드 입력 */}
         {step === 'academy-code' && (
