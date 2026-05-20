@@ -75,6 +75,7 @@ export default function GradeInputPage() {
   // ── 탭3: 발송 이력 ────────────────────────────────
   const [gradeLogs, setGradeLogs] = useState<any[]>([]);
   const [selectedGradeLog, setSelectedGradeLog] = useState<any>(null);
+  const [selectedGradeRecipient, setSelectedGradeRecipient] = useState<any>(null);
   const [selectedGradeLogIds, setSelectedGradeLogIds] = useState<Set<string>>(new Set());
   const [isDeletingGradeLogs, setIsDeletingGradeLogs] = useState(false);
 
@@ -524,11 +525,16 @@ export default function GradeInputPage() {
             }),
           });
           const result = await res.json();
-          if (result.results) allResults.push(...result.results);
+          if (result.results) {
+            allResults.push(...result.results.map((r: any) => ({
+              ...r,
+              message: preview.message,
+            })));
+          }
           totalSuccess += result.success || 0;
           totalFail += result.fail || 0;
         } catch {
-          allResults.push({ student_id: preview.studentId, name: preview.studentName, phone, status: 'fail', error: '발송 오류' });
+          allResults.push({ student_id: preview.studentId, name: preview.studentName, phone, status: 'fail', error: '발송 오류', message: preview.message });
           totalFail++;
         }
       }
@@ -1152,14 +1158,18 @@ export default function GradeInputPage() {
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-black text-gray-800">발송 상세</h3>
-                <button onClick={() => setSelectedGradeLog(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+                <button onClick={() => { setSelectedGradeLog(null); setSelectedGradeRecipient(null); }} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
               </div>
               <p className="text-xs text-gray-400 mt-1">{new Date(selectedGradeLog.created_at).toLocaleString('ko-KR')}</p>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               <div className="bg-gray-50 rounded-2xl p-4">
-                <p className="text-xs font-black text-gray-400 mb-1">메시지 내용</p>
-                <p className="text-sm text-gray-700 font-bold whitespace-pre-wrap">{selectedGradeLog.message}</p>
+                <p className="text-xs font-black text-gray-400 mb-1">
+                  {selectedGradeRecipient ? `${selectedGradeRecipient.name}에게 발송된 메시지` : '메시지 내용'}
+                </p>
+                <p className="text-sm text-gray-700 font-bold whitespace-pre-wrap">
+                  {selectedGradeRecipient?.message || selectedGradeLog.message}
+                </p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-gray-50 rounded-2xl p-3">
@@ -1176,20 +1186,32 @@ export default function GradeInputPage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-black text-gray-400 mb-2">수신자 상세</p>
+                <p className="text-xs font-black text-gray-400 mb-2">수신자 상세 {selectedGradeRecipient && <span className="text-indigo-400 font-bold">— 클릭하여 메시지 확인</span>}</p>
                 <div className="space-y-1.5">
-                  {(selectedGradeLog.recipients || []).map((r: any, i: number) => (
-                    <div key={i} className={`flex items-center justify-between py-2 px-3 rounded-xl ${r.status === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.status === 'success' ? 'bg-green-400' : 'bg-red-400'}`}></span>
-                        <span className="text-sm font-black text-gray-700">{r.name}</span>
+                  {(selectedGradeLog.recipients || []).map((r: any, i: number) => {
+                    const isSelected = selectedGradeRecipient === r;
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => setSelectedGradeRecipient((prev: any) => prev === r ? null : r)}
+                        className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-all border-2
+                          ${isSelected
+                            ? 'border-indigo-300 bg-indigo-50'
+                            : r.status === 'success'
+                              ? 'border-transparent bg-green-50 hover:border-indigo-200'
+                              : 'border-transparent bg-red-50 hover:border-indigo-200'}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.status === 'success' ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                          <span className="text-sm font-black text-gray-700">{r.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-gray-500 font-bold">{r.phone}</span>
+                          {r.error && <p className="text-[10px] text-red-400 font-bold">{r.error}</p>}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs text-gray-500 font-bold">{r.phone}</span>
-                        {r.error && <p className="text-[10px] text-red-400 font-bold">{r.error}</p>}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

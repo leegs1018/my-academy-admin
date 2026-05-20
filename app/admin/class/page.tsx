@@ -2,11 +2,62 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Subject {
   id: string;
   name: string;
   description: string;
+}
+
+function SortableSubjectRow({
+  subject, idx, onChange, onRemove,
+}: {
+  subject: Subject;
+  idx: number;
+  onChange: (idx: number, field: keyof Subject, value: string, isEdit: boolean) => void;
+  onRemove: (idx: number, isEdit: boolean) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: subject.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="flex gap-2 items-center bg-white p-3 rounded-2xl border border-rose-50 shadow-sm"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 touch-none text-lg select-none flex-shrink-0"
+        tabIndex={-1}
+      >⠿</button>
+      <div className="flex-1">
+        <input
+          className="w-full border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300"
+          value={subject.name}
+          onChange={e => onChange(idx, 'name', e.target.value, true)}
+          placeholder="과목명"
+        />
+        <p className="text-[7px] text-gray-300 mt-1 ml-1 font-mono">UUID: {subject.id}</p>
+      </div>
+      <input
+        className="flex-[2] border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300"
+        value={subject.description}
+        onChange={e => onChange(idx, 'description', e.target.value, true)}
+        placeholder="설명"
+      />
+      <button onClick={() => onRemove(idx, true)} className="text-rose-200 p-2 flex-shrink-0">✕</button>
+    </div>
+  );
 }
 
 export default function ClassPage() {
@@ -60,6 +111,19 @@ export default function ClassPage() {
 
   const formatKRW = (val: number) => new Intl.NumberFormat('ko-KR').format(val) + '원';
   const formatDisplayTime = (timeStr: string) => timeStr ? timeStr.slice(0, 5) : '';
+
+  const subjectSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleSubjectDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const cats: Subject[] = editingClass?.test_categories ?? [];
+    const oldIdx = cats.findIndex(c => c.id === active.id);
+    const newIdx = cats.findIndex(c => c.id === over.id);
+    setEditingClass({ ...editingClass, test_categories: arrayMove(cats, oldIdx, newIdx) });
+  };
 
   const addSubjectField = (isEdit: boolean = false) => {
     const newSub = createInitialSubject();
@@ -327,16 +391,21 @@ export default function ClassPage() {
                   <span className="text-xs font-black text-rose-500 uppercase">Subjects</span>
                   <button onClick={() => addSubjectField(true)} className="bg-rose-500 text-white w-7 h-7 rounded-full text-xs shadow-md">+</button>
                 </div>
-                {editingClass.test_categories.map((cat: any, index: number) => (
-                  <div key={cat.id} className="flex gap-2 items-start bg-white p-3 rounded-2xl border border-rose-50 shadow-sm">
-                    <div className="flex-1">
-                      <input className="w-full border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300" value={cat.name} onChange={e => handleSubjectChange(index, 'name', e.target.value, true)} placeholder="과목명" />
-                      <p className="text-[7px] text-gray-300 mt-1 ml-1 font-mono">UUID: {cat.id}</p>
+                <DndContext sensors={subjectSensors} collisionDetection={closestCenter} onDragEnd={handleSubjectDragEnd}>
+                  <SortableContext items={editingClass.test_categories.map((c: Subject) => c.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2">
+                      {editingClass.test_categories.map((cat: Subject, index: number) => (
+                        <SortableSubjectRow
+                          key={cat.id}
+                          subject={cat}
+                          idx={index}
+                          onChange={handleSubjectChange}
+                          onRemove={removeSubjectField}
+                        />
+                      ))}
                     </div>
-                    <input className="flex-[2] border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300" value={cat.description} onChange={e => handleSubjectChange(index, 'description', e.target.value, true)} placeholder="설명" />
-                    <button onClick={() => removeSubjectField(index, true)} className="text-rose-200 p-2">✕</button>
-                  </div>
-                ))}
+                  </SortableContext>
+                </DndContext>
               </div>
 
               <div className="space-y-3">
