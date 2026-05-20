@@ -647,6 +647,7 @@ export default function AiQuestionsPage() {
 
   // ── 대량 생성 상태 ──
   const [bulkTexts, setBulkTexts] = useState<string[]>(['', '']);
+  const [bulkTitles, setBulkTitles] = useState<string[]>(['', '']);
   const [bulkProgress, setBulkProgress] = useState<
     Array<{ status: 'idle' | 'loading' | 'success' | 'error'; message?: string }>
   >([{ status: 'idle' }, { status: 'idle' }]);
@@ -855,14 +856,15 @@ export default function AiQuestionsPage() {
   }, []);
 
   // ── 대량 생성 저장 (text 파라미터 버전) ──
-  const autoSaveBulkExam = useCallback(async (passageText: string, qs: ExamQuestion[]) => {
+  const autoSaveBulkExam = useCallback(async (passageText: string, qs: ExamQuestion[], customTitle?: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       const types = [...new Set(qs.map(q => q.type))];
       const diffLevel = [...new Set(validConfigs.map(c => c.difficulty))].join(',');
-      const titleSnapshot = passageText.slice(0, 30) + (passageText.length > 30 ? '...' : '');
+      const titleSnapshot = customTitle?.trim()
+        || passageText.slice(0, 30) + (passageText.length > 30 ? '...' : '');
 
       const [questionBlob, answerBlob] = await Promise.all([
         generateQuestionPdfBlob(qs, titleSnapshot, passageText),
@@ -905,14 +907,16 @@ export default function AiQuestionsPage() {
 
   // ── 대량 생성 핸들러 ──
   const addBulkText = () => {
-    if (bulkTexts.length < 5) {
+    if (bulkTexts.length < 10) {
       setBulkTexts(prev => [...prev, '']);
+      setBulkTitles(prev => [...prev, '']);
       setBulkProgress(prev => [...prev, { status: 'idle' }]);
     }
   };
   const removeBulkText = (idx: number) => {
     if (bulkTexts.length > 1) {
       setBulkTexts(prev => prev.filter((_, i) => i !== idx));
+      setBulkTitles(prev => prev.filter((_, i) => i !== idx));
       setBulkProgress(prev => prev.filter((_, i) => i !== idx));
     }
   };
@@ -956,7 +960,7 @@ export default function AiQuestionsPage() {
           continue;
         }
 
-        await autoSaveBulkExam(text, json.questions ?? []);
+        await autoSaveBulkExam(text, json.questions ?? [], bulkTitles[idx]);
         progress[idx] = { status: 'success', message: '저장 완료' };
         setBulkProgress([...progress]);
       } catch {
@@ -1552,10 +1556,10 @@ export default function AiQuestionsPage() {
           {/* 지문 입력 카드들 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-black text-gray-800">📄 지문 입력 <span className="text-sm font-bold text-gray-400">(최대 5개)</span></h2>
+              <h2 className="text-base font-black text-gray-800">📄 지문 입력 <span className="text-sm font-bold text-gray-400">(최대 10개)</span></h2>
               <button
                 onClick={addBulkText}
-                disabled={bulkTexts.length >= 5}
+                disabled={bulkTexts.length >= 10}
                 className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 + 지문 추가
@@ -1595,6 +1599,18 @@ export default function AiQuestionsPage() {
                         )}
                       </div>
                     </div>
+                    <input
+                      type="text"
+                      value={bulkTitles[idx] ?? ''}
+                      onChange={e => {
+                        const next = [...bulkTitles];
+                        next[idx] = e.target.value;
+                        setBulkTitles(next);
+                      }}
+                      disabled={bulkLoading}
+                      placeholder="제목 (선택) — 비워두면 지문 앞부분이 제목으로 저장됩니다"
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-2 disabled:bg-gray-50 disabled:text-gray-500"
+                    />
                     <textarea
                       value={text}
                       onChange={e => {
