@@ -59,6 +59,75 @@ function SortableSubjectRow({
   );
 }
 
+function SortableClassCard({
+  c, onEdit, onDelete, dayLabels, formatKRW, formatDisplayTime,
+}: {
+  c: any;
+  onEdit: (c: any) => void;
+  onDelete: (id: any) => void;
+  dayLabels: Record<string, string>;
+  formatKRW: (v: number) => string;
+  formatDisplayTime: (t: string) => string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: c.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative"
+    >
+      {/* 드래그 핸들 */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="absolute top-5 left-5 cursor-grab active:cursor-grabbing text-slate-200 hover:text-slate-400 text-2xl touch-none select-none transition-colors"
+        tabIndex={-1}
+      >⠿</button>
+
+      <div className="flex justify-between items-start mb-4 pl-6">
+        <div className="flex gap-2">
+          <span className="bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.target_level} 반</span>
+          <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.start_year}년</span>
+        </div>
+        <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => onEdit(c)} className="text-indigo-500 font-black text-xs">수정</button>
+          <button onClick={() => onDelete(c.id)} className="text-rose-300 font-black text-xs">삭제</button>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-end border-b pb-4 mb-4">
+        <div>
+          <h3 className="text-2xl font-black text-slate-800 tracking-tight">{c.class_name}</h3>
+          <p className="text-sm font-bold text-slate-400">Teacher. {c.teacher_name || '미지정'}</p>
+        </div>
+        <span className="text-2xl font-black text-indigo-600 italic">{formatKRW(c.tuition_fee)}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        {Array.isArray(c.test_categories) && c.test_categories.map((cat: Subject) => (
+          <span key={cat.id} className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[11px] font-black border border-rose-100">#{cat.name}</span>
+        ))}
+      </div>
+
+      <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4">
+        <div className="flex gap-1.5">
+          {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(d => (
+            <span key={d} className={`flex-1 h-10 flex items-center justify-center rounded-2xl text-xs font-black ${c[d] ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-200 border border-slate-50'}`}>
+              {dayLabels[d]}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center justify-between border-t pt-3 font-black text-indigo-700 text-lg">
+          <span className="text-[10px] text-slate-400 uppercase tracking-widest ml-1">Schedule</span>
+          <div>{formatDisplayTime(c.start_time)} ~ {formatDisplayTime(c.end_time)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClassPage() {
   const [classes, setClasses] = useState<any[]>([]);
   const [userId, setUserId] = useState('');
@@ -105,11 +174,43 @@ export default function ClassPage() {
 
   const fetchClasses = async () => {
     const { data } = await supabase.from('classes').select('*').eq('academy_id', userId).order('created_at', { ascending: false });
-    if (data) setClasses(data);
+    if (data) {
+      try {
+        const saved = localStorage.getItem(`class_order_${userId}`);
+        if (saved) {
+          const order: string[] = JSON.parse(saved);
+          const ordered = [
+            ...order.map(id => data.find((c: any) => c.id === id)).filter(Boolean),
+            ...data.filter((c: any) => !order.includes(c.id)),
+          ];
+          setClasses(ordered);
+        } else {
+          setClasses(data);
+        }
+      } catch {
+        setClasses(data);
+      }
+    }
   };
 
   const formatKRW = (val: number) => new Intl.NumberFormat('ko-KR').format(val) + '원';
   const formatDisplayTime = (timeStr: string) => timeStr ? timeStr.slice(0, 5) : '';
+
+  const classSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleClassDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setClasses(prev => {
+      const oldIdx = prev.findIndex((c: any) => c.id === active.id);
+      const newIdx = prev.findIndex((c: any) => c.id === over.id);
+      const next = arrayMove(prev, oldIdx, newIdx);
+      localStorage.setItem(`class_order_${userId}`, JSON.stringify(next.map((c: any) => c.id)));
+      return next;
+    });
+  };
 
   const subjectSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -312,45 +413,23 @@ export default function ClassPage() {
       </div>
 
       {/* 리스트 섹션 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-        {classes.map((c) => (
-          <div key={c.id} className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex gap-2">
-                <span className="bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.target_level} 반</span>
-                <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.start_year}년</span>
-              </div>
-              <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEditModal(c)} className="text-indigo-500 font-black text-xs">수정</button>
-                <button onClick={() => deleteClass(c.id)} className="text-rose-300 font-black text-xs">삭제</button>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-end border-b pb-4 mb-4">
-              <div><h3 className="text-2xl font-black text-slate-800 tracking-tight">{c.class_name}</h3><p className="text-sm font-bold text-slate-400">Teacher. {c.teacher_name || '미지정'}</p></div>
-              <span className="text-2xl font-black text-indigo-600 italic">{formatKRW(c.tuition_fee)}</span>
-            </div>
-
-            <div className="flex flex-wrap gap-2 mb-6">
-              {Array.isArray(c.test_categories) && c.test_categories.map((cat: Subject) => (
-                <span key={cat.id} className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[11px] font-black border border-rose-100" title={cat.id}>#{cat.name}</span>
-              ))}
-            </div>
-
-            <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4">
-              <div className="flex gap-1.5">
-                {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(d => (
-                  <span key={d} className={`flex-1 h-10 flex items-center justify-center rounded-2xl text-xs font-black ${c[d] ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-200 border border-slate-50'}`}>{dayLabels[d]}</span>
-                ))}
-              </div>
-              <div className="flex items-center justify-between border-t pt-3 font-black text-indigo-700 text-lg">
-                <span className="text-[10px] text-slate-400 uppercase tracking-widest ml-1">Schedule</span>
-                <div>{formatDisplayTime(c.start_time)} ~ {formatDisplayTime(c.end_time)}</div>
-              </div>
-            </div>
+      <DndContext sensors={classSensors} collisionDetection={closestCenter} onDragEnd={handleClassDragEnd}>
+        <SortableContext items={classes.map((c: any) => c.id)} strategy={verticalListSortingStrategy}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+            {classes.map((c: any) => (
+              <SortableClassCard
+                key={c.id}
+                c={c}
+                onEdit={openEditModal}
+                onDelete={deleteClass}
+                dayLabels={dayLabels}
+                formatKRW={formatKRW}
+                formatDisplayTime={formatDisplayTime}
+              />
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
 
       {/* 수정 모달 */}
       {isEditModalOpen && editingClass && (
