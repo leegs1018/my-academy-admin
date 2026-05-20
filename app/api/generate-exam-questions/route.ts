@@ -946,25 +946,50 @@ function extractJson(text: string): string {
   return text.trim();
 }
 
+interface TypeConfigInput {
+  type: string;
+  difficulty: 'b1' | 'b2' | 'c1' | 'c2';
+  count: number;
+}
+
 export async function POST(request: Request) {
   try {
-    const { text, questionTypes, difficulty = 'c2', academy_id } = await request.json() as { text: string; questionTypes: string[]; difficulty?: 'b1' | 'b2' | 'c1' | 'c2'; academy_id?: string };
+    const body = await request.json() as {
+      text: string;
+      typeConfigs?: TypeConfigInput[];
+      // legacy fields (backward compat)
+      questionTypes?: string[];
+      difficulty?: 'b1' | 'b2' | 'c1' | 'c2';
+      academy_id?: string;
+    };
+
+    const { text, academy_id } = body;
+
+    // 신규 typeConfigs 방식 또는 구버전 questionTypes+difficulty 방식 모두 지원
+    let enabledConfigs: TypeConfigInput[];
+    if (body.typeConfigs && body.typeConfigs.length > 0) {
+      enabledConfigs = body.typeConfigs.filter(c => c.type && VALID_TYPES.has(c.type));
+    } else if (body.questionTypes && body.questionTypes.length > 0) {
+      const diff = body.difficulty ?? 'b2';
+      enabledConfigs = body.questionTypes
+        .filter(t => VALID_TYPES.has(t))
+        .map(t => ({ type: t, difficulty: diff, count: 1 }));
+    } else {
+      enabledConfigs = [];
+    }
 
     if (!text || text.trim().length < 50) {
       return NextResponse.json({ error: '지문 텍스트가 너무 짧습니다.' }, { status: 400 });
     }
-    if (!Array.isArray(questionTypes) || questionTypes.length === 0) {
+    if (enabledConfigs.length === 0) {
       return NextResponse.json({ error: '문제 유형을 최소 1개 선택해주세요.' }, { status: 400 });
     }
-    const invalid = questionTypes.filter(t => !VALID_TYPES.has(t));
-    if (invalid.length > 0) {
-      return NextResponse.json({ error: `유효하지 않은 문제 유형: ${invalid.join(', ')}` }, { status: 400 });
-    }
 
-    // CON 잔액 확인 및 차감 (유형당 과금)
+    // CON 차감 — 문제 개수 기준 (count 합산)
     if (academy_id) {
       const pricePerType = await getFeaturePrice('ai_question_per_type');
-      const totalCost = pricePerType * questionTypes.length;
+      const totalQuestions = enabledConfigs.reduce((s, c) => s + Math.max(1, Math.min(3, c.count)), 0);
+      const totalCost = pricePerType * totalQuestions;
       if (totalCost > 0) {
         const balance = await getConBalance(academy_id);
         if (balance < totalCost) {
@@ -980,11 +1005,12 @@ export async function POST(request: Request) {
           p_academy_id: academy_id,
           p_amount: totalCost,
           p_feature_key: 'ai_question_per_type',
-          p_description: `실전변형 문제 생성 (${questionTypes.length}유형 × ${pricePerType}C)`,
+          p_description: `실전변형 문제 생성 (${totalQuestions}문제 × ${pricePerType}C)`,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {
-            return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance }, { status: 402 });
+            const balance2 = await getConBalance(academy_id);
+            return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance: balance2 }, { status: 402 });
           }
           return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
         }
@@ -995,8 +1021,8 @@ export async function POST(request: Request) {
 
     const CIRCLES = ['①','②','③','④','⑤'];
 
-    // 유형별 개별 생성 + 검증 (병렬 실행으로 토큰 한계 우회)
-    const generateForType = async (questionType: string): Promise<ExamQuestion | null> => {
+    // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
+    const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
       const MAX_RETRIES = 3;
       const targetAnswer = Math.floor(Math.random() * 5) + 1;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1087,9 +1113,19 @@ export async function POST(request: Request) {
       return null;
     };
 
-    // 모든 유형을 병렬로 동시 생성
-    const results = await Promise.all(questionTypes.map(t => generateForType(t)));
-    const questions = results.filter((q): q is ExamQuestion => q !== null);
+    // 유형 병렬 실행, 유형 내 count만큼 순차 생성 → typeConfigs 순서 유지 = PDF 순서
+    const allResults = await Promise.all(
+      enabledConfigs.map(async (cfg) => {
+        const count = Math.max(1, Math.min(3, cfg.count));
+        const qs: ExamQuestion[] = [];
+        for (let i = 0; i < count; i++) {
+          const q = await generateForType(cfg.type, cfg.difficulty);
+          if (q) qs.push(q);
+        }
+        return qs;
+      })
+    );
+    const questions = allResults.flat();
 
     return NextResponse.json({ success: true, questions });
   } catch (error: unknown) {

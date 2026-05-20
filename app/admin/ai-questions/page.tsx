@@ -3,6 +3,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import ConInsufficientModal from '@/components/ConInsufficientModal';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface ExamChoice {
   number: number;
@@ -37,6 +45,22 @@ interface QuestionTypeOption {
   color: string;
 }
 
+interface TypeConfig {
+  id: string;
+  type: string;
+  difficulty: 'b1' | 'b2' | 'c1' | 'c2';
+  count: number;    // 1~3
+  enabled: boolean;
+  isCustom: boolean;
+}
+
+const DIFF_OPTIONS = [
+  { key: 'b1' as const, label: '하' },
+  { key: 'b2' as const, label: '중' },
+  { key: 'c1' as const, label: '상' },
+  { key: 'c2' as const, label: '최상' },
+];
+
 const QUESTION_TYPE_OPTIONS: QuestionTypeOption[] = [
   { key: 'topic_title',      label: '주제/제목 유형',         description: '글의 주제나 제목 파악',             color: 'bg-blue-100 text-blue-700 border-blue-200' },
   { key: 'grammar',          label: '어법 유형',              description: '어법상 틀린 것 찾기 ①~⑤',           color: 'bg-green-100 text-green-700 border-green-200' },
@@ -55,6 +79,114 @@ const TYPE_LABEL_MAP: Record<string, string> = {};
 QUESTION_TYPE_OPTIONS.forEach(o => { TYPE_LABEL_MAP[o.key] = o.label; });
 
 const CIRCLE_NUMS = ['①', '②', '③', '④', '⑤'];
+
+// ── SortableTypeCard ─────────────────────────────────────────
+function SortableTypeCard({
+  cfg,
+  onUpdate,
+  onRemove,
+}: {
+  cfg: TypeConfig;
+  onUpdate: (id: string, patch: Partial<TypeConfig>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: cfg.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 bg-white rounded-2xl border-2 px-3 py-2.5 shadow-sm transition-all
+        ${cfg.enabled ? 'border-indigo-100' : 'border-gray-100 opacity-60'}`}
+    >
+      {/* 드래그 핸들 */}
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 px-0.5 touch-none"
+        tabIndex={-1}
+      >
+        ⠿
+      </button>
+
+      {/* 체크박스 */}
+      <input
+        type="checkbox"
+        checked={cfg.enabled}
+        onChange={e => onUpdate(cfg.id, { enabled: e.target.checked })}
+        className="w-4 h-4 accent-indigo-600 flex-shrink-0 cursor-pointer"
+      />
+
+      {/* 유형명 */}
+      <div className="flex-1 min-w-0">
+        {cfg.isCustom ? (
+          <select
+            value={cfg.type}
+            onChange={e => onUpdate(cfg.id, { type: e.target.value })}
+            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 bg-white"
+          >
+            <option value="">유형 선택</option>
+            {QUESTION_TYPE_OPTIONS.map(o => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+        ) : (
+          <span className={`inline-block text-xs font-black px-2 py-0.5 rounded-lg border ${TYPE_COLOR_MAP[cfg.type] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+            {TYPE_LABEL_MAP[cfg.type] ?? cfg.type}
+          </span>
+        )}
+      </div>
+
+      {/* 난이도 라디오 */}
+      <div className="flex gap-1 flex-shrink-0">
+        {DIFF_OPTIONS.map(d => (
+          <label key={d.key} className="flex flex-col items-center gap-0.5 cursor-pointer">
+            <input
+              type="radio"
+              name={`diff-${cfg.id}`}
+              value={d.key}
+              checked={cfg.difficulty === d.key}
+              onChange={() => onUpdate(cfg.id, { difficulty: d.key })}
+              className="accent-indigo-600 w-3 h-3"
+            />
+            <span className={`text-[10px] font-black leading-none
+              ${cfg.difficulty === d.key ? 'text-indigo-600' : 'text-gray-400'}`}>
+              {d.label}
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {/* 수량 스피너 */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+          onClick={() => onUpdate(cfg.id, { count: Math.max(1, cfg.count - 1) })}
+          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm flex items-center justify-center transition-all"
+        >−</button>
+        <span className="w-4 text-center text-sm font-black text-indigo-700">{cfg.count}</span>
+        <button
+          onClick={() => onUpdate(cfg.id, { count: Math.min(3, cfg.count + 1) })}
+          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm flex items-center justify-center transition-all"
+        >+</button>
+      </div>
+
+      {/* 삭제 (추가 행만) */}
+      {cfg.isCustom && (
+        <button
+          onClick={() => onRemove(cfg.id)}
+          className="text-red-300 hover:text-red-500 text-base font-black flex-shrink-0 leading-none"
+        >✕</button>
+      )}
+    </div>
+  );
+}
 
 // 어법/낱말쓰임 지문 속 ①②③④⑤ — 검정 볼드 + 뒤따르는 단어 밑줄
 // singleWordOnly=true 이면 선지에서 첫 번째 단어만 추출 (vocab_paraphrase용)
@@ -502,8 +634,18 @@ export default function AiQuestionsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [pdfTitle, setPdfTitle] = useState('');
 
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(['topic_title']));
-  const [difficulty, setDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
+  const [typeConfigs, setTypeConfigs] = useState<TypeConfig[]>(() =>
+    QUESTION_TYPE_OPTIONS.map(o => ({
+      id: crypto.randomUUID(),
+      type: o.key,
+      difficulty: 'b2' as const,
+      count: 1,
+      enabled: true,
+      isCustom: false,
+    }))
+  );
+  const [bulkDifficulty, setBulkDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2' | ''>('');
+  const [bulkCount, setBulkCount] = useState<number | ''>(1);
 
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
@@ -617,18 +759,45 @@ export default function AiQuestionsPage() {
     }
   };
 
-  // ── 유형 선택 토글 ──
-  const toggleType = (key: string) => {
-    setSelectedTypes(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        if (next.size > 1) next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+  // ── TypeConfig 핸들러 ──
+  const updateConfig = (id: string, patch: Partial<TypeConfig>) => {
+    setTypeConfigs(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
   };
+  const removeConfig = (id: string) => {
+    setTypeConfigs(prev => prev.filter(c => c.id !== id));
+  };
+  const addCustomConfig = () => {
+    setTypeConfigs(prev => [...prev, {
+      id: crypto.randomUUID(),
+      type: '',
+      difficulty: 'b2',
+      count: 1,
+      enabled: true,
+      isCustom: true,
+    }]);
+  };
+  const applyBulk = () => {
+    setTypeConfigs(prev => prev.map(c => {
+      if (!c.enabled) return c;
+      return {
+        ...c,
+        ...(bulkDifficulty ? { difficulty: bulkDifficulty } : {}),
+        ...(bulkCount !== '' ? { count: Math.max(1, Math.min(3, bulkCount)) } : {}),
+      };
+    }));
+  };
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setTypeConfigs(prev => {
+        const oldIdx = prev.findIndex(c => c.id === active.id);
+        const newIdx = prev.findIndex(c => c.id === over.id);
+        return arrayMove(prev, oldIdx, newIdx);
+      });
+    }
+  };
+  const validConfigs = typeConfigs.filter(c => c.enabled && c.type !== '');
 
   // ── 자동 저장 ──
   const autoSaveExam = useCallback(async (qs: ExamQuestion[], text: string, types: string[], titleSnapshot: string, originalPassage: string, difficultyLevel: string) => {
@@ -682,7 +851,7 @@ export default function AiQuestionsPage() {
 
   // ── 문제 생성 ──
   const handleGenerate = async () => {
-    if (selectedTypes.size === 0 || textToSend.trim().length < 50) return;
+    if (validConfigs.length === 0 || textToSend.trim().length < 50) return;
     setLoading(true);
     setError(null);
     setQuestions(null);
@@ -706,7 +875,11 @@ export default function AiQuestionsPage() {
       const res = await fetch('/api/generate-exam-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSend.trim(), questionTypes: [...selectedTypes], difficulty, academy_id: userId || undefined }),
+        body: JSON.stringify({
+          text: textToSend.trim(),
+          typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })),
+          academy_id: userId || undefined,
+        }),
       });
       const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
       if (json.error === 'INSUFFICIENT_CON') {
@@ -717,10 +890,11 @@ export default function AiQuestionsPage() {
       setOriginalPassageText(textToSend.trim());
       setQuestions(json.questions ?? []);
 
-      const typesArr = [...selectedTypes];
+      const typesArr = validConfigs.map(c => c.type);
+      const diffLabel = validConfigs.map(c => c.difficulty).join(',');
       const titleSnapshot = pdfTitle;
       const passageSnapshot = textToSend.trim();
-      setTimeout(() => autoSaveExam(json.questions ?? [], passageSnapshot, typesArr, titleSnapshot, passageSnapshot, difficulty), 800);
+      setTimeout(() => autoSaveExam(json.questions ?? [], passageSnapshot, typesArr, titleSnapshot, passageSnapshot, diffLabel), 800);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
@@ -924,74 +1098,98 @@ export default function AiQuestionsPage() {
             </p>
           </div>
 
-          {/* 난이도 선택 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-base font-black text-gray-800 mb-4">📊 난이도 설정</h2>
-            <div className="flex gap-2">
-              {([
-                { key: 'b1', label: '중등/고등 하', sub: 'B1', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
-                { key: 'b2', label: '고등 중',      sub: 'B2', icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
-                { key: 'c1', label: '고등 상',      sub: 'C1', icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-                { key: 'c2', label: '고등 최상',    sub: 'C2', icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
-              ] as const).map(d => (
-                <button key={d.key} onClick={() => setDifficulty(d.key)}
-                  className={`flex-1 py-4 rounded-xl font-black transition-all border-2
-                    ${difficulty === d.key
-                      ? d.active
-                      : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
-                  <div className="text-2xl mb-1">{d.icon}</div>
-                  <div className="text-xs font-bold opacity-60 mb-0.5">{d.sub}</div>
-                  <div className="text-sm">{d.label}</div>
-                </button>
-              ))}
+          {/* 문제 유형 슬라이드 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-black text-gray-800">📌 문제 유형 설정</h2>
+              <button
+                onClick={addCustomConfig}
+                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all"
+              >
+                + 유형 추가
+              </button>
             </div>
-          </div>
 
-          {/* 문제 유형 선택 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-base font-black text-gray-800 mb-4">📌 문제 유형 선택 <span className="text-xs font-bold text-gray-400 ml-1">(복수 선택 가능)</span></h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {QUESTION_TYPE_OPTIONS.map(opt => {
-                const isSelected = selectedTypes.has(opt.key);
-                return (
-                  <button key={opt.key} onClick={() => toggleType(opt.key)}
-                    className={`flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left
-                      ${isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-gray-50'}`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0
-                        ${isSelected ? 'border-indigo-500 bg-indigo-500' : 'border-gray-300'}`}>
-                        {isSelected && <span className="text-white text-[10px] font-black">✓</span>}
-                      </div>
-                      <span className="text-sm font-black text-gray-800">{opt.label}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 ml-6">{opt.description}</p>
-                  </button>
-                );
-              })}
+            {/* 일괄 설정 바 */}
+            <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-xs font-black text-gray-500 flex-shrink-0">일괄 설정</span>
+              <div className="flex gap-1.5">
+                {DIFF_OPTIONS.map(d => (
+                  <label key={d.key} className="flex items-center gap-0.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="bulk-diff"
+                      value={d.key}
+                      checked={bulkDifficulty === d.key}
+                      onChange={() => setBulkDifficulty(d.key)}
+                      className="accent-indigo-600 w-3 h-3"
+                    />
+                    <span className={`text-[11px] font-black ${bulkDifficulty === d.key ? 'text-indigo-600' : 'text-gray-400'}`}>{d.label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 ml-1">
+                <span className="text-xs text-gray-400 font-bold">수량</span>
+                <button onClick={() => setBulkCount(v => v === '' ? 1 : Math.max(1, v - 1))}
+                  className="w-5 h-5 rounded bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">−</button>
+                <span className="w-4 text-center text-xs font-black text-indigo-700">{bulkCount}</span>
+                <button onClick={() => setBulkCount(v => v === '' ? 1 : Math.min(3, v + 1))}
+                  className="w-5 h-5 rounded bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">+</button>
+              </div>
+              <button
+                onClick={applyBulk}
+                className="ml-auto px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg hover:bg-indigo-200 transition-all"
+              >적용</button>
             </div>
-            <p className="mt-3 text-xs text-gray-400">선택된 유형: {selectedTypes.size}개 ({[...selectedTypes].map(k => TYPE_LABEL_MAP[k]).join(', ')})</p>
+
+            {/* 카드 목록 */}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {typeConfigs.map(cfg => (
+                    <SortableTypeCard
+                      key={cfg.id}
+                      cfg={cfg}
+                      onUpdate={updateConfig}
+                      onRemove={removeConfig}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+
+            <p className="mt-2 text-[11px] text-gray-400">
+              체크된 유형 {validConfigs.length}개 · 총 {validConfigs.reduce((s, c) => s + c.count, 0)}문제 생성 예정
+            </p>
           </div>
 
           {/* CON 차감 안내 */}
-          {aiPrice !== null && aiPrice > 0 && (
-            <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">⭐</span>
-                <span className="text-xs font-black text-yellow-700">유형당 {aiPrice} CON 차감</span>
+          {aiPrice !== null && aiPrice > 0 && (() => {
+            const totalQ = validConfigs.reduce((s, c) => s + c.count, 0);
+            return (
+              <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">⭐</span>
+                  <span className="text-xs font-black text-yellow-700">문제당 {aiPrice} CON 차감</span>
+                </div>
+                {totalQ > 0 && (
+                  <>
+                    <p className="text-xs font-black text-yellow-800 ml-6">
+                      총 {totalQ}문제 생성 시{' '}
+                      <span className="text-yellow-900">{(aiPrice * totalQ).toLocaleString()} CON</span> 차감 예정
+                    </p>
+                    <p className="text-[11px] text-yellow-600 ml-6">⏱ 생성되는 유형이 많을수록 시간이 더 소요됩니다</p>
+                  </>
+                )}
               </div>
-              {selectedTypes.size > 0 && (
-                <p className="text-xs font-black text-yellow-800 ml-6">
-                  {selectedTypes.size}유형 선택 시 총{' '}
-                  <span className="text-yellow-900">{(aiPrice * selectedTypes.size).toLocaleString()} CON</span> 차감 예정
-                </p>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {/* 생성 버튼 */}
           <button
             onClick={handleGenerate}
-            disabled={loading || textToSend.trim().length < 50 || selectedTypes.size === 0}
+            disabled={loading || textToSend.trim().length < 50 || validConfigs.length === 0}
             className="w-full py-4 rounded-2xl font-black text-base bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
           >
             {loading ? loadingMsg : '🤖 AI 문제 생성하기'}
