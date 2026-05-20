@@ -173,24 +173,13 @@ export default function ClassPage() {
   useEffect(() => { if (userId) fetchClasses(); }, [userId]);
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('*').eq('academy_id', userId).order('created_at', { ascending: false });
-    if (data) {
-      try {
-        const saved = localStorage.getItem(`class_order_${userId}`);
-        if (saved) {
-          const order: string[] = JSON.parse(saved);
-          const ordered = [
-            ...order.map(id => data.find((c: any) => c.id === id)).filter(Boolean),
-            ...data.filter((c: any) => !order.includes(c.id)),
-          ];
-          setClasses(ordered);
-        } else {
-          setClasses(data);
-        }
-      } catch {
-        setClasses(data);
-      }
-    }
+    const { data } = await supabase
+      .from('classes')
+      .select('*')
+      .eq('academy_id', userId)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false });
+    if (data) setClasses(data);
   };
 
   const formatKRW = (val: number) => new Intl.NumberFormat('ko-KR').format(val) + '원';
@@ -207,7 +196,12 @@ export default function ClassPage() {
       const oldIdx = prev.findIndex((c: any) => c.id === active.id);
       const newIdx = prev.findIndex((c: any) => c.id === over.id);
       const next = arrayMove(prev, oldIdx, newIdx);
-      localStorage.setItem(`class_order_${userId}`, JSON.stringify(next.map((c: any) => c.id)));
+      // DB에 sort_order 저장 (백그라운드)
+      Promise.all(
+        next.map((c: any, i: number) =>
+          supabase.from('classes').update({ sort_order: i }).eq('id', c.id)
+        )
+      );
       return next;
     });
   };
