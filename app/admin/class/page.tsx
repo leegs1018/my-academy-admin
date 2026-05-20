@@ -47,7 +47,6 @@ function SortableSubjectRow({
           onChange={e => onChange(idx, 'name', e.target.value, true)}
           placeholder="과목명"
         />
-        <p className="text-[7px] text-gray-300 mt-1 ml-1 font-mono">UUID: {subject.id}</p>
       </div>
       <input
         className="flex-[2] border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300"
