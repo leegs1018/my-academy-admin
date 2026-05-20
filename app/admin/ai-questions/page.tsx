@@ -620,7 +620,7 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
 }
 
 export default function AiQuestionsPage() {
-  const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
+  const [activeTab, setActiveTab] = useState<'generate' | 'bulk' | 'history'>('generate');
   const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
 
   const [manualText, setManualText] = useState('');
@@ -644,6 +644,13 @@ export default function AiQuestionsPage() {
   );
   const [bulkDifficulty, setBulkDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2' | ''>('');
   const [bulkCount, setBulkCount] = useState<number | ''>(1);
+
+  // ── 대량 생성 상태 ──
+  const [bulkTexts, setBulkTexts] = useState<string[]>(['', '']);
+  const [bulkProgress, setBulkProgress] = useState<
+    Array<{ status: 'idle' | 'loading' | 'success' | 'error'; message?: string }>
+  >([{ status: 'idle' }, { status: 'idle' }]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
@@ -847,6 +854,120 @@ export default function AiQuestionsPage() {
     }
   }, []);
 
+  // ── 대량 생성 저장 (text 파라미터 버전) ──
+  const autoSaveBulkExam = useCallback(async (passageText: string, qs: ExamQuestion[]) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const types = [...new Set(qs.map(q => q.type))];
+      const diffLevel = [...new Set(validConfigs.map(c => c.difficulty))].join(',');
+      const titleSnapshot = passageText.slice(0, 30) + (passageText.length > 30 ? '...' : '');
+
+      const [questionBlob, answerBlob] = await Promise.all([
+        generateQuestionPdfBlob(qs, titleSnapshot, passageText),
+        buildAnswerPdfBlob(qs, titleSnapshot),
+      ]);
+      if (!questionBlob) return;
+
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const [pdfBase64, answerPdfBase64] = await Promise.all([
+        toBase64(questionBlob),
+        toBase64(answerBlob),
+      ]);
+
+      await fetch('/api/save-exam-history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          pdfBase64,
+          answerPdfBase64,
+          title: titleSnapshot,
+          passageExcerpt: passageText.slice(0, 150),
+          passageFull: passageText,
+          questionTypes: types,
+          difficulty: diffLevel,
+        }),
+      });
+    } catch {
+      // 저장 실패해도 대량 생성 흐름은 계속
+    }
+  }, [validConfigs]);
+
+  // ── 대량 생성 핸들러 ──
+  const addBulkText = () => {
+    if (bulkTexts.length < 5) {
+      setBulkTexts(prev => [...prev, '']);
+      setBulkProgress(prev => [...prev, { status: 'idle' }]);
+    }
+  };
+  const removeBulkText = (idx: number) => {
+    if (bulkTexts.length > 1) {
+      setBulkTexts(prev => prev.filter((_, i) => i !== idx));
+      setBulkProgress(prev => prev.filter((_, i) => i !== idx));
+    }
+  };
+
+  const handleBulkGenerate = async () => {
+    const activeList = bulkTexts
+      .map((t, i) => ({ text: t.trim(), idx: i }))
+      .filter(({ text }) => text.length >= 50);
+    if (activeList.length === 0 || validConfigs.length === 0) return;
+
+    setBulkLoading(true);
+    const progress: Array<{ status: 'idle' | 'loading' | 'success' | 'error'; message?: string }> =
+      bulkTexts.map(() => ({ status: 'idle' }));
+    setBulkProgress([...progress]);
+
+    for (const { text, idx } of activeList) {
+      progress[idx] = { status: 'loading', message: 'AI 생성 중...' };
+      setBulkProgress([...progress]);
+
+      try {
+        const res = await fetch('/api/generate-exam-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })),
+            academy_id: userId || undefined,
+          }),
+        });
+        const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number; success?: boolean };
+
+        if (!res.ok || !json.success) {
+          if (json.error === 'INSUFFICIENT_CON') {
+            setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 });
+            progress[idx] = { status: 'error', message: 'CON 부족 — 중단됨' };
+            setBulkProgress([...progress]);
+            break;
+          }
+          progress[idx] = { status: 'error', message: json.error ?? '생성 실패' };
+          setBulkProgress([...progress]);
+          continue;
+        }
+
+        await autoSaveBulkExam(text, json.questions ?? []);
+        progress[idx] = { status: 'success', message: '저장 완료' };
+        setBulkProgress([...progress]);
+      } catch {
+        progress[idx] = { status: 'error', message: '오류 발생' };
+        setBulkProgress([...progress]);
+      }
+    }
+
+    setBulkLoading(false);
+  };
+
   // ── 문제 생성 ──
   const handleGenerate = async () => {
     if (validConfigs.length === 0 || textToSend.trim().length < 50) return;
@@ -999,11 +1120,11 @@ export default function AiQuestionsPage() {
 
       {/* 탭 */}
       <div className="flex gap-2 mb-6 border-b-2 border-slate-100">
-        {(['generate', 'history'] as const).map(tab => (
+        {(['generate', 'bulk', 'history'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-6 py-3 font-black text-base rounded-t-xl transition-all
               ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
-            {tab === 'generate' ? '✏️ 문제 생성' : '📋 생성 이력'}
+            {tab === 'generate' ? '✏️ 문제 생성' : tab === 'bulk' ? '📦 문제 생성(대량)' : '📋 생성 이력'}
           </button>
         ))}
       </div>
@@ -1419,6 +1540,179 @@ export default function AiQuestionsPage() {
                   );
                 })}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 대량 생성 탭 ── */}
+      {activeTab === 'bulk' && (
+        <div className="space-y-6">
+
+          {/* 지문 입력 카드들 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-black text-gray-800">📄 지문 입력 <span className="text-sm font-bold text-gray-400">(최대 5개)</span></h2>
+              <button
+                onClick={addBulkText}
+                disabled={bulkTexts.length >= 5}
+                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                + 지문 추가
+              </button>
+            </div>
+            <div className="space-y-4">
+              {bulkTexts.map((text, idx) => {
+                const prog = bulkProgress[idx] ?? { status: 'idle' };
+                return (
+                  <div key={idx} className={`rounded-2xl border-2 p-4 transition-all
+                    ${prog.status === 'success' ? 'border-green-200 bg-green-50/30' :
+                      prog.status === 'error'   ? 'border-red-200 bg-red-50/30' :
+                      prog.status === 'loading' ? 'border-indigo-200 bg-indigo-50/30' :
+                      'border-gray-100 bg-white'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-gray-500">지문 {idx + 1}</span>
+                      <div className="flex items-center gap-2">
+                        {/* 상태 뱃지 */}
+                        {prog.status === 'idle' && (
+                          <span className="text-[11px] font-bold text-gray-400 px-2 py-0.5 bg-gray-100 rounded-full">대기중</span>
+                        )}
+                        {prog.status === 'loading' && (
+                          <span className="text-[11px] font-bold text-indigo-600 px-2 py-0.5 bg-indigo-100 rounded-full animate-pulse">AI 생성 중...</span>
+                        )}
+                        {prog.status === 'success' && (
+                          <span className="text-[11px] font-bold text-green-700 px-2 py-0.5 bg-green-100 rounded-full">✓ {prog.message}</span>
+                        )}
+                        {prog.status === 'error' && (
+                          <span className="text-[11px] font-bold text-red-600 px-2 py-0.5 bg-red-100 rounded-full">✗ {prog.message}</span>
+                        )}
+                        {/* 삭제 버튼 */}
+                        {bulkTexts.length > 1 && !bulkLoading && (
+                          <button
+                            onClick={() => removeBulkText(idx)}
+                            className="text-gray-300 hover:text-red-400 text-base font-black leading-none transition-all"
+                          >✕</button>
+                        )}
+                      </div>
+                    </div>
+                    <textarea
+                      value={text}
+                      onChange={e => {
+                        const next = [...bulkTexts];
+                        next[idx] = e.target.value;
+                        setBulkTexts(next);
+                      }}
+                      disabled={bulkLoading}
+                      placeholder="영어 지문을 여기에 입력하세요... (최소 50자)"
+                      rows={5}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none leading-relaxed disabled:bg-gray-50 disabled:text-gray-500"
+                    />
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {text.trim().length > 0
+                        ? text.trim().length < 50
+                          ? `${text.trim().length}자 — 50자 이상 입력하세요`
+                          : `${text.trim().length}자`
+                        : '지문을 입력하세요 (최소 50자)'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 문제 유형 설정 (공유) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-black text-gray-800">📌 문제 유형 설정</h2>
+              <button
+                onClick={addCustomConfig}
+                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all"
+              >
+                + 유형 추가
+              </button>
+            </div>
+            <div className="flex items-center justify-end gap-2 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-xs font-black text-gray-500 flex-shrink-0 mr-1">일괄 설정</span>
+              <div className="flex gap-1">
+                {DIFF_OPTIONS.map(d => (
+                  <button key={d.key}
+                    onClick={() => setBulkDifficulty(prev => prev === d.key ? '' : d.key)}
+                    className={`flex flex-col items-center justify-center w-12 py-1.5 rounded-xl font-black text-[10px] transition-all border-2
+                      ${bulkDifficulty === d.key ? d.active : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
+                    <span className="text-sm leading-none mb-0.5">{d.icon}</span>
+                    <span className="text-[8px] font-bold opacity-60 leading-none mb-0.5">{d.sub}</span>
+                    <span className="leading-none">{d.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-400 font-bold">수량</span>
+                <button onClick={() => setBulkCount(v => v === '' ? 1 : Math.max(1, v - 1))}
+                  className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">−</button>
+                <span className="w-5 text-center text-sm font-black text-indigo-700">{bulkCount}</span>
+                <button onClick={() => setBulkCount(v => v === '' ? 1 : Math.min(3, v + 1))}
+                  className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">+</button>
+              </div>
+              <button onClick={applyBulk}
+                className="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg hover:bg-indigo-200 transition-all">적용</button>
+            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {typeConfigs.map(cfg => (
+                    <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <p className="mt-2 text-[11px] text-gray-400">
+              체크된 유형 {validConfigs.length}개 · 지문당 {validConfigs.reduce((s, c) => s + c.count, 0)}문제 생성 예정
+            </p>
+          </div>
+
+          {/* CON 안내 */}
+          {aiPrice !== null && aiPrice > 0 && (() => {
+            const perPassage = validConfigs.reduce((s, c) => s + c.count, 0);
+            const validBulkCount = bulkTexts.filter(t => t.trim().length >= 50).length;
+            const totalQ = perPassage * validBulkCount;
+            return (
+              <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">⭐</span>
+                  <span className="text-xs font-black text-yellow-700">문제당 {aiPrice} CON 차감</span>
+                </div>
+                {totalQ > 0 && (
+                  <>
+                    <p className="text-xs font-black text-yellow-800 ml-6">
+                      지문당 {perPassage}문제 × {validBulkCount}개 지문 →{' '}
+                      <span className="text-yellow-900">총 {(aiPrice * totalQ).toLocaleString()} CON</span> 차감 예정
+                    </p>
+                    <p className="text-[11px] text-yellow-600 ml-6">⏱ 지문 수에 비례해 시간이 소요됩니다 (순차 생성)</p>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* 생성 버튼 */}
+          <button
+            onClick={handleBulkGenerate}
+            disabled={
+              bulkLoading ||
+              validConfigs.length === 0 ||
+              bulkTexts.filter(t => t.trim().length >= 50).length === 0
+            }
+            className="w-full py-4 rounded-2xl font-black text-base bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            {bulkLoading
+              ? `순차 생성 중... (${bulkProgress.filter(p => p.status === 'success' || p.status === 'error').length}/${bulkTexts.filter(t => t.trim().length >= 50).length})`
+              : `🤖 순차 생성 시작 (${bulkTexts.filter(t => t.trim().length >= 50).length}개 지문)`}
+          </button>
+
+          {/* 완료 후 안내 */}
+          {!bulkLoading && bulkProgress.some(p => p.status === 'success') && (
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm font-bold text-green-700">
+              ✅ 생성 완료! <button onClick={() => setActiveTab('history')} className="underline ml-1">생성 이력 탭</button>에서 다운로드하세요.
             </div>
           )}
         </div>
