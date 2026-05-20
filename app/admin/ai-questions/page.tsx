@@ -55,10 +55,10 @@ interface TypeConfig {
 }
 
 const DIFF_OPTIONS = [
-  { key: 'b1' as const, label: '하' },
-  { key: 'b2' as const, label: '중' },
-  { key: 'c1' as const, label: '상' },
-  { key: 'c2' as const, label: '최상' },
+  { key: 'b1' as const, label: '하',   sub: 'B1', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+  { key: 'b2' as const, label: '중',   sub: 'B2', icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+  { key: 'c1' as const, label: '상',   sub: 'C1', icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+  { key: 'c2' as const, label: '최상', sub: 'C2', icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
 ];
 
 const QUESTION_TYPE_OPTIONS: QuestionTypeOption[] = [
@@ -103,14 +103,14 @@ function SortableTypeCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 bg-white rounded-2xl border-2 px-3 py-2.5 shadow-sm transition-all
+      className={`flex items-center gap-3 bg-white rounded-2xl border-2 px-4 py-4 shadow-sm transition-all
         ${cfg.enabled ? 'border-indigo-100' : 'border-gray-100 opacity-60'}`}
     >
       {/* 드래그 핸들 */}
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 px-0.5 touch-none"
+        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 text-lg touch-none select-none"
         tabIndex={-1}
       >
         ⠿
@@ -121,16 +121,16 @@ function SortableTypeCard({
         type="checkbox"
         checked={cfg.enabled}
         onChange={e => onUpdate(cfg.id, { enabled: e.target.checked })}
-        className="w-4 h-4 accent-indigo-600 flex-shrink-0 cursor-pointer"
+        className="w-5 h-5 accent-indigo-600 flex-shrink-0 cursor-pointer"
       />
 
       {/* 유형명 */}
-      <div className="flex-1 min-w-0">
+      <div className="w-36 flex-shrink-0">
         {cfg.isCustom ? (
           <select
             value={cfg.type}
             onChange={e => onUpdate(cfg.id, { type: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 bg-white"
+            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-400 bg-white"
           >
             <option value="">유형 선택</option>
             {QUESTION_TYPE_OPTIONS.map(o => (
@@ -138,42 +138,40 @@ function SortableTypeCard({
             ))}
           </select>
         ) : (
-          <span className={`inline-block text-xs font-black px-2 py-0.5 rounded-lg border ${TYPE_COLOR_MAP[cfg.type] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+          <span className={`inline-block text-xs font-black px-2.5 py-1 rounded-lg border ${TYPE_COLOR_MAP[cfg.type] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
             {TYPE_LABEL_MAP[cfg.type] ?? cfg.type}
           </span>
         )}
       </div>
 
-      {/* 난이도 라디오 */}
-      <div className="flex gap-1 flex-shrink-0">
+      {/* 난이도 버튼 (이전 버전 스타일) */}
+      <div className="flex gap-1.5 flex-1">
         {DIFF_OPTIONS.map(d => (
-          <label key={d.key} className="flex flex-col items-center gap-0.5 cursor-pointer">
-            <input
-              type="radio"
-              name={`diff-${cfg.id}`}
-              value={d.key}
-              checked={cfg.difficulty === d.key}
-              onChange={() => onUpdate(cfg.id, { difficulty: d.key })}
-              className="accent-indigo-600 w-3 h-3"
-            />
-            <span className={`text-[10px] font-black leading-none
-              ${cfg.difficulty === d.key ? 'text-indigo-600' : 'text-gray-400'}`}>
-              {d.label}
-            </span>
-          </label>
+          <button
+            key={d.key}
+            onClick={() => onUpdate(cfg.id, { difficulty: d.key })}
+            className={`flex-1 py-2 rounded-xl font-black text-xs transition-all border-2
+              ${cfg.difficulty === d.key
+                ? d.active
+                : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}
+          >
+            <div className="text-base leading-none mb-0.5">{d.icon}</div>
+            <div className="text-[9px] font-bold opacity-60 leading-none mb-0.5">{d.sub}</div>
+            <div className="leading-none">{d.label}</div>
+          </button>
         ))}
       </div>
 
       {/* 수량 스피너 */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
           onClick={() => onUpdate(cfg.id, { count: Math.max(1, cfg.count - 1) })}
-          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm flex items-center justify-center transition-all"
+          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm flex items-center justify-center transition-all"
         >−</button>
-        <span className="w-4 text-center text-sm font-black text-indigo-700">{cfg.count}</span>
+        <span className="w-5 text-center text-base font-black text-indigo-700">{cfg.count}</span>
         <button
           onClick={() => onUpdate(cfg.id, { count: Math.min(3, cfg.count + 1) })}
-          className="w-6 h-6 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm flex items-center justify-center transition-all"
+          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm flex items-center justify-center transition-all"
         >+</button>
       </div>
 
@@ -1112,34 +1110,38 @@ export default function AiQuestionsPage() {
             </div>
 
             {/* 일괄 설정 바 */}
-            <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
-              <span className="text-xs font-black text-gray-500 flex-shrink-0">일괄 설정</span>
-              <div className="flex gap-1.5">
+            <div className="flex items-center justify-end gap-2 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-xs font-black text-gray-500 flex-shrink-0 mr-1">일괄 설정</span>
+              {/* 난이도 버튼 */}
+              <div className="flex gap-1">
                 {DIFF_OPTIONS.map(d => (
-                  <label key={d.key} className="flex items-center gap-0.5 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="bulk-diff"
-                      value={d.key}
-                      checked={bulkDifficulty === d.key}
-                      onChange={() => setBulkDifficulty(d.key)}
-                      className="accent-indigo-600 w-3 h-3"
-                    />
-                    <span className={`text-[11px] font-black ${bulkDifficulty === d.key ? 'text-indigo-600' : 'text-gray-400'}`}>{d.label}</span>
-                  </label>
+                  <button
+                    key={d.key}
+                    onClick={() => setBulkDifficulty(prev => prev === d.key ? '' : d.key)}
+                    className={`flex flex-col items-center justify-center w-12 py-1.5 rounded-xl font-black text-[10px] transition-all border-2
+                      ${bulkDifficulty === d.key
+                        ? d.active
+                        : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}
+                  >
+                    <span className="text-sm leading-none mb-0.5">{d.icon}</span>
+                    <span className="text-[8px] font-bold opacity-60 leading-none mb-0.5">{d.sub}</span>
+                    <span className="leading-none">{d.label}</span>
+                  </button>
                 ))}
               </div>
-              <div className="flex items-center gap-1 ml-1">
+              {/* 수량 스피너 */}
+              <div className="flex items-center gap-1">
                 <span className="text-xs text-gray-400 font-bold">수량</span>
                 <button onClick={() => setBulkCount(v => v === '' ? 1 : Math.max(1, v - 1))}
-                  className="w-5 h-5 rounded bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">−</button>
-                <span className="w-4 text-center text-xs font-black text-indigo-700">{bulkCount}</span>
+                  className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">−</button>
+                <span className="w-5 text-center text-sm font-black text-indigo-700">{bulkCount}</span>
                 <button onClick={() => setBulkCount(v => v === '' ? 1 : Math.min(3, v + 1))}
-                  className="w-5 h-5 rounded bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">+</button>
+                  className="w-6 h-6 rounded-lg bg-gray-200 hover:bg-gray-300 text-xs font-black flex items-center justify-center">+</button>
               </div>
+              {/* 적용 버튼 */}
               <button
                 onClick={applyBulk}
-                className="ml-auto px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg hover:bg-indigo-200 transition-all"
+                className="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg hover:bg-indigo-200 transition-all"
               >적용</button>
             </div>
 
