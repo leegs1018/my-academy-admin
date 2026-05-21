@@ -219,6 +219,7 @@ export default function PdfEditorPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [passageModal, setPassageModal] = useState<PdfHistoryItem | null>(null);
   const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
+  const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
 
   // ── 지문분석 CON 단가 로드 ──
   useEffect(() => {
@@ -779,11 +780,11 @@ export default function PdfEditorPage() {
                 )}
 
                 {/* 00 원문 */}
-                <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-                  <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
-                    <span className="text-white/70 font-black text-2xl leading-none">00</span>
+                <div className={`bg-white rounded-2xl border overflow-hidden ${printTheme === 'color' ? 'shadow-lg border-slate-100' : 'shadow-sm border-slate-200'}`}>
+                  <div className={`px-5 py-2.5 flex items-center gap-3 ${printTheme === 'color' ? 'bg-slate-700' : 'bg-white border-b-2 border-slate-200'}`}>
+                    <span className={`font-black text-2xl leading-none ${printTheme === 'color' ? 'text-white/70' : 'text-slate-400'}`}>00</span>
                     <div>
-                      <h2 className="text-white font-black text-lg leading-tight">원문 지문</h2>
+                      <h2 className={`font-black text-lg leading-tight ${printTheme === 'color' ? 'text-white' : 'text-slate-900'}`}>원문 지문</h2>
                     </div>
                   </div>
                   <div className="p-4">
@@ -793,7 +794,7 @@ export default function PdfEditorPage() {
 
                 {/* 01 변형 지문 */}
                 <SectionCard number="01" title="변형 지문"
-                  color="bg-teal-600"
+                  color="bg-teal-600" theme={printTheme}
                   onCopy={() => copy(d.paraphrased_passage ?? '', 'paraphrase')}
                   copied={copiedSection === 'paraphrase'}>
                   {editMode ? (
@@ -809,11 +810,11 @@ export default function PdfEditorPage() {
 
                 {/* 02 T/F 문제 */}
                 <SectionCard number="02" title="T/F 문제 10개"
-                  color="bg-violet-500" onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
+                  color="bg-violet-500" theme={printTheme} onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
                   <div className="space-y-1 mb-2">
                     {d.tf_questions.map((q) => (
-                      <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 transition-colors">
-                        <span className="font-black text-slate-600 w-7 shrink-0 text-lg">{q.number}.</span>
+                      <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg transition-colors ${printTheme === 'color' ? 'hover:bg-violet-50' : 'hover:bg-gray-50'}`}>
+                        <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
                         {editMode ? (
                           <textarea
                             className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-xl resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
@@ -831,31 +832,31 @@ export default function PdfEditorPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="pdf-answer-area border-t border-slate-200 pt-3">
+                  <div className={`pdf-answer-area border-t pt-3 ${printTheme === 'color' ? 'border-violet-100' : 'border-slate-200'}`}>
                     <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                      className="no-print flex items-center gap-2 text-slate-600 font-black hover:text-slate-800 transition-colors text-sm">
+                      className={`no-print flex items-center gap-2 font-black hover:transition-colors text-sm ${printTheme === 'color' ? 'text-violet-600 hover:text-violet-800' : 'text-slate-600 hover:text-slate-800'}`}>
                       <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
                       해설지 {showAnswerKey ? '닫기' : '보기'}
                     </button>
                     {showAnswerKey && (
                       <div className="mt-3 space-y-3">
-                        <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200">
+                        <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-gray-50 border-gray-200'}`}>
                           <div className="flex justify-between mb-2">
-                            <span className="font-black text-slate-700 text-sm">정답</span>
+                            <span className={`font-black text-sm ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</span>
                             <button onClick={() => copy(d.answer_key, 'answer_key')}
-                              className="no-print text-xs font-black text-slate-500 hover:text-slate-700">
+                              className={`no-print text-xs font-black ${printTheme === 'color' ? 'text-violet-500 hover:text-violet-700' : 'text-slate-500 hover:text-slate-700'}`}>
                               {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
                             </button>
                           </div>
                           <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
                         </div>
                         {d.tf_questions.some(q => q.explanation) && (
-                          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200">
-                            <span className="font-black text-slate-700 block mb-2 text-sm">해설</span>
+                          <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-gray-50 border-gray-200'}`}>
+                            <span className={`font-black block mb-2 text-sm ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>해설</span>
                             <div className="space-y-2">
                               {d.tf_questions.map(q => q.explanation && (
                                 <div key={q.number} className="flex gap-2 text-sm">
-                                  <span className="font-black text-slate-600 shrink-0 w-12">{q.number}. {q.answer}</span>
+                                  <span className={`font-black shrink-0 w-12 ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}. {q.answer}</span>
                                   <p className="text-slate-600 font-bold leading-relaxed flex-1 min-w-0">{q.explanation}</p>
                                 </div>
                               ))}
@@ -874,7 +875,7 @@ export default function PdfEditorPage() {
 
                 {/* 03 한글 요약 */}
                 <SectionCard number="03" title="한글 요약"
-                  color="bg-indigo-500"
+                  color="bg-indigo-500" theme={printTheme}
                   onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
                   copied={copiedSection === 'korean'}>
                   <div>
@@ -911,13 +912,13 @@ export default function PdfEditorPage() {
 
                 {/* 04 영어 제목 */}
                 <SectionCard number="04" title="영어 제목 3가지"
-                  color="bg-amber-500"
+                  color="bg-amber-500" theme={printTheme}
                   onCopy={() => copy(d.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')}
                   copied={copiedSection === 'titles'}>
                   <div className="space-y-2">
                     {d.english_titles.map((title, i) => (
-                      <div key={i} className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
-                        <span className="font-black text-slate-600 w-8 shrink-0 text-lg">{i + 1}.</span>
+                      <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
+                        <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
                         {editMode ? (
                           <input
                             className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
@@ -945,12 +946,12 @@ export default function PdfEditorPage() {
 
                 {/* 05 1문장 영어 요약 */}
                 <SectionCard number="05" title="1문장 영어 요약 3가지"
-                  color="bg-rose-500" onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
+                  color="bg-rose-500" theme={printTheme} onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                   <div className="space-y-2">
                     {d.one_sentence_summaries.map((s, i) => (
-                      <div key={i} className="px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
+                      <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-gray-50 border-gray-200'}`}>
                         <div className="flex items-start gap-2">
-                          <span className="font-black text-slate-600 w-8 shrink-0 text-lg">{i + 1}.</span>
+                          <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
                           <div className="flex-1">
                             {editMode ? (
                               <>
@@ -990,7 +991,7 @@ export default function PdfEditorPage() {
 
                 {/* 06 관련 어휘 */}
                 <SectionCard number="06" title="관련 어휘 10개"
-                  color="bg-slate-700" onCopy={() => copy(d.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
+                  color="bg-slate-700" theme={printTheme} onCopy={() => copy(d.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
                   <div>
                     <table id="vocab-table" className="w-full text-base border-collapse table-fixed">
                       <colgroup>
@@ -1074,6 +1075,20 @@ export default function PdfEditorPage() {
 
           {result && (
             <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
+              {/* 테마 토글 */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 shadow-lg px-3 py-2 rounded-2xl">
+                <span className="text-slate-400 text-xs font-bold mr-1">테마</span>
+                <button
+                  onClick={() => setPrintTheme('color')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'color' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
+                  컬러
+                </button>
+                <button
+                  onClick={() => setPrintTheme('mono')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'mono' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
+                  흑백
+                </button>
+              </div>
               {saveStatus === 'saving' && (
                 <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
@@ -1283,22 +1298,23 @@ export default function PdfEditorPage() {
   );
 }
 
-function SectionCard({ number, title, subtitle, color, onCopy, copied, children }: {
+function SectionCard({ number, title, subtitle, color, onCopy, copied, children, theme = 'mono' }: {
   number: string; title: string; subtitle?: string; color: string;
-  onCopy: () => void; copied: boolean; children: React.ReactNode;
+  onCopy: () => void; copied: boolean; children: React.ReactNode; theme?: 'color' | 'mono';
 }) {
+  const isColor = theme === 'color';
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="bg-white border-b-2 border-slate-200 px-5 py-2.5 flex items-center justify-between">
+    <div className={`bg-white rounded-2xl border overflow-hidden ${isColor ? 'shadow-lg border-slate-100' : 'shadow-sm border-slate-200'}`}>
+      <div className={`px-5 py-2.5 flex items-center justify-between ${isColor ? color : 'bg-white border-b-2 border-slate-200'}`}>
         <div className="flex items-center gap-3">
-          <span className="text-slate-400 font-black text-2xl leading-none">{number}</span>
+          <span className={`font-black text-2xl leading-none ${isColor ? 'text-white/70' : 'text-slate-400'}`}>{number}</span>
           <div>
-            <h2 className="text-slate-900 font-black text-lg leading-tight">{title}</h2>
-            {subtitle && <p className="text-slate-500 font-bold text-sm mt-0.5">{subtitle}</p>}
+            <h2 className={`font-black text-lg leading-tight ${isColor ? 'text-white' : 'text-slate-900'}`}>{title}</h2>
+            {subtitle && <p className={`font-bold text-sm mt-0.5 ${isColor ? 'text-white/80' : 'text-slate-500'}`}>{subtitle}</p>}
           </div>
         </div>
         <button onClick={onCopy}
-          className="no-print bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs px-3 py-1.5 rounded-xl transition-all active:scale-95">
+          className={`no-print font-black text-xs px-3 py-1.5 rounded-xl transition-all active:scale-95 ${isColor ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
           {copied ? '✅ 복사됨' : '📋 복사'}
         </button>
       </div>
