@@ -787,7 +787,7 @@ export default function PdfEditorPage() {
                     </div>
                   </div>
                   <div className="p-4">
-                    <p className="text-slate-700 font-bold leading-loose whitespace-pre-wrap text-xl">{originalPassageText}</p>
+                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{originalPassageText}</p>
                   </div>
                 </div>
 
@@ -803,7 +803,7 @@ export default function PdfEditorPage() {
                       onChange={(e) => setEditedResult(prev => prev ? { ...prev, paraphrased_passage: e.target.value } : prev)}
                     />
                   ) : (
-                    <p className="text-slate-700 font-bold leading-loose whitespace-pre-wrap text-xl">{d.paraphrased_passage}</p>
+                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{d.paraphrased_passage}</p>
                   )}
                 </SectionCard>
 
