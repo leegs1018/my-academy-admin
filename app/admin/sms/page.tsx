@@ -219,12 +219,13 @@ export default function SMSPage() {
         return;
       }
 
-      // 발송 이력 저장
+      // 발송 이력 저장 (각 수신자에 message 포함)
+      const recipientsWithMsg = (result.results as any[]).map((r: any) => ({ ...r, message }));
       const { data: logData } = await supabase.from('sms_logs').insert([{
         academy_id: userId,
         message,
         recipient_type: recipientType,
-        recipients: result.results,
+        recipients: recipientsWithMsg,
         total_count: result.total,
         success_count: result.success,
         fail_count: result.fail,
@@ -854,7 +855,7 @@ export default function SMSPage() {
                 <p className="text-xs font-black text-gray-400 mb-1">
                   {selectedRecipient ? `${selectedRecipient.name}에게 발송된 메시지` : '메시지 내용'}
                 </p>
-                <p className="text-sm text-gray-700 font-bold whitespace-pre-wrap">{selectedLog.message}</p>
+                <p className="text-sm text-gray-700 font-bold whitespace-pre-wrap">{selectedRecipient?.message ?? selectedLog.message}</p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-gray-50 rounded-2xl p-3">
