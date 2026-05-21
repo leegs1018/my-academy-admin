@@ -780,11 +780,11 @@ export default function PdfEditorPage() {
                 )}
 
                 {/* 00 원문 */}
-                <div className={`bg-white rounded-2xl border overflow-hidden ${printTheme === 'color' ? 'shadow-lg border-slate-100' : 'shadow-sm border-slate-200'}`}>
-                  <div className={`px-5 py-2.5 flex items-center gap-3 ${printTheme === 'color' ? 'bg-slate-700' : 'bg-white border-b-2 border-slate-200'}`}>
-                    <span className={`font-black text-2xl leading-none ${printTheme === 'color' ? 'text-white/70' : 'text-slate-400'}`}>00</span>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                  <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
+                    <span className="font-black text-2xl leading-none text-white/70">00</span>
                     <div>
-                      <h2 className={`font-black text-lg leading-tight ${printTheme === 'color' ? 'text-white' : 'text-slate-900'}`}>원문 지문</h2>
+                      <h2 className="font-black text-lg leading-tight text-white">원문 지문</h2>
                     </div>
                   </div>
                   <div className="p-4">
@@ -1304,17 +1304,17 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children,
 }) {
   const isColor = theme === 'color';
   return (
-    <div className={`bg-white rounded-2xl border overflow-hidden ${isColor ? 'shadow-lg border-slate-100' : 'shadow-sm border-slate-200'}`}>
-      <div className={`px-5 py-2.5 flex items-center justify-between ${isColor ? color : 'bg-white border-b-2 border-slate-200'}`}>
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+      <div className={`${color} px-5 py-2.5 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
-          <span className={`font-black text-2xl leading-none ${isColor ? 'text-white/70' : 'text-slate-400'}`}>{number}</span>
+          <span className="font-black text-2xl leading-none text-white/70">{number}</span>
           <div>
-            <h2 className={`font-black text-lg leading-tight ${isColor ? 'text-white' : 'text-slate-900'}`}>{title}</h2>
-            {subtitle && <p className={`font-bold text-sm mt-0.5 ${isColor ? 'text-white/80' : 'text-slate-500'}`}>{subtitle}</p>}
+            <h2 className="font-black text-lg leading-tight text-white">{title}</h2>
+            {subtitle && <p className="font-bold text-sm mt-0.5 text-white/80">{subtitle}</p>}
           </div>
         </div>
         <button onClick={onCopy}
-          className={`no-print font-black text-xs px-3 py-1.5 rounded-xl transition-all active:scale-95 ${isColor ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}>
+          className="no-print font-black text-xs px-3 py-1.5 rounded-xl transition-all active:scale-95 bg-white/20 hover:bg-white/30 text-white">
           {copied ? '✅ 복사됨' : '📋 복사'}
         </button>
       </div>
