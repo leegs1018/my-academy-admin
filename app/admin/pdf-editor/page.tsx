@@ -879,15 +879,15 @@ export default function PdfEditorPage() {
                   onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')}
                   copied={copiedSection === 'korean'}>
                   <div>
-                    <span className="inline-block mb-3 bg-indigo-100 text-indigo-700 text-base font-black px-3 py-1 rounded-full">
+                    <span className={`inline-block mb-3 text-base font-black px-3 py-1 rounded-full ${printTheme === 'color' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
                       {d.korean_summary.type === '일반' ? '일반 지문' : d.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
                     </span>
                     <table className="w-full border-collapse">
                       <tbody>
                         {d.korean_summary.rows.map((row, i) => (
-                          <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
-                            <td className="w-28 p-2.5 font-black text-indigo-700 text-base border border-indigo-100 whitespace-nowrap align-top">{row.label}</td>
-                            <td className="p-2.5 border border-indigo-100">
+                          <tr key={i} className={printTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
+                            <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${printTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
+                            <td className={`p-2.5 border ${printTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
                               {editMode ? (
                                 <textarea
                                   className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
