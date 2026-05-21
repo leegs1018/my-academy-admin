@@ -813,7 +813,7 @@ export default function PdfEditorPage() {
                   color="bg-violet-500" theme={printTheme} onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
                   <div className="space-y-1 mb-2">
                     {d.tf_questions.map((q) => (
-                      <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg transition-colors ${printTheme === 'color' ? 'hover:bg-violet-50' : 'hover:bg-gray-50'}`}>
+                      <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg transition-colors ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
                         <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
                         {editMode ? (
                           <textarea
@@ -840,7 +840,7 @@ export default function PdfEditorPage() {
                     </button>
                     {showAnswerKey && (
                       <div className="mt-3 space-y-3">
-                        <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-gray-50 border-gray-200'}`}>
+                        <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
                           <div className="flex justify-between mb-2">
                             <span className={`font-black text-sm ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</span>
                             <button onClick={() => copy(d.answer_key, 'answer_key')}
@@ -851,7 +851,7 @@ export default function PdfEditorPage() {
                           <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
                         </div>
                         {d.tf_questions.some(q => q.explanation) && (
-                          <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
                             <span className={`font-black block mb-2 text-sm ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>해설</span>
                             <div className="space-y-2">
                               {d.tf_questions.map(q => q.explanation && (
@@ -917,7 +917,7 @@ export default function PdfEditorPage() {
                   copied={copiedSection === 'titles'}>
                   <div className="space-y-2">
                     {d.english_titles.map((title, i) => (
-                      <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-gray-50 border-gray-200'}`}>
+                      <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
                         <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
                         {editMode ? (
                           <input
@@ -949,7 +949,7 @@ export default function PdfEditorPage() {
                   color="bg-rose-500" theme={printTheme} onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                   <div className="space-y-2">
                     {d.one_sentence_summaries.map((s, i) => (
-                      <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-gray-50 border-gray-200'}`}>
+                      <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-200'}`}>
                         <div className="flex items-start gap-2">
                           <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
                           <div className="flex-1">
@@ -1017,7 +1017,7 @@ export default function PdfEditorPage() {
                             return { ...prev, vocabulary_table: vocab };
                           });
                           return (
-                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                          <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
                             <td className="px-2 py-2 border-b border-slate-100">
                               {editMode ? (
                                 <div className="flex flex-col gap-0.5">
@@ -1305,7 +1305,7 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children,
   const isColor = theme === 'color';
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-      <div className={`${color} px-5 py-2.5 flex items-center justify-between`}>
+      <div className={`${isColor ? color : 'bg-slate-700'} px-5 py-2.5 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
           <span className="font-black text-2xl leading-none text-white/70">{number}</span>
           <div>
