@@ -461,7 +461,8 @@ export default function PdfEditorPage() {
   const canGenerate = textToSend.length >= 50 && !loading;
 
   const handleGenerate = async () => {
-    if (!canGenerate) return;
+    const currentText = (inputMode === 'text' ? manualText : ocrText).trim();
+    if (currentText.length < 50 || loading) return;
 
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -479,7 +480,7 @@ export default function PdfEditorPage() {
       const res = await fetch('/api/process-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSend, difficulty, academy_id: user?.id }),
+        body: JSON.stringify({ text: currentText, difficulty, academy_id: user?.id }),
         signal: controller.signal,
       });
       const rawText = await res.text();
@@ -491,11 +492,11 @@ export default function PdfEditorPage() {
       }
       if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
       const generated = json.data as GeneratedMaterials;
-      setOriginalPassageText(textToSend);
+      setOriginalPassageText(currentText);
       setResult(generated);
       setSaveStatus('idle');
       // DOM 렌더링 대기 후 자동 저장
-      setTimeout(() => autoSavePdf(generated, textToSend, difficulty, pdfTitle), 800);
+      setTimeout(() => autoSavePdf(generated, currentText, difficulty, pdfTitle), 800);
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
@@ -811,11 +812,11 @@ export default function PdfEditorPage() {
                   color="bg-violet-500" onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
                   <div className="space-y-1 mb-2">
                     {d.tf_questions.map((q) => (
-                      <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-violet-50 transition-colors">
-                        <span className="font-black text-violet-600 w-7 shrink-0 text-base">{q.number}.</span>
+                      <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 transition-colors">
+                        <span className="font-black text-slate-600 w-7 shrink-0 text-lg">{q.number}.</span>
                         {editMode ? (
                           <textarea
-                            className="flex-1 border border-violet-200 rounded p-1 font-bold text-slate-700 text-lg resize-none focus:outline-none focus:border-violet-400 min-h-[36px]"
+                            className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-xl resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
                             value={q.statement}
                             onChange={(e) => setEditedResult(prev => {
                               if (!prev) return prev;
@@ -825,36 +826,36 @@ export default function PdfEditorPage() {
                             })}
                           />
                         ) : (
-                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-lg">{q.statement}</p>
+                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-xl">{q.statement}</p>
                         )}
                       </div>
                     ))}
                   </div>
-                  <div className="pdf-answer-area border-t border-violet-100 pt-3">
+                  <div className="pdf-answer-area border-t border-slate-200 pt-3">
                     <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                      className="no-print flex items-center gap-2 text-violet-600 font-black hover:text-violet-800 transition-colors text-sm">
+                      className="no-print flex items-center gap-2 text-slate-600 font-black hover:text-slate-800 transition-colors text-sm">
                       <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
                       해설지 {showAnswerKey ? '닫기' : '보기'}
                     </button>
                     {showAnswerKey && (
                       <div className="mt-3 space-y-3">
-                        <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
+                        <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200">
                           <div className="flex justify-between mb-2">
-                            <span className="font-black text-violet-700 text-sm">정답</span>
+                            <span className="font-black text-slate-700 text-sm">정답</span>
                             <button onClick={() => copy(d.answer_key, 'answer_key')}
-                              className="no-print text-xs font-black text-violet-500 hover:text-violet-700">
+                              className="no-print text-xs font-black text-slate-500 hover:text-slate-700">
                               {copiedSection === 'answer_key' ? '✅ 복사됨' : '📋 복사'}
                             </button>
                           </div>
                           <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
                         </div>
                         {d.tf_questions.some(q => q.explanation) && (
-                          <div className="p-3 bg-violet-50 rounded-2xl border border-violet-100">
-                            <span className="font-black text-violet-700 block mb-2 text-sm">해설</span>
+                          <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200">
+                            <span className="font-black text-slate-700 block mb-2 text-sm">해설</span>
                             <div className="space-y-2">
                               {d.tf_questions.map(q => q.explanation && (
                                 <div key={q.number} className="flex gap-2 text-sm">
-                                  <span className="font-black text-violet-600 shrink-0 w-12">{q.number}. {q.answer}</span>
+                                  <span className="font-black text-slate-600 shrink-0 w-12">{q.number}. {q.answer}</span>
                                   <p className="text-slate-600 font-bold leading-relaxed flex-1 min-w-0">{q.explanation}</p>
                                 </div>
                               ))}
@@ -915,8 +916,8 @@ export default function PdfEditorPage() {
                   copied={copiedSection === 'titles'}>
                   <div className="space-y-2">
                     {d.english_titles.map((title, i) => (
-                      <div key={i} className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 rounded-xl border border-amber-100">
-                        <span className="font-black text-amber-600 w-8 shrink-0 text-lg">{i + 1}.</span>
+                      <div key={i} className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
+                        <span className="font-black text-slate-600 w-8 shrink-0 text-lg">{i + 1}.</span>
                         {editMode ? (
                           <input
                             className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
@@ -933,7 +934,7 @@ export default function PdfEditorPage() {
                           return (
                             <div className="flex-1">
                               <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
-                              {korean && <p className="text-slate-500 font-bold text-base mt-1">{korean}</p>}
+                              {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
                             </div>
                           );
                         })()}
@@ -947,9 +948,9 @@ export default function PdfEditorPage() {
                   color="bg-rose-500" onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                   <div className="space-y-2">
                     {d.one_sentence_summaries.map((s, i) => (
-                      <div key={i} className="px-3 py-2.5 bg-rose-50 rounded-xl border border-rose-100">
+                      <div key={i} className="px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
                         <div className="flex items-start gap-2">
-                          <span className="font-black text-rose-600 w-8 shrink-0 text-lg">{i + 1}.</span>
+                          <span className="font-black text-slate-600 w-8 shrink-0 text-lg">{i + 1}.</span>
                           <div className="flex-1">
                             {editMode ? (
                               <>
@@ -1023,7 +1024,7 @@ export default function PdfEditorPage() {
                                   <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
                                 </div>
                               ) : (
-                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-400 text-sm ml-1">({row.meaning})</span></>
+                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-sm ml-1">({row.meaning})</span></>
                               )}
                             </td>
                             {([['syn1','syn1_m'], ['syn2','syn2_m'], ['syn3','syn3_m']] as const).map(([wk, mk], j) => (
@@ -1034,7 +1035,7 @@ export default function PdfEditorPage() {
                                     <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
                                   </div>
                                 ) : (
-                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-400 text-sm ml-1">({row[mk]})</span></>
+                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-sm ml-1">({row[mk]})</span></>
                                 )}
                               </td>
                             ))}
@@ -1045,7 +1046,7 @@ export default function PdfEditorPage() {
                                   <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
                                 </div>
                               ) : (
-                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-400 text-sm ml-1">({row.antonym_m})</span></>
+                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-sm ml-1">({row.antonym_m})</span></>
                               )}
                             </td>
                           </tr>
@@ -1287,17 +1288,17 @@ function SectionCard({ number, title, subtitle, color, onCopy, copied, children 
   onCopy: () => void; copied: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-      <div className={`${color} px-5 py-2.5 flex items-center justify-between`}>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white border-b-2 border-slate-200 px-5 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-white/70 font-black text-2xl leading-none">{number}</span>
+          <span className="text-slate-400 font-black text-2xl leading-none">{number}</span>
           <div>
-            <h2 className="text-white font-black text-lg leading-tight">{title}</h2>
-            {subtitle && <p className="text-white/80 font-bold text-sm mt-0.5">{subtitle}</p>}
+            <h2 className="text-slate-900 font-black text-lg leading-tight">{title}</h2>
+            {subtitle && <p className="text-slate-500 font-bold text-sm mt-0.5">{subtitle}</p>}
           </div>
         </div>
         <button onClick={onCopy}
-          className="no-print bg-white/20 hover:bg-white/30 text-white font-black text-xs px-3 py-1.5 rounded-xl transition-all active:scale-95">
+          className="no-print bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs px-3 py-1.5 rounded-xl transition-all active:scale-95">
           {copied ? '✅ 복사됨' : '📋 복사'}
         </button>
       </div>
