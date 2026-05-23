@@ -92,6 +92,25 @@ Difficulty control:
 - Prioritize abstract reasoning over obscure vocabulary.
 - Vocabulary should feel academically natural, not artificially difficult.
 - Correct answers should emerge only after understanding the full logical structure of the passage.
+
+[정답 유일성 원칙 — 모든 유형 공통 적용]
+
+- 실제 오류(문법·어휘·논리)는 반드시 정확히 1개만 존재해야 한다.
+- 나머지 4개 선택지는 어떤 문법 이론·논리 분석으로도 오류가 되어서는 안 된다.
+- 문법 학자 간 견해 차이가 발생할 수 있는 애매한 구조는 사용 금지.
+- stylistic awkwardness(문체상 어색함)는 허용되지만 grammatical incorrectness(문법 오류)는 절대 아니어야 한다.
+- Correct distractors must appear suspicious at first glance but become fully grammatical after structural analysis.
+- Never create distractors that are controversial, marginally acceptable, or dependent on stylistic preference.
+- Correct choices must remain fully grammatical even under formal written English standards.
+- If more than one option can reasonably be interpreted as incorrect, discard the entire question and regenerate it.
+
+[정답 유일성 검수 — 생성 후 반드시 수행]
+
+각 선택지에 대해 순서대로 점검할 것:
+1. 해당 선택지가 왜 맞는지(또는 왜 틀리는지) 문법·논리 규칙으로 설명 가능해야 한다.
+2. 정답이 아닌 선택지는 어떤 관점에서도 수정 필요성이 없어야 한다.
+3. "더 자연스럽다" 수준이 아니라 실제 문법·논리 규칙상 올바른지 검토할 것.
+4. 두 개 이상의 선택지가 오류로 해석 가능하면 문제 전체를 폐기하고 재생성할 것.
 `,
 
   topic_title: `
@@ -1044,6 +1063,68 @@ export async function POST(request: Request) {
         if (!q) {
           if (attempt < MAX_RETRIES) continue;
           return null;
+        }
+
+        // 선지 수 검증 (모든 유형)
+        if (!q.choices || q.choices.length !== 5) {
+          console.warn(`[${questionType}] 선지 수 오류 (${q.choices?.length ?? 0}개) — 재시도 ${attempt + 1}`);
+          if (attempt < MAX_RETRIES) continue;
+          return null;
+        }
+
+        // targetAnswer 일치 검증 (모든 유형) — 마지막 시도는 그냥 허용
+        if (q.answer !== targetAnswer && attempt < MAX_RETRIES) {
+          console.warn(`[${questionType}] 정답 불일치: 요청=${targetAnswer} 실제=${q.answer} — 재시도 ${attempt + 1}`);
+          continue;
+        }
+
+        // flow 검증: ①~⑤ 모두 modified_passage에 존재해야 함
+        if (questionType === 'flow') {
+          const missing = CIRCLES.filter(c => !q!.modified_passage?.includes(c));
+          if (missing.length > 0) {
+            console.warn(`[flow] 누락 번호 ${missing.join('')} — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+        }
+
+        // phrase_meaning 검증: 선지 길이 55자 이상
+        if (questionType === 'phrase_meaning') {
+          const shortChoices = q!.choices.filter((c: ExamChoice) => c.text.length < 55);
+          if (shortChoices.length > 0) {
+            console.warn(`[phrase_meaning] 선지 길이 미달 (${shortChoices.map(c => c.text.length).join(',')}) — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+        }
+
+        // summary 검증: question_text에 (A)와 (B) 포함
+        if (questionType === 'summary') {
+          const qt = q!.question_text ?? '';
+          if (!qt.includes('(A)') || !qt.includes('(B)')) {
+            console.warn(`[summary] question_text에 (A)(B) 누락 — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+        }
+
+        // fill_blank 검증: modified_passage에 빈칸 마커 존재
+        if (questionType === 'fill_blank') {
+          if (!q!.modified_passage?.includes('___')) {
+            console.warn(`[fill_blank] 빈칸 마커 누락 — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+        }
+
+        // topic_title, fill_blank, phrase_meaning 검증: 선지가 원형 기호 단독이면 안 됨
+        if (['topic_title', 'fill_blank', 'phrase_meaning'].includes(questionType)) {
+          const hasSymbolOnly = q!.choices.some((c: ExamChoice) => /^[①②③④⑤]$/.test(c.text.trim()));
+          if (hasSymbolOnly) {
+            console.warn(`[${questionType}] 선지에 기호 단독 항목 — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
         }
 
         // grammar 검증
