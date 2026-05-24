@@ -420,9 +420,9 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       const aM = passage.match(/\(A\)\s*([\s\S]*?)(?=\(B\))/);
       const bM = passage.match(/\(B\)\s*([\s\S]*?)(?=\(C\))/);
       const cM = passage.match(/\(C\)\s*([\s\S]*?)$/);
-      if (givenM) html += `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#94a3b8;margin-bottom:2px;">[주어진 글]</div><div style="font-size:12px;line-height:1.6;color:#1e293b;">${esc(givenM[1].trim())}</div></div>`;
+      if (givenM) html += `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#94a3b8;margin-bottom:2px;">[주어진 글]</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${esc(givenM[1].trim())}</div></div>`;
       for (const [lbl, m] of [['A', aM], ['B', bM], ['C', cM]] as [string, RegExpMatchArray | null][]) {
-        if (m) html += `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#6366f1;margin-bottom:2px;">(${lbl})</div><div style="font-size:12px;line-height:1.6;color:#1e293b;">${esc(m[1].trim())}</div></div>`;
+        if (m) html += `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#6366f1;margin-bottom:2px;">(${lbl})</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${esc(m[1].trim())}</div></div>`;
       }
     } else if (q.modified_passage) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
@@ -1540,13 +1540,13 @@ export default function AiQuestionsPage() {
                             {givenMatch && (
                               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-3">
                                 <p className="text-xs font-black text-slate-400 mb-2">[주어진 글]</p>
-                                <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{givenMatch[1].trim()}</p>
+                                <p className="text-sm text-slate-700 font-medium leading-relaxed" style={{textAlign:'justify',wordBreak:'break-word'}}>{givenMatch[1].trim()}</p>
                               </div>
                             )}
                             {[['A', aMatch], ['B', bMatch], ['C', cMatch]].map(([label, match]) => match && (
                               <div key={label as string} className="bg-white border border-slate-200 rounded-xl p-4 mb-3">
                                 <p className="text-xs font-black text-indigo-500 mb-2">({label})</p>
-                                <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{(match as RegExpMatchArray)[1].trim()}</p>
+                                <p className="text-sm text-slate-700 font-medium leading-relaxed" style={{textAlign:'justify',wordBreak:'break-word'}}>{(match as RegExpMatchArray)[1].trim()}</p>
                               </div>
                             ))}
                           </>
@@ -1573,6 +1573,11 @@ export default function AiQuestionsPage() {
                                     : 'bg-gray-50 border border-transparent'}`}>
                                 {(q.type === 'grammar' || q.type === 'vocab_paraphrase') ? (
                                   renderGrammarChoice(c.text, isCorrect, c.number)
+                                ) : q.type === 'sentence_order' ? (
+                                  <span className={`text-sm leading-relaxed font-medium
+                                    ${isCorrect ? 'font-black text-indigo-700' : 'text-gray-700'}`}>
+                                    {c.text}
+                                  </span>
                                 ) : (
                                   <>
                                     <span className={`font-black flex-shrink-0 text-sm pt-0.5 min-w-[20px]
