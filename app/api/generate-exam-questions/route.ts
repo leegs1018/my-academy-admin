@@ -524,34 +524,6 @@ enabled students ②[learning]
 ❌ 지문 아무곳이나 밑줄
 
 ━━━━━━━━━━━━━━━━━━
-[금지 규칙 — Surface Grammar Error Ban]
-━━━━━━━━━━━━━━━━━━
-
-Do NOT create errors that can be identified through local phrase checking alone.
-
-The incorrect option must NOT be solvable by checking only:
-- preposition + verb form
-- simple infinitive omission
-- article usage
-- isolated tense mismatch
-- isolated singular/plural mismatch
-
-The student must analyze:
-- clause structure,
-- logical subject,
-- modifier attachment,
-- parallel category,
-- or antecedent relationship
-
-before determining the error.
-
-The incorrect option should remain locally plausible.
-
-A student reading only the underlined phrase should NOT be able to determine the answer immediately.
-
-The grammatical violation must emerge only after analyzing the larger sentence structure.
-
-━━━━━━━━━━━━━━━━━━
 [정답 자기검증 — 반드시 수행]
 ━━━━━━━━━━━━━━━━━━
 
