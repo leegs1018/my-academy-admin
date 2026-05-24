@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export interface ExamChoice {
   number: number;
