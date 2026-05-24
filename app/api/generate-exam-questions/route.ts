@@ -694,7 +694,7 @@ text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄로 작성.
 
 - choices: 5개 영어 문장 또는 절 형태 (원형 번호 없이 텍스트만)
   · text 필드에 반드시 완전한 영어 문장 또는 절을 작성할 것
-  · 각 선택지 text는 반드시 55자(character) 이상이어야 한다 — 55자 미만 선택지 절대 금지
+  · 각 선택지 text는 반드시 55자(character) 이상 110자 이내 — 55자 미만 또는 110자 초과 절대 금지
   · ①②③④⑤ 기호를 text 필드에 절대 사용 금지 — 텍스트만 작성
   · 올바른 형식 예시:
     {"number": 1, "text": "one's success is judged by how many goals he has achieved"}
@@ -980,7 +980,7 @@ ${selectedRules}
 이번 문제의 정답(answer) 번호는 반드시 ${targetAnswer}번이어야 한다. 다른 번호는 정답이 될 수 없다.` : ''}`;
 }
 
-const MULTI_STEP_TYPES = new Set(['grammar', 'sentence_order', 'phrase_meaning']);
+const MULTI_STEP_TYPES = new Set(['grammar', 'sentence_order', 'phrase_meaning', 'vocab_paraphrase']);
 
 function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number): string {
   if (questionType === 'grammar') {
@@ -1031,11 +1031,34 @@ ${text}
 1. 비유/추상/함축/역설 표현 후보 6개를 지문에서 찾아 원문 그대로 인용
 2. 가장 고난도 추론이 필요한 표현 1개 선정 + 이유 (전체 논리 파악 필요)
 3. 해당 표현의 진의(intended implication) — literal 의미가 아닌 필자 의도 설명
-4. 정답 선지 (55자 이상 영어 문장, conceptual paraphrase):
+4. 정답 선지 (55~110자 영어 문장, conceptual paraphrase):
    - ${targetAnswer}번 위치의 정답
    - literal 의미가 아닌 추상적 재진술
-5. 오답 4개 (각 55자 이상, 서로 다른 실패 방식):
+5. 오답 4개 (각 55~110자, 서로 다른 실패 방식):
    - 부분 일치 / 역방향 / 과잉일반화 / 예시수준 / 반대함의 중 4가지
+
+분석 텍스트만 출력. JSON 금지.`;
+  }
+
+  if (questionType === 'vocab_paraphrase') {
+    return `수능 낱말 쓰임 문제 출제 계획을 세워라.
+
+[지문]
+${text}
+
+수행 순서:
+1. 지문의 핵심 논리 흐름 파악: 주제·중심 주장·전개 방향 1~2줄 요약
+2. 밑줄 후보 단어 8개 선정 (명사/동사/형용사 중 문맥 의존도 높은 단어, 원문 그대로 인용)
+   - 선정 기준: 주변 문맥 없이는 적절성 판단 불가능한 단어
+   - 관사/전치사/접속사 금지
+3. 후보 중 5개 선정 → ①②③④⑤ 번호 부여 + 위치(문장 인용)
+4. ${targetAnswer}번 위치를 오답(문맥상 부적절) 단어로 확정:
+   - 원문 단어 → 교체할 반의어/혼동어 결정
+   - 왜 문맥상 부적절한지 설명
+   - 교체 단어가 원문에 없는 단어인지 확인
+5. 나머지 4개: 원문 단어 → 문맥상 적절한 새 단어로 교체 계획
+   - 각 교체 단어가 원문에 없는 단어인지 확인
+   - 왜 문맥상 적절한지 설명
 
 분석 텍스트만 출력. JSON 금지.`;
   }
@@ -1140,7 +1163,7 @@ export async function POST(request: Request) {
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
-      const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 2 : 1;
+      const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 4 : 4;
       const targetAnswer = Math.floor(Math.random() * 5) + 1;
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       const isMultiStep = MULTI_STEP_TYPES.has(questionType);
