@@ -1233,6 +1233,11 @@ export async function POST(request: Request) {
     };
     const DEFAULT_MODEL = 'gpt-5.1';
 
+    const TYPE_TOKENS_MAP: Record<string, number> = {
+      grammar: 4000,
+    };
+    const DEFAULT_TOKENS = 2500;
+
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
       const MAX_RETRIES = 1;
@@ -1243,7 +1248,7 @@ export async function POST(request: Request) {
         try {
           const response = await client.chat.completions.create({
             model,
-            max_completion_tokens: 2500,
+            max_completion_tokens: TYPE_TOKENS_MAP[questionType] ?? DEFAULT_TOKENS,
             messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }],
           });
           const rawText = response.choices[0]?.message?.content ?? '';

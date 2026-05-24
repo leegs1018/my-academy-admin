@@ -862,9 +862,13 @@ export default function AiQuestionsPage() {
           difficulty: difficultyLevel,
         }),
       });
-      const json = await res.json() as { success?: boolean; error?: string };
+      let json: { success?: boolean; error?: string } = {};
+      try { json = await res.json(); } catch { /* non-JSON timeout response */ }
       if (res.ok && json.success) setSaveStatus('done');
-      else { setSaveStatus('error'); setSaveErrorMsg(json.error || '알 수 없는 오류'); }
+      else {
+        const msg = json.error || (res.status === 413 ? 'PDF 파일이 너무 큽니다' : res.status >= 500 ? '서버 오류 — 잠시 후 다시 시도해 주세요' : '저장 실패');
+        setSaveStatus('error'); setSaveErrorMsg(msg);
+      }
     } catch (e) {
       setSaveStatus('error');
       setSaveErrorMsg(e instanceof Error ? e.message : '네트워크 오류');
