@@ -1207,7 +1207,7 @@ export async function POST(request: Request) {
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
-      const MAX_RETRIES = 3;
+      const MAX_RETRIES = 1;
       const targetAnswer = Math.floor(Math.random() * 5) + 1;
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1215,7 +1215,7 @@ export async function POST(request: Request) {
         try {
           const response = await client.chat.completions.create({
             model,
-            max_completion_tokens: 4000,
+            max_completion_tokens: 2500,
             messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }],
           });
           const rawText = response.choices[0]?.message?.content ?? '';
