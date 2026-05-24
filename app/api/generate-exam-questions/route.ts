@@ -1215,7 +1215,7 @@ export async function POST(request: Request) {
         try {
           const response = await client.chat.completions.create({
             model,
-            max_tokens: 4000,
+            max_completion_tokens: 4000,
             messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }],
           });
           const rawText = response.choices[0]?.message?.content ?? '';
