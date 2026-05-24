@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export interface ExamChoice {
   number: number;
@@ -563,6 +563,72 @@ STEP 3.
 10. 평가원 스타일 구조 함정이 존재하는가?
 
 ━━━━━━━━━━━━━━━━━━
+[실제 오류 생성 강제 규칙 — 매우 중요]
+━━━━━━━━━━━━━━━━━━
+
+정답 번호로 선택된 부분은 반드시
+"원문 표현에서 실제로 문법 형태가 변경되어야 한다."
+
+즉:
+- 원문을 그대로 유지한 채 번호만 붙이는 것을 절대 금지한다.
+- 반드시 원문의 형태를 문법적으로 틀린 형태로 변형해야 한다.
+
+허용 예시:
+- whether → that
+- to reduce → reducing
+- themselves → them
+- which was → which were
+- interested → interesting
+
+금지 예시:
+- 원문 표현 그대로 사용
+- 수정 없이 번호만 삽입
+- "틀려 보인다"는 이유만으로 정답 지정
+
+생성 후 반드시 아래를 검증할 것:
+
+STEP 1.
+원문(original passage)과 modified_passage의 정답 위치를 비교하라.
+
+STEP 2.
+정답 번호 위치에서
+실제로 문법 형태 변화가 발생했는지 확인하라.
+
+STEP 3.
+형태 변화가 없다면:
+→ 오류 생성 실패로 간주하고
+새로운 오류를 다시 생성할 것.
+
+STEP 4.
+정답 위치의 수정 전/수정 후를 내부적으로 비교할 것.
+
+예시:
+원문: "determine whether the strategy is effective"
+수정: "determine that the strategy is effective"
+→ 실제 문법 형태 변화 존재 → 정상적인 오류 생성
+
+반면:
+원문: "it was shown that"
+수정: "it was shown that"
+→ 형태 변화 없음 → 오류 생성 실패 → 재생성 필요
+
+━━━━━━━━━━━━━━━━━━
+[정답 존재 검증 — 필수]
+━━━━━━━━━━━━━━━━━━
+
+출력 전 반드시 확인:
+
+- 정답 번호를 수정 이전 원문과 비교했을 때
+  실제 문법 위반이 발생했는가?
+
+- "원문과 동일한 표현"이면 절대 정답으로 지정 금지.
+
+- 반드시: 원문 ≠ modified_passage의 정답 위치 표현 이어야 한다.
+
+만약 원문 == modified_passage의 정답 위치 표현 이면
+→ 오류 생성 실패 → 다시 생성할 것.
+
+━━━━━━━━━━━━━━━━━━
 [출력 필드]
 ━━━━━━━━━━━━━━━━━━
 
@@ -576,6 +642,7 @@ explanation에는:
 - 왜 틀렸는지
 - 어떤 문법 규칙 위반인지
 - 올바른 형태는 무엇인지
+- 원문 표현과 modified_passage의 정답 위치 표현 비교
 
 를 반드시 한글로 상세 설명할 것.
 `,
@@ -896,10 +963,12 @@ text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄로 작성.
   주의: 대괄호 없이 실제 표현을 삽입할 것
 
 - modified_passage 형식 (반드시 준수):
+  · 원본 지문 전체를 그대로 사용할 것 — 첫 문장부터 마지막 문장까지 절대 생략·요약·축약 금지.
   · 지문 속 핵심 추상/비유/함축/일반화 표현을 [대괄호]로 감싸 밑줄 대상 표시
   · 예시: "...In fact, [every man has a horizon of his own], and he will expect..."
   · 표현 길이: 단어 2개 이상 ~ 절 수준 가능, 지문 원문 그대로 사용
   · 대괄호는 하나만 사용할 것 (여러 곳 금지)
+  · 단락 일부를 발췌하거나 요약한 지문 사용 절대 금지 — 원문 지문과 동일한 전체 문장 수를 유지할 것
 
 - choices: 5개 영어 문장 또는 절 형태 (원형 번호 없이 텍스트만)
   · text 필드에 반드시 완전한 영어 문장 또는 절을 작성할 것
@@ -1285,16 +1354,14 @@ export async function POST(request: Request) {
       return null;
     };
 
-    // 유형 병렬 실행, 유형 내 count만큼 순차 생성 → typeConfigs 순서 유지 = PDF 순서
+    // 유형 병렬 실행 + 유형 내 count도 병렬 실행 (순차 실행 시 타임아웃 방지)
     const allResults = await Promise.all(
       enabledConfigs.map(async (cfg) => {
         const count = Math.max(1, Math.min(3, cfg.count));
-        const qs: ExamQuestion[] = [];
-        for (let i = 0; i < count; i++) {
-          const q = await generateForType(cfg.type, cfg.difficulty);
-          if (q) qs.push(q);
-        }
-        return qs;
+        const results = await Promise.all(
+          Array.from({ length: count }, () => generateForType(cfg.type, cfg.difficulty))
+        );
+        return results.filter((q): q is ExamQuestion => q !== null);
       })
     );
     const questions = allResults.flat();
