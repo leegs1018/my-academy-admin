@@ -1201,9 +1201,9 @@ export async function POST(request: Request) {
     const CIRCLES = ['①','②','③','④','⑤'];
 
     const TYPE_MODEL_MAP: Record<string, string> = {
-      grammar: 'gpt-5.5',
+      grammar: 'gpt-4o',
     };
-    const DEFAULT_MODEL = 'gpt-5.1';
+    const DEFAULT_MODEL = 'gpt-4o';
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
