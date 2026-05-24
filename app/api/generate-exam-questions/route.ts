@@ -1229,7 +1229,7 @@ export async function POST(request: Request) {
     const CIRCLES = ['①','②','③','④','⑤'];
 
     const TYPE_MODEL_MAP: Record<string, string> = {
-      grammar: 'gpt-5.5',
+      grammar: 'gpt-5.1',
     };
     const DEFAULT_MODEL = 'gpt-5.1';
 
