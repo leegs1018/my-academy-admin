@@ -361,6 +361,19 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     ).join('');
   };
 
+  const escVocabBlank = (s: string | null | undefined) => {
+    const raw = (s ?? '').replace(/\(([ab])\)\s*_+/gi, '($1)');
+    const parts = raw.split(/(\(a\)|\(b\))/gi);
+    const ss = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n+/g, ' ');
+    return parts.map(part => {
+      const lower = part.toLowerCase();
+      if (lower === '(a)' || lower === '(b)') {
+        return `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 2px;"><span style="font-weight:900;color:#4338ca;background:#eef2ff;padding:1px 6px;border-radius:4px;font-size:11px;">${lower}</span><span style="display:inline-block;width:70px;border-bottom:2px solid #374151;">&nbsp;</span></span>`;
+      }
+      return ss(part);
+    }).join('');
+  };
+
   const passageBox = (content: string) =>
     `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:6px 8px;margin-bottom:7px;font-size:13px;line-height:1.65;color:#1e293b;">${content}</div>`;
   const instrP = (content: string) =>
@@ -396,6 +409,9 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     } else if (q.modified_passage && q.type === 'phrase_meaning') {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escWithUnderline(q.modified_passage));
+    } else if (q.modified_passage && q.type === 'vocab_blank') {
+      html += instrP(`${num}. ${esc(q.question_text)}`);
+      html += passageBox(escVocabBlank(q.modified_passage));
     } else if (q.modified_passage) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escP(q.modified_passage));
