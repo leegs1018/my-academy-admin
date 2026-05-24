@@ -298,7 +298,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   const colW = (W - 2 * M - GAP) / 2; // ~95mm per column
   const A4_H = 297;
   const BOTTOM = A4_H - M - 8; // bottom content limit
-  const RENDER_W = 400; // px width per question element
+  const RENDER_W = 360; // px width — matches PDF column (~95mm at 96dpi)
 
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
@@ -368,7 +368,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     return parts.map(part => {
       const lower = part.toLowerCase();
       if (lower === '(a)' || lower === '(b)') {
-        return `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 2px;"><span style="font-weight:900;color:#4338ca;background:#eef2ff;padding:1px 6px;border-radius:4px;font-size:11px;">${lower}</span><span style="display:inline-block;width:70px;border-bottom:2px solid #374151;">&nbsp;</span></span>`;
+        return `<span style="display:inline-block;border-bottom:2.5px solid #374151;min-width:82px;text-align:center;font-weight:900;color:#4338ca;font-size:12px;margin:0 3px;vertical-align:bottom;padding-bottom:1px;">${lower}</span>`;
       }
       return ss(part);
     }).join('');
@@ -833,11 +833,21 @@ export default function AiQuestionsPage() {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` },
       });
-      if (!urlRes.ok) { setSaveStatus('error'); setSaveErrorMsg('업로드 URL 발급 실패'); return; }
-      const { question: qUrl, answer: aUrl } = await urlRes.json() as {
-        question: { path: string; signedUrl: string; token: string };
-        answer: { path: string; signedUrl: string; token: string } | null;
-      };
+      let urlData: { question: { path: string; signedUrl: string; token: string }; answer: { path: string; signedUrl: string; token: string } | null } | null = null;
+      try {
+        const rawText = await urlRes.text();
+        urlData = JSON.parse(rawText);
+      } catch {
+        setSaveStatus('error');
+        setSaveErrorMsg(`URL 발급 응답 오류 (${urlRes.status}) — 잠시 후 재시도`);
+        return;
+      }
+      if (!urlRes.ok || !urlData?.question) {
+        setSaveStatus('error');
+        setSaveErrorMsg('업로드 URL 발급 실패');
+        return;
+      }
+      const { question: qUrl, answer: aUrl } = urlData;
 
       // 2. PDF 생성
       const [questionBlob, answerBlob] = await Promise.all([
@@ -846,8 +856,11 @@ export default function AiQuestionsPage() {
       ]);
       if (!questionBlob) { setSaveStatus('error'); setSaveErrorMsg('PDF 생성 실패'); return; }
 
-      // 3. 클라이언트에서 Supabase 스토리지에 직접 업로드 (대용량 base64 서버 전송 불필요)
-      await supabase.storage.from('pdf-history').uploadToSignedUrl(qUrl.path, qUrl.token, questionBlob, { contentType: 'application/pdf' });
+      // 3. 클라이언트에서 Supabase 스토리지에 직접 업로드
+      const { error: uploadErr } = await supabase.storage
+        .from('pdf-history')
+        .uploadToSignedUrl(qUrl.path, qUrl.token, questionBlob, { contentType: 'application/pdf' });
+      if (uploadErr) { setSaveStatus('error'); setSaveErrorMsg(`PDF 업로드 실패: ${uploadErr.message}`); return; }
       if (aUrl && answerBlob) {
         await supabase.storage.from('pdf-history').uploadToSignedUrl(aUrl.path, aUrl.token, answerBlob, { contentType: 'application/pdf' });
       }
@@ -855,10 +868,7 @@ export default function AiQuestionsPage() {
       // 4. 서버에 경로만 전달해 DB 저장
       const res = await fetch('/api/save-exam-history', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
           questionPdfPath: qUrl.path,
           answerPdfPath: aUrl?.path ?? null,
@@ -872,7 +882,7 @@ export default function AiQuestionsPage() {
       let json: { success?: boolean; error?: string } = {};
       try { json = await res.json(); } catch { /* non-JSON response */ }
       if (res.ok && json.success) setSaveStatus('done');
-      else { setSaveStatus('error'); setSaveErrorMsg(json.error || '저장 실패'); }
+      else { setSaveStatus('error'); setSaveErrorMsg(json.error || `저장 실패 (${res.status})`); }
     } catch (e) {
       setSaveStatus('error');
       setSaveErrorMsg(e instanceof Error ? e.message : '네트워크 오류');
