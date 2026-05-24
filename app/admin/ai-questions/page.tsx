@@ -828,24 +828,31 @@ export default function AiQuestionsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setSaveStatus('error'); setSaveErrorMsg('로그인 세션 없음'); return; }
 
+      // 1. 서버에서 서명된 업로드 URL 발급
+      const urlRes = await fetch('/api/storage/get-upload-urls', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
+      if (!urlRes.ok) { setSaveStatus('error'); setSaveErrorMsg('업로드 URL 발급 실패'); return; }
+      const { question: qUrl, answer: aUrl } = await urlRes.json() as {
+        question: { path: string; signedUrl: string; token: string };
+        answer: { path: string; signedUrl: string; token: string } | null;
+      };
+
+      // 2. PDF 생성
       const [questionBlob, answerBlob] = await Promise.all([
         generateQuestionPdfBlob(qs, titleSnapshot.trim(), originalPassage),
         buildAnswerPdfBlob(qs, titleSnapshot.trim()),
       ]);
       if (!questionBlob) { setSaveStatus('error'); setSaveErrorMsg('PDF 생성 실패'); return; }
 
-      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      // 3. 클라이언트에서 Supabase 스토리지에 직접 업로드 (대용량 base64 서버 전송 불필요)
+      await supabase.storage.from('pdf-history').uploadToSignedUrl(qUrl.path, qUrl.token, questionBlob, { contentType: 'application/pdf' });
+      if (aUrl && answerBlob) {
+        await supabase.storage.from('pdf-history').uploadToSignedUrl(aUrl.path, aUrl.token, answerBlob, { contentType: 'application/pdf' });
+      }
 
-      const [pdfBase64, answerPdfBase64] = await Promise.all([
-        toBase64(questionBlob),
-        toBase64(answerBlob),
-      ]);
-
+      // 4. 서버에 경로만 전달해 DB 저장
       const res = await fetch('/api/save-exam-history', {
         method: 'POST',
         headers: {
@@ -853,8 +860,8 @@ export default function AiQuestionsPage() {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          pdfBase64,
-          answerPdfBase64,
+          questionPdfPath: qUrl.path,
+          answerPdfPath: aUrl?.path ?? null,
           title: titleSnapshot.trim() || null,
           passageExcerpt: text.slice(0, 150),
           passageFull: text,
@@ -863,12 +870,9 @@ export default function AiQuestionsPage() {
         }),
       });
       let json: { success?: boolean; error?: string } = {};
-      try { json = await res.json(); } catch { /* non-JSON timeout response */ }
+      try { json = await res.json(); } catch { /* non-JSON response */ }
       if (res.ok && json.success) setSaveStatus('done');
-      else {
-        const msg = json.error || (res.status === 413 ? 'PDF 파일이 너무 큽니다' : res.status >= 500 ? '서버 오류 — 잠시 후 다시 시도해 주세요' : '저장 실패');
-        setSaveStatus('error'); setSaveErrorMsg(msg);
-      }
+      else { setSaveStatus('error'); setSaveErrorMsg(json.error || '저장 실패'); }
     } catch (e) {
       setSaveStatus('error');
       setSaveErrorMsg(e instanceof Error ? e.message : '네트워크 오류');
@@ -892,17 +896,20 @@ export default function AiQuestionsPage() {
       ]);
       if (!questionBlob) return;
 
-      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+      const urlRes = await fetch('/api/storage/get-upload-urls', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
       });
+      if (!urlRes.ok) return;
+      const { question: qUrl, answer: aUrl } = await urlRes.json() as {
+        question: { path: string; signedUrl: string; token: string };
+        answer: { path: string; signedUrl: string; token: string } | null;
+      };
 
-      const [pdfBase64, answerPdfBase64] = await Promise.all([
-        toBase64(questionBlob),
-        toBase64(answerBlob),
-      ]);
+      await supabase.storage.from('pdf-history').uploadToSignedUrl(qUrl.path, qUrl.token, questionBlob, { contentType: 'application/pdf' });
+      if (aUrl && answerBlob) {
+        await supabase.storage.from('pdf-history').uploadToSignedUrl(aUrl.path, aUrl.token, answerBlob, { contentType: 'application/pdf' });
+      }
 
       await fetch('/api/save-exam-history', {
         method: 'POST',
@@ -911,8 +918,8 @@ export default function AiQuestionsPage() {
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          pdfBase64,
-          answerPdfBase64,
+          questionPdfPath: qUrl.path,
+          answerPdfPath: aUrl?.path ?? null,
           title: titleSnapshot,
           passageExcerpt: passageText.slice(0, 150),
           passageFull: passageText,
