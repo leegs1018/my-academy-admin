@@ -1208,7 +1208,7 @@ export async function POST(request: Request) {
         let q: ExamQuestion | undefined;
         try {
           const response = await client.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-5.1',
             max_tokens: 4000,
             messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }],
           });
