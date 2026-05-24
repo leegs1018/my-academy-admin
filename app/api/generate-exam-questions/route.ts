@@ -1157,6 +1157,69 @@ ${selectedRules}
 이번 문제의 정답(answer) 번호는 반드시 ${targetAnswer}번이어야 한다. 다른 번호는 정답이 될 수 없다.` : ''}`;
 }
 
+const MULTI_STEP_TYPES = new Set(['grammar', 'sentence_order', 'phrase_meaning']);
+
+function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number): string {
+  if (questionType === 'grammar') {
+    return `수능 어법 문제 출제 계획을 세워라.
+
+[지문]
+${text}
+
+수행 순서:
+1. 관계사/병렬/분사/명사절/수일치/준동사/재귀대명사 구조 포인트를 지문에서 8개 찾고 원문 표현 인용
+2. 그 중 구조 분석 없이 판단 불가능한 5개 선정 → ①②③④⑤ 번호 부여
+3. ${targetAnswer}번 위치를 오류 위치로 확정:
+   - 원문 표현 → 오류 삽입 표현 (구체적으로 명시)
+   - 위반 문법 규칙 명시 (예: "관계부사 where → 관계대명사 which 교체")
+4. 나머지 4개: 틀려보이지만 완전히 맞는 이유 각각 설명
+
+분석 텍스트만 출력. JSON 금지.`;
+  }
+
+  if (questionType === 'sentence_order') {
+    return `수능 순서 배열 문제 출제 계획을 세워라.
+
+[지문]
+${text}
+
+수행 순서:
+1. 지문의 모든 문장을 S1, S2, S3... 으로 번호 매기고 전체 나열
+2. [주어진 글]에 적합한 문장(들) 선정 + 이유 (독립적으로 이해 가능한 도입부)
+3. 나머지 문장들을 (A)(B)(C) 단락으로 나누는 방안:
+   - 각 단락의 논리적 역할 (설명/예시/결론/역접 등)
+   - 단락 내 문장 목록 (S번호로 명시)
+   - 단락 간 연결 장치 (지시어/대명사/연결어 명시)
+4. 올바른 배열 순서 확정:
+   - 반드시 ${targetAnswer}번 선택지가 정답이 되도록 단락 구성 조정
+   - 1=(A)-(B)-(C), 2=(A)-(C)-(B), 3=(B)-(A)-(C), 4=(B)-(C)-(A), 5=(C)-(A)-(B)
+5. 오답 배열 2~3개가 부분 연결되지만 전체 구조에서 실패하는 이유
+
+분석 텍스트만 출력. JSON 금지.`;
+  }
+
+  if (questionType === 'phrase_meaning') {
+    return `수능 어구 의미 추론 문제 출제 계획을 세워라.
+
+[지문]
+${text}
+
+수행 순서:
+1. 비유/추상/함축/역설 표현 후보 6개를 지문에서 찾아 원문 그대로 인용
+2. 가장 고난도 추론이 필요한 표현 1개 선정 + 이유 (전체 논리 파악 필요)
+3. 해당 표현의 진의(intended implication) — literal 의미가 아닌 필자 의도 설명
+4. 정답 선지 (55자 이상 영어 문장, conceptual paraphrase):
+   - ${targetAnswer}번 위치의 정답
+   - literal 의미가 아닌 추상적 재진술
+5. 오답 4개 (각 55자 이상, 서로 다른 실패 방식):
+   - 부분 일치 / 역방향 / 과잉일반화 / 예시수준 / 반대함의 중 4가지
+
+분석 텍스트만 출력. JSON 금지.`;
+  }
+
+  return '';
+}
+
 function extractJson(text: string): string {
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlock) return codeBlock[1].trim();
@@ -1242,7 +1305,7 @@ export async function POST(request: Request) {
     const CIRCLES = ['①','②','③','④','⑤'];
 
     const TYPE_MODEL_MAP: Record<string, string> = {
-      grammar: 'gpt-5.5',
+      grammar: 'gpt-5.1',
     };
     const DEFAULT_MODEL = 'gpt-5.1';
 
@@ -1257,13 +1320,35 @@ export async function POST(request: Request) {
       const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order') ? 2 : 1;
       const targetAnswer = Math.floor(Math.random() * 5) + 1;
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
+      const isMultiStep = MULTI_STEP_TYPES.has(questionType);
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         let q: ExamQuestion | undefined;
         try {
+          type Msg = { role: 'user' | 'assistant'; content: string };
+          let messages: Msg[];
+
+          if (isMultiStep) {
+            const analysisPrompt = buildAnalysisPrompt(text, questionType, targetAnswer);
+            const step1 = await client.chat.completions.create({
+              model,
+              max_completion_tokens: 1500,
+              messages: [{ role: 'user' as const, content: analysisPrompt }],
+            });
+            const analysis = step1.choices[0]?.message?.content ?? '';
+            console.log(`[${questionType}] Step1 분석 완료 (${analysis.length}자)`);
+            messages = [
+              { role: 'user', content: analysisPrompt },
+              { role: 'assistant', content: analysis },
+              { role: 'user', content: `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 구조와 정답(${targetAnswer}번)을 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, targetAnswer)}` },
+            ];
+          } else {
+            messages = [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }];
+          }
+
           const response = await client.chat.completions.create({
             model,
             max_completion_tokens: TYPE_TOKENS_MAP[questionType] ?? DEFAULT_TOKENS,
-            messages: [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }],
+            messages,
           });
           const rawText = response.choices[0]?.message?.content ?? '';
           const parsed = JSON.parse(extractJson(rawText)) as { questions: ExamQuestion[] };
