@@ -70,6 +70,7 @@ const QUESTION_TYPE_OPTIONS: QuestionTypeOption[] = [
   { key: 'summary',          label: '요약문 완성 유형',       description: '요약문의 (A)(B) 빈칸 완성',          color: 'bg-teal-100 text-teal-700 border-teal-200' },
   { key: 'flow',             label: '흐름 유형',              description: '전체 흐름과 관계 없는 문장 찾기',    color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
   { key: 'phrase_meaning',   label: '어구 의미 추론 유형',    description: '밑줄 어구의 문맥 속 의미 추론',      color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { key: 'sentence_order',  label: '순서 배열 유형',         description: '글의 순서로 가장 적절한 것은?',       color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
 ];
 
 const TYPE_COLOR_MAP: Record<string, string> = {};
@@ -412,6 +413,17 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     } else if (q.modified_passage && q.type === 'vocab_blank') {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escVocabBlank(q.modified_passage));
+    } else if (q.modified_passage && q.type === 'sentence_order') {
+      html += instrP(`${num}. ${esc(q.question_text)}`);
+      const passage = q.modified_passage;
+      const givenM = passage.match(/\[주어진 글\]\s*([\s\S]*?)(?=\(A\))/);
+      const aM = passage.match(/\(A\)\s*([\s\S]*?)(?=\(B\))/);
+      const bM = passage.match(/\(B\)\s*([\s\S]*?)(?=\(C\))/);
+      const cM = passage.match(/\(C\)\s*([\s\S]*?)$/);
+      if (givenM) html += `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#94a3b8;margin-bottom:2px;">[주어진 글]</div><div style="font-size:12px;line-height:1.6;color:#1e293b;">${esc(givenM[1].trim())}</div></div>`;
+      for (const [lbl, m] of [['A', aM], ['B', bM], ['C', cM]] as [string, RegExpMatchArray | null][]) {
+        if (m) html += `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#6366f1;margin-bottom:2px;">(${lbl})</div><div style="font-size:12px;line-height:1.6;color:#1e293b;">${esc(m[1].trim())}</div></div>`;
+      }
     } else if (q.modified_passage) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escP(q.modified_passage));
@@ -1384,7 +1396,7 @@ export default function AiQuestionsPage() {
                 {questions.map((q, idx) => {
                   const typeOpt = QUESTION_TYPE_OPTIONS.find(o => o.key === q.type);
                   const isRevealed = revealedAnswers.has(idx);
-                  const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow') ? CIRCLE_NUMS[q.answer - 1] : `${q.answer}번`;
+                  const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow') ? CIRCLE_NUMS[q.answer - 1] : (q.type === 'sentence_order' ? (q.choices[q.answer - 1]?.text ?? `${q.answer}번`) : `${q.answer}번`);
                   return (
                     <div key={idx} id={`exam-q-${idx}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                       {/* 카드 헤더 */}
@@ -1513,8 +1525,36 @@ export default function AiQuestionsPage() {
                         </>
                       )}
 
+                      {/* sentence_order: [질문] + [주어진 글 + (A)(B)(C) 단락] */}
+                      {q.type === 'sentence_order' && (() => {
+                        const passage = q.modified_passage ?? '';
+                        const givenMatch = passage.match(/\[주어진 글\]\s*([\s\S]*?)(?=\(A\))/);
+                        const aMatch = passage.match(/\(A\)\s*([\s\S]*?)(?=\(B\))/);
+                        const bMatch = passage.match(/\(B\)\s*([\s\S]*?)(?=\(C\))/);
+                        const cMatch = passage.match(/\(C\)\s*([\s\S]*?)$/);
+                        return (
+                          <>
+                            <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
+                              {q.question_text}
+                            </div>
+                            {givenMatch && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-3">
+                                <p className="text-xs font-black text-slate-400 mb-2">[주어진 글]</p>
+                                <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{givenMatch[1].trim()}</p>
+                              </div>
+                            )}
+                            {[['A', aMatch], ['B', bMatch], ['C', cMatch]].map(([label, match]) => match && (
+                              <div key={label as string} className="bg-white border border-slate-200 rounded-xl p-4 mb-3">
+                                <p className="text-xs font-black text-indigo-500 mb-2">({label})</p>
+                                <p className="text-sm text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{(match as RegExpMatchArray)[1].trim()}</p>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+
                       {/* 문제 지시문 (아래 유형은 위에서 이미 처리) */}
-                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && (
+                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && q.type !== 'sentence_order' && (
                         <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
                           {q.question_text}
                         </div>
