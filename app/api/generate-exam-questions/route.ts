@@ -511,7 +511,7 @@ text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄로 작성.
   · 삽입 위치는 ①~⑤ 중 하나 (①과 ⑤에만 고정하지 말고 다양하게 배치)
 
 [문장 길이 규칙 — 반드시 준수]
-  · modified_passage 전체 길이는 반드시 1000자(character) 이상 — 1000자 미만 절대 금지
+  · modified_passage 전체 길이는 반드시 800자(character) 이상 — 800자 미만 절대 금지
   · intro 각 문장: 반드시 25단어(word) 이상
   · ①~⑤ 각 문장: 반드시 30단어(word) 이상
   · 각 문장은 반드시 종속절(although, while, whereas, even though, given that 등), 관계절(which, that, whose 등), 분사구문(having+p.p., being+p.p. 등) 중 최소 1개 포함
@@ -805,7 +805,7 @@ export async function POST(request: Request) {
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
-      const MAX_RETRIES = 1;
+      const MAX_RETRIES = questionType === 'grammar' ? 2 : 1;
       const targetAnswer = Math.floor(Math.random() * 5) + 1;
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
