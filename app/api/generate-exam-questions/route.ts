@@ -1221,7 +1221,8 @@ export async function POST(request: Request) {
           const rawText = response.choices[0]?.message?.content ?? '';
           const parsed = JSON.parse(extractJson(rawText)) as { questions: ExamQuestion[] };
           q = parsed.questions[0];
-        } catch {
+        } catch (err) {
+          console.error(`[${questionType}] API 오류 (attempt ${attempt}):`, err);
           if (attempt < MAX_RETRIES) continue;
           return null;
         }
