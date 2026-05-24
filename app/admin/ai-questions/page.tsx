@@ -413,9 +413,10 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     } else if (q.modified_passage && q.type === 'vocab_blank') {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escVocabBlank(q.modified_passage));
-    } else if (q.modified_passage && q.type === 'sentence_order') {
-      html += instrP(`${num}. ${esc(q.question_text)}`);
-      const passage = q.modified_passage;
+    } else if (q.type === 'sentence_order') {
+      const soInstruction = q.question_text.split('[주어진 글]')[0].trim();
+      html += instrP(`${num}. ${esc(soInstruction)}`);
+      const passage = q.modified_passage || q.question_text;
       const givenM = passage.match(/\[주어진 글\]\s*([\s\S]*?)(?=\(A\))/);
       const aM = passage.match(/\(A\)\s*([\s\S]*?)(?=\(B\))/);
       const bM = passage.match(/\(B\)\s*([\s\S]*?)(?=\(C\))/);
@@ -1527,15 +1528,19 @@ export default function AiQuestionsPage() {
 
                       {/* sentence_order: [질문] + [주어진 글 + (A)(B)(C) 단락] */}
                       {q.type === 'sentence_order' && (() => {
-                        const passage = q.modified_passage ?? '';
+                        // AI가 question_text에 지문까지 넣는 경우 방어: [주어진 글] 이전 지시문만 추출
+                        const instruction = q.question_text.split('[주어진 글]')[0].trim();
+                        // modified_passage 우선, 없으면 question_text에서 파싱
+                        const raw = q.modified_passage || q.question_text;
+                        const passage = raw ?? '';
                         const givenMatch = passage.match(/\[주어진 글\]\s*([\s\S]*?)(?=\(A\))/);
                         const aMatch = passage.match(/\(A\)\s*([\s\S]*?)(?=\(B\))/);
                         const bMatch = passage.match(/\(B\)\s*([\s\S]*?)(?=\(C\))/);
                         const cMatch = passage.match(/\(C\)\s*([\s\S]*?)$/);
                         return (
                           <>
-                            <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
-                              {q.question_text}
+                            <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed">
+                              {instruction}
                             </div>
                             {givenMatch && (
                               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-3">

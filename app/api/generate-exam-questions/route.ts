@@ -641,13 +641,12 @@ text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄로 작성.
   · 삽입 위치는 ①~⑤ 중 하나 (①과 ⑤에만 고정하지 말고 다양하게 배치)
 
 [문장 길이 규칙 — 반드시 준수]
-  · modified_passage 전체 길이는 반드시 800자(character) 이상 1300자 이내 — 800자 미만 또는 1300자 초과 절대 금지
-  · intro 각 문장: 반드시 25단어(word) 이상
-  · ①~⑤ 각 문장: 반드시 30단어(word) 이상
-  · 각 문장은 반드시 종속절(although, while, whereas, even though, given that 등), 관계절(which, that, whose 등), 분사구문(having+p.p., being+p.p. 등) 중 최소 1개 포함
-  · 짧은 단문(단순 주어+동사+목적어) 절대 금지
-  · 아래 예시 수준의 문장 길이를 반드시 달성할 것:
-    예) "Although it is widely assumed that artistic skill depends primarily on technical mastery of perspective and composition, many critics have argued that the emotional resonance of a work — the ineffable quality that draws viewers into a sustained encounter with the image — ultimately determines its lasting significance in the history of art."
+  · modified_passage 전체 길이는 반드시 800자(character) 이상 1300자 이내
+  · 800자 미만 또는 1300자 초과 절대 금지 — 이 제한이 최우선 규칙
+  · intro: 1~2문장 (2문장 권장), 각 문장 15~25단어 수준
+  · ①~⑤: 각 문장 15~25단어 수준
+  · 각 문장은 종속절·관계절·분사구문 중 최소 1개 포함 (단문 금지)
+  · 단, 문장 길이보다 전체 1300자 이내 제한이 우선이므로 초과할 것 같으면 문장을 줄일 것
 
 - choices: 반드시 아래 고정값 사용
   [{"number":1,"text":"①"},{"number":2,"text":"②"},{"number":3,"text":"③"},{"number":4,"text":"④"},{"number":5,"text":"⑤"}]
@@ -751,6 +750,10 @@ text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄로 작성.
 ━━━━━━━━━━━━━━━━━━
 
 "주어진 글 다음에 이어질 글의 순서로 가장 적절한 것은?"
+
+⚠️ 절대 규칙: question_text 필드에는 위 지시문 문자열만 넣을 것.
+[주어진 글], (A), (B), (C) 본문은 반드시 modified_passage 필드에만 작성할 것.
+question_text에 지문 내용 포함 절대 금지.
 
 ━━━━━━━━━━━━━━━━━━
 [가장 중요한 규칙 — 원본 지문 재구성]
