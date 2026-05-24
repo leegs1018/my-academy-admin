@@ -805,7 +805,7 @@ export async function POST(request: Request) {
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
-      const MAX_RETRIES = questionType === 'grammar' ? 2 : 1;
+      const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase') ? 2 : 1;
       const targetAnswer = Math.floor(Math.random() * 5) + 1;
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -919,25 +919,6 @@ export async function POST(request: Request) {
           const vpTexts = q!.choices.map((c: ExamChoice) => c.text.replace(/^[①②③④⑤]\s*/, '').trim().toLowerCase());
           if (new Set(vpTexts).size < vpTexts.length) {
             console.warn(`[vocab_paraphrase] 선지 중복 — 재시도 ${attempt + 1}`);
-            if (attempt < MAX_RETRIES) continue;
-            return null;
-          }
-          const passage = q!.modified_passage ?? '';
-          const parts = passage.split(/(①|②|③|④|⑤)/g);
-          let positionMismatch = false;
-          for (let pi = 0; pi < parts.length; pi++) {
-            if (!CIRCLES.includes(parts[pi])) continue;
-            const circleIdx = CIRCLES.indexOf(parts[pi]);
-            const afterCircle = (parts[pi + 1] ?? '').trimStart();
-            const firstWord = afterCircle.match(/^(\S+)/)?.[1]?.toLowerCase().replace(/[^a-z]/g, '') ?? '';
-            const choiceWord = vpTexts[circleIdx] ?? '';
-            if (firstWord && choiceWord && firstWord !== choiceWord) {
-              console.warn(`[vocab_paraphrase] 번호 위치 불일치 ${CIRCLES[circleIdx]}: 지문="${firstWord}" 선지="${choiceWord}" — 재시도 ${attempt + 1}`);
-              positionMismatch = true;
-              break;
-            }
-          }
-          if (positionMismatch) {
             if (attempt < MAX_RETRIES) continue;
             return null;
           }
