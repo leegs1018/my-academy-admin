@@ -375,7 +375,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   };
 
   const passageBox = (content: string) =>
-    `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:6px 8px;margin-bottom:7px;font-size:13px;line-height:1.65;color:#1e293b;">${content}</div>`;
+    `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:6px 8px;margin-bottom:7px;font-size:13px;line-height:1.65;color:#1e293b;text-align:justify;word-break:break-word;">${content}</div>`;
   const instrP = (content: string) =>
     `<p style="font-size:13px;font-weight:700;color:#1e293b;margin:0 0 5px;line-height:1.5;white-space:pre-wrap;">${content}</p>`;
 
