@@ -73,13 +73,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code, points, role')
+          .select('academy_name, kiosk_code, points')
           .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
         if (data?.points !== undefined) setPoints(data.points);
-        if (data?.role) setUserRole(data.role);
+        const role = session.user.user_metadata?.role ?? 'ai_only';
+        setUserRole(role);
       }
     };
     getAcademyInfo();
