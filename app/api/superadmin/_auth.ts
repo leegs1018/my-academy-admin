@@ -18,7 +18,7 @@ export async function requireSuperAdmin(request: NextRequest): Promise<NextRespo
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user || user.email !== process.env.SUPER_ADMIN_EMAIL) {
+  if (!user || user.email !== process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

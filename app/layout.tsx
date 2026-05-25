@@ -69,18 +69,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // ── 학원 정보 로드 ───────────────────────────────
   useEffect(() => {
     const getAcademyInfo = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.id) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code, points')
-          .eq('user_id', user.id)
+          .select('academy_name, kiosk_code, points, role')
+          .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
         if (data?.points !== undefined) setPoints(data.points);
-        const role = user.user_metadata?.role ?? 'ai_only';
-        setUserRole(role);
+        setUserRole(data?.role ?? 'ai_only');
       }
     };
     getAcademyInfo();

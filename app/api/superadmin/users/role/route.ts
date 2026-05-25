@@ -13,9 +13,10 @@ export async function POST(request: NextRequest) {
   }
 
   const supabaseAdmin = createAdminClient();
-  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-    user_metadata: { role },
-  });
+  const { error } = await supabaseAdmin
+    .from('academy_config')
+    .update({ role })
+    .eq('user_id', userId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

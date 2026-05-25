@@ -149,10 +149,12 @@ export default function MockExamQuestionsPage() {
   // 지문 선택
   const [years, setYears] = useState<number[]>([]);
   const [institutions, setInstitutions] = useState<string[]>([]);
+  const [grades, setGrades] = useState<string[]>([]);
   const [examNames, setExamNames] = useState<string[]>([]);
   const [questionNumbers, setQuestionNumbers] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedExamName, setSelectedExamName] = useState('');
   const [selectedNumber, setSelectedNumber] = useState('');
   const [passageText, setPassageText] = useState('');
@@ -207,7 +209,7 @@ export default function MockExamQuestionsPage() {
 
   useEffect(() => {
     if (!selectedYear) return;
-    setSelectedInstitution(''); setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
+    setSelectedInstitution(''); setSelectedGrade(''); setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear))
       .then(({ data }) => {
         setInstitutions([...new Set((data ?? []).map((r: { institution: string }) => r.institution))]);
@@ -216,37 +218,49 @@ export default function MockExamQuestionsPage() {
 
   useEffect(() => {
     if (!selectedYear || !selectedInstitution) return;
-    setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
-    supabase.from('mock_exam_passages').select('exam_name')
+    setSelectedGrade(''); setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
+    supabase.from('mock_exam_passages').select('grade')
       .eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution)
       .then(({ data }) => {
-        setExamNames([...new Set((data ?? []).map((r: { exam_name: string }) => r.exam_name))]);
+        setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]);
       });
   }, [selectedYear, selectedInstitution]);
 
   useEffect(() => {
-    if (!selectedYear || !selectedInstitution || !selectedExamName) return;
+    if (!selectedYear || !selectedInstitution || !selectedGrade) return;
+    setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
+    supabase.from('mock_exam_passages').select('exam_name')
+      .eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution)
+      .eq('grade', selectedGrade)
+      .then(({ data }) => {
+        setExamNames([...new Set((data ?? []).map((r: { exam_name: string }) => r.exam_name))]);
+      });
+  }, [selectedYear, selectedInstitution, selectedGrade]);
+
+  useEffect(() => {
+    if (!selectedYear || !selectedInstitution || !selectedGrade || !selectedExamName) return;
     setSelectedNumber(''); setPassageText('');
     supabase.from('mock_exam_passages').select('question_number')
       .eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution)
-      .eq('exam_name', selectedExamName).order('question_number')
+      .eq('grade', selectedGrade).eq('exam_name', selectedExamName).order('question_number')
       .then(({ data }) => {
         setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number));
       });
-  }, [selectedYear, selectedInstitution, selectedExamName]);
+  }, [selectedYear, selectedInstitution, selectedGrade, selectedExamName]);
 
   useEffect(() => {
-    if (!selectedNumber || !selectedYear || !selectedInstitution || !selectedExamName) return;
+    if (!selectedNumber || !selectedYear || !selectedInstitution || !selectedGrade || !selectedExamName) return;
     setPassageLoading(true);
     supabase.from('mock_exam_passages').select('passage_text')
       .eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution)
-      .eq('exam_name', selectedExamName).eq('question_number', parseInt(selectedNumber))
+      .eq('grade', selectedGrade).eq('exam_name', selectedExamName)
+      .eq('question_number', parseInt(selectedNumber))
       .single()
       .then(({ data }) => {
         setPassageText(data?.passage_text ?? '');
         setPassageLoading(false);
       });
-  }, [selectedNumber, selectedYear, selectedInstitution, selectedExamName]);
+  }, [selectedNumber, selectedYear, selectedInstitution, selectedGrade, selectedExamName]);
 
   // 유형 설정 핸들러
   const updateConfig = (id: string, patch: Partial<TypeConfig>) => {
@@ -299,9 +313,11 @@ export default function MockExamQuestionsPage() {
     setProgress('문제 생성 중...');
 
     try {
-      const requestItems = validConfigs.flatMap(cfg =>
-        Array.from({ length: cfg.count }, () => ({ type: cfg.type, difficulty: cfg.difficulty }))
-      );
+      const typeConfigsPayload = validConfigs.map(cfg => ({
+        type: cfg.type,
+        difficulty: cfg.difficulty,
+        count: cfg.count,
+      }));
 
       const res = await fetch('/api/generate-exam-questions', {
         method: 'POST',
@@ -309,7 +325,7 @@ export default function MockExamQuestionsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ text: passageText, questions: requestItems }),
+        body: JSON.stringify({ text: passageText, typeConfigs: typeConfigsPayload }),
       });
 
       const json = await res.json() as { questions?: ExamQuestion[]; error?: string };
@@ -350,7 +366,7 @@ export default function MockExamQuestionsPage() {
         {/* STEP 1: 지문 선택 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
             <div>
               <label className="block text-xs font-black text-gray-400 mb-1.5">년도</label>
               <select
@@ -375,11 +391,23 @@ export default function MockExamQuestionsPage() {
               </select>
             </div>
             <div>
+              <label className="block text-xs font-black text-gray-400 mb-1.5">학년</label>
+              <select
+                value={selectedGrade}
+                onChange={e => setSelectedGrade(e.target.value)}
+                disabled={!selectedInstitution}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50"
+              >
+                <option value="">선택</option>
+                {grades.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-black text-gray-400 mb-1.5">시험명</label>
               <select
                 value={selectedExamName}
                 onChange={e => setSelectedExamName(e.target.value)}
-                disabled={!selectedInstitution}
+                disabled={!selectedGrade}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50"
               >
                 <option value="">선택</option>

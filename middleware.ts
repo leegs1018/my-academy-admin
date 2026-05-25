@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname;
-  const isSuperAdmin = user?.email === process.env.SUPER_ADMIN_EMAIL;
+  const isSuperAdmin = user?.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;
   const role = user?.user_metadata?.role ?? 'ai_only';
 
   // 2. 미인증 접근 차단
