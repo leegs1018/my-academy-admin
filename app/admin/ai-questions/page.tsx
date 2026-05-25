@@ -492,14 +492,15 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 
   const renderEl = async (html: string, w: number, padding: number) => {
     const el = document.createElement('div');
-    el.style.cssText = `position:absolute;top:0;left:-${w * 2 + 50}px;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
+    el.style.cssText = `position:fixed;top:-9999px;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
     el.innerHTML = html;
     document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => setTimeout(r, 100));
     const fullH = el.scrollHeight;
-    const ratio = fullH / el.offsetWidth;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, width: el.offsetWidth, height: fullH });
+    const ratio = fullH / Math.max(el.offsetWidth, 1);
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: el.offsetWidth, height: Math.max(fullH, 1) });
     document.body.removeChild(el);
     return { url, ratio };
   };
@@ -586,14 +587,15 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
 
   const renderEl = async (html: string, w: number, padding: number) => {
     const el = document.createElement('div');
-    el.style.cssText = `position:absolute;top:0;left:-${w * 2 + 50}px;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
+    el.style.cssText = `position:fixed;top:-9999px;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
     el.innerHTML = html;
     document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => setTimeout(r, 100));
     const fullH = el.scrollHeight;
-    const ratio = fullH / el.offsetWidth;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, width: el.offsetWidth, height: fullH });
+    const ratio = fullH / Math.max(el.offsetWidth, 1);
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: el.offsetWidth, height: Math.max(fullH, 1) });
     document.body.removeChild(el);
     return { url, ratio };
   };
