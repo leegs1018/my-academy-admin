@@ -1,1 +1,5 @@
-export { default } from '@/app/admin/ai-questions/page';
+import { redirect } from 'next/navigation';
+
+export default function ToolPage() {
+  redirect('/admin/pdf-editor');
+}

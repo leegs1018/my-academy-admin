@@ -6,12 +6,14 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 
 const menuItems = [
-  { href: '/superadmin',                  label: '데이터 분석',    icon: '📊' },
-  { href: '/superadmin/academies',        label: '학원 관리',      icon: '🏫' },
-  { href: '/superadmin/credits-pricing',      label: 'CON 단가 관리',  icon: '⭐' },
-  { href: '/superadmin/sms',             label: 'SMS 발송',       icon: '📱' },
-  { href: '/superadmin/notices',         label: '공지사항 관리',  icon: '📢' },
-  { href: '/superadmin/inquiries',       label: '문의 관리',      icon: '💬' },
+  { href: '/superadmin',                   label: '데이터 분석',       icon: '📊' },
+  { href: '/superadmin/academies',         label: '학원 관리',         icon: '🏫' },
+  { href: '/superadmin/credits-pricing',   label: 'CON 단가 관리',     icon: '⭐' },
+  { href: '/superadmin/mock-exams',        label: '모의고사 지문 관리', icon: '📚' },
+  { href: '/superadmin/sms',              label: 'SMS 발송',           icon: '📱' },
+  { href: '/superadmin/notices',          label: '공지사항 관리',      icon: '📢' },
+  { href: '/superadmin/inquiries',        label: '문의 관리',          icon: '💬' },
+  { href: '/superadmin/site-settings',    label: '사이트 설정',        icon: '⚙️' },
 ];
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {

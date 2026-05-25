@@ -91,7 +91,7 @@ function SortableClassCard({
           <span className="bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.target_level} 반</span>
           <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.start_year}년</span>
         </div>
-        <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-3">
           <button onClick={() => onEdit(c)} className="text-indigo-500 font-black text-xs">수정</button>
           <button onClick={() => onDelete(c.id)} className="text-rose-300 font-black text-xs">삭제</button>
         </div>

@@ -23,8 +23,9 @@ const menuItems: MenuItem[] = [
     label: 'AI 문제 생성',
     icon: '🤖',
     children: [
-      { href: '/admin/pdf-editor',   label: '지문분석 툴/워크북', icon: '📝' },
-      { href: '/admin/ai-questions', label: '실전 변형 문제',     icon: '🎯' },
+      { href: '/admin/pdf-editor',           label: '지문분석 툴/워크북',  icon: '📝' },
+      { href: '/admin/ai-questions',         label: '실전 변형 문제',      icon: '🎯' },
+      { href: '/admin/mock-exam-questions',  label: '모의고사 변형 문제',  icon: '📚' },
     ],
   },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [academyName, setAcademyName] = useState('');
   const [kioskCode, setKioskCode] = useState('');
   const [points, setPoints] = useState<number>(0);
+  const [userRole, setUserRole] = useState<string>('');
   const [isDark, setIsDark] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -71,12 +73,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code, points')
+          .select('academy_name, kiosk_code, points, role')
           .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
         if (data?.points !== undefined) setPoints(data.points);
+        if (data?.role) setUserRole(data.role);
       }
     };
     getAcademyInfo();
@@ -84,7 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   // ── AI 문제 생성 그룹 자동 펼침 ─────────────────
   useEffect(() => {
-    const aiPaths = ['/admin/pdf-editor', '/admin/ai-questions'];
+    const aiPaths = ['/admin/pdf-editor', '/admin/ai-questions', '/admin/mock-exam-questions'];
     if (aiPaths.some(p => pathname.startsWith(p))) setExpandedGroup('AI 문제 생성');
   }, [pathname]);
 
@@ -153,7 +156,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* 메뉴 목록 */}
             <nav className="flex-1 overflow-y-auto custom-scrollbar py-4 px-3">
               <div className="space-y-0.5">
-                {menuItems.map((item) => {
+                {(userRole === 'admin'
+                  ? menuItems
+                  : menuItems.filter(item =>
+                      item.label === 'AI 문제 생성' || item.label === '공지사항' || item.label === '문의하기'
+                    )
+                ).map((item) => {
                   if (item.children) {
                     const isAnyChildActive = item.children.some(c => pathname.startsWith(c.href));
                     const isExpanded = expandedGroup === item.label || isAnyChildActive;

@@ -27,23 +27,17 @@ export default function LandingPage() {
             <span className="text-2xl font-black tracking-tighter text-slate-900">
               CON <span className="text-yellow-500">EDU</span>
             </span>
-            <span className="text-[10px] font-bold text-slate-400 tracking-[0.2em]">MANAGEMENT CENTER</span>
+            <span className="text-[10px] font-bold text-slate-400 tracking-[0.2em]">AI QUESTION GENERATOR</span>
           </div>
         </Link>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/kiosk"
-            className="px-5 py-2.5 text-sm font-bold border-2 border-slate-200 text-slate-600 rounded-full hover:border-slate-900 hover:text-slate-900 transition-all"
-          >
-            출결 키오스크
-          </Link>
           {isLoggedIn ? (
             <Link
-              href="/admin"
+              href="/admin/pdf-editor"
               className="px-6 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all"
             >
-              대시보드로 이동 🚀
+              서비스 시작하기 🚀
             </Link>
           ) : (
             <>
@@ -68,7 +62,7 @@ export default function LandingPage() {
       <section className="relative pt-24 pb-32 overflow-hidden">
         <div className="max-w-7xl mx-auto px-8 flex flex-col items-center text-center">
           <div className="inline-block px-4 py-1.5 mb-10 rounded-full bg-slate-50 border border-slate-200 text-slate-500 text-xs font-black uppercase tracking-widest">
-            Next Generation Academy Solution
+            AI 문제 자동 생성 솔루션
           </div>
 
           <h1 className="text-6xl md:text-8xl font-black text-slate-900 leading-[1.4] md:leading-[1.3] tracking-tight mb-10">
@@ -81,32 +75,58 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-xl text-slate-400 font-medium leading-relaxed max-w-2xl mb-14">
-            CON EDU 하나로 출결부터 성적, 수납까지.<br />
-            원장님은 교육에만 집중하세요. 복잡한 관리는 저희가 합니다.
+            CON EDU 하나로 지문 분석, 실전 문제 생성까지.<br />
+            원장님은 교육에만 집중하세요. 복잡한 문제 생성은 저희가 합니다.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-6">
             <Link
-              href={isLoggedIn ? '/admin' : '/login'}
+              href={isLoggedIn ? '/admin/pdf-editor' : '/login'}
               className="px-12 py-5 bg-slate-900 text-white font-black rounded-full text-lg shadow-2xl shadow-slate-300 hover:bg-slate-800 transition-all hover:-translate-y-1"
             >
-              {isLoggedIn ? '관리자 센터 입장하기' : '지금 시작하기'}
+              지금 시작하기
             </Link>
-            <button className="px-12 py-5 bg-white text-slate-900 font-black rounded-full text-lg border-2 border-slate-900 hover:bg-slate-50 transition-all">
+            <Link
+              href="/guide"
+              className="px-12 py-5 bg-white text-slate-900 font-black rounded-full text-lg border-2 border-slate-900 hover:bg-slate-50 transition-all"
+            >
               서비스 가이드
-            </button>
+            </Link>
           </div>
         </div>
         <div className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-yellow-50 rounded-full blur-[120px] opacity-60 z-[-1]"></div>
       </section>
 
-      {/* 3대 핵심 기능 */}
+      {/* AI 문제 출제 서비스 3카드 */}
       <section className="max-w-7xl mx-auto px-8 py-20">
+        <div className="text-center mb-14">
+          <p className="text-yellow-600 font-black text-xs uppercase tracking-widest mb-3">AI Question Service</p>
+          <h2 className="text-4xl font-black text-slate-900">AI 문제 출제 서비스</h2>
+          <p className="text-slate-400 font-medium mt-4">지문 하나로 다양한 유형의 문제를 자동으로 생성합니다</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
-            { title: '성적 리포트', label: 'Smart Analytics', desc: '학생별 성적 변화를 그래프로 자동 생성합니다. 상담 시 학부모님께 전문적인 데이터를 보여주세요.', icon: '📊', bg: 'bg-blue-50' },
-            { title: '출결 알림톡',  label: 'Real-time Alert',  desc: '등/하원 즉시 카카오 알림톡이 발송됩니다. 학부모님이 가장 안심하고 만족하는 기능입니다.',        icon: '🔔', bg: 'bg-yellow-50' },
-            { title: '자동 청구서 발행', label: 'Auto Billing', desc: '매달 번거로운 수납 안내를 자동화하세요. 모바일 청구서 한 장으로 미납 걱정을 덜어드립니다.',    icon: '📄', bg: 'bg-slate-100' },
+            {
+              title: '지문 분석 & 워크북',
+              label: 'Passage Analysis',
+              desc: '텍스트 또는 이미지로 지문을 업로드하면 AI가 분석해 워크북 PDF를 자동 생성합니다.',
+              icon: '📝',
+              bg: 'bg-teal-50',
+            },
+            {
+              title: '실전 변형 문제',
+              label: 'Exam Generation',
+              desc: '어법·어휘·빈칸 등 9가지 유형으로 맞춤 변형 문제를 한 번에 생성·출력합니다.',
+              icon: '🎯',
+              bg: 'bg-indigo-50',
+            },
+            {
+              title: '모의고사 변형 문제',
+              label: 'Mock Exam Variant',
+              desc: '수능·평가원·교육청 기출 지문을 선택해 실전 수준의 변형 문제를 즉시 만들어드립니다.',
+              icon: '📚',
+              bg: 'bg-amber-50',
+            },
           ].map((item, i) => (
             <div
               key={i}
@@ -131,15 +151,15 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto bg-slate-900 rounded-[4rem] px-8 py-24 text-center relative overflow-hidden shadow-2xl shadow-slate-400">
           <div className="relative z-10">
             <h2 className="text-4xl md:text-5xl font-black text-white mb-6 leading-tight">
-              성공하는 학원의 선택<br />
+              AI가 만드는 수준 높은 영어 문제<br />
               <span className="text-yellow-400 italic">CON EDU</span>
             </h2>
-            <p className="text-slate-400 font-medium mb-12">지금 가입하고 7일간 모든 기능을 무료로 체험해보세요.</p>
+            <p className="text-slate-400 font-medium mb-12">지금 가입하고 AI 문제 생성 서비스를 경험해보세요.</p>
             <Link
-              href={isLoggedIn ? '/admin' : '/register'}
+              href={isLoggedIn ? '/admin/pdf-editor' : '/register'}
               className="px-12 py-5 bg-yellow-400 text-slate-900 font-black rounded-full hover:bg-yellow-300 transition-all inline-block text-lg shadow-xl shadow-yellow-400/20"
             >
-              {isLoggedIn ? '대시보드로 바로가기' : '지금 무료로 시작하기'}
+              {isLoggedIn ? '서비스 바로가기' : '지금 무료로 시작하기'}
             </Link>
           </div>
           <div className="absolute -bottom-10 -right-10 text-white opacity-[0.03] text-[250px] font-black pointer-events-none">CE</div>
@@ -153,12 +173,12 @@ export default function LandingPage() {
             <div className="w-6 h-6 bg-slate-900 rounded flex items-center justify-center">
               <span className="text-yellow-400 text-[10px] font-black">C</span>
             </div>
-            <span>CON EDU 관리센터</span>
+            <span>CON EDU</span>
           </div>
           <div className="flex gap-8">
-            <span className="hover:text-slate-900 cursor-pointer">이용약관</span>
-            <span className="text-slate-900 cursor-pointer underline decoration-2 underline-offset-4">개인정보처리방침</span>
-            <span className="hover:text-slate-900 cursor-pointer">고객센터</span>
+            <Link href="/terms" className="hover:text-slate-900 transition-colors">이용약관</Link>
+            <Link href="/privacy" className="text-slate-900 underline decoration-2 underline-offset-4">개인정보처리방침</Link>
+            <Link href="/support" className="hover:text-slate-900 transition-colors">고객센터</Link>
           </div>
           <p>© 2026 CON EDU. All rights reserved.</p>
         </div>
