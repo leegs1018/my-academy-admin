@@ -510,32 +510,30 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     return { url, ratio };
   };
 
-  try {
-    // Title spanning both columns
-    if (title) {
-      const { url: titleUrl, ratio: titleRatio } = await renderEl(
-        `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
-          <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div>
-        </div>`,
-        760, 8
-      );
-      const fullW = W - 2 * M;
-      const titleMmH = fullW * titleRatio;
-      pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-      leftY = M + titleMmH + 3;
-      rightY = leftY;
-      lineTopY = leftY;
-    }
-
-    // Questions in 2-column layout
-    for (let i = 0; i < questions.length; i++) {
-      const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
-      placeImage(url, colW * ratio);
-    }
-
-    finalizePage();
-    return pdf.output('blob');
+  // Title spanning both columns
+  if (title) {
+    const { url: titleUrl, ratio: titleRatio } = await renderEl(
+      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
+        <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div>
+      </div>`,
+      760, 8
+    );
+    const fullW = W - 2 * M;
+    const titleMmH = fullW * titleRatio;
+    pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
+    leftY = M + titleMmH + 3;
+    rightY = leftY;
+    lineTopY = leftY;
   }
+
+  // Questions in 2-column layout
+  for (let i = 0; i < questions.length; i++) {
+    const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
+    placeImage(url, colW * ratio);
+  }
+
+  finalizePage();
+  return pdf.output('blob');
 }
 
 async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Promise<Blob> {
@@ -610,25 +608,24 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     return { url, ratio };
   };
 
-  try {
-    // Title spanning both columns
-    if (title) {
-      const { url: titleUrl, ratio: titleRatio } = await renderEl(
-        `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
-          <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div>
-        </div>`,
-        760, 8
-      );
-      const fullW = W - 2 * M;
-      const titleMmH = fullW * titleRatio;
-      pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-      leftY = M + titleMmH + 3;
-      rightY = leftY;
-      lineTopY = leftY;
-    }
+  // Title spanning both columns
+  if (title) {
+    const { url: titleUrl, ratio: titleRatio } = await renderEl(
+      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
+        <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div>
+      </div>`,
+      760, 8
+    );
+    const fullW = W - 2 * M;
+    const titleMmH = fullW * titleRatio;
+    pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
+    leftY = M + titleMmH + 3;
+    rightY = leftY;
+    lineTopY = leftY;
+  }
 
-    // Answer blocks per question
-    for (let i = 0; i < questions.length; i++) {
+  // Answer blocks per question
+  for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
     const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
@@ -655,13 +652,12 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     html += `<p style="font-size:9.5px;color:#374151;line-height:1.65;margin:0;">${esc(q.explanation)}</p>`;
     html += `</div>`;
 
-      const { url, ratio } = await renderEl(html, RENDER_W, 6);
-      placeImage(url, colW * ratio);
-    }
-
-    finalizePage();
-    return pdf.output('blob');
+    const { url, ratio } = await renderEl(html, RENDER_W, 6);
+    placeImage(url, colW * ratio);
   }
+
+  finalizePage();
+  return pdf.output('blob');
 }
 
 export default function AiQuestionsPage() {
