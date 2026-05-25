@@ -293,7 +293,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   const renderEl = async (html: string, w: number, padding: number) => {
     const html2canvas = (await import('html2canvas')).default;
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:100000;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:99998;`;
     el.innerHTML = html; document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => setTimeout(r, 100));
@@ -361,7 +361,7 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   const renderEl = async (html: string, w: number, padding: number) => {
     const html2canvas = (await import('html2canvas')).default;
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:100000;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:99998;`;
     el.innerHTML = html; document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => setTimeout(r, 100));
