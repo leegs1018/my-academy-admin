@@ -523,6 +523,11 @@ Awkward wording alone is NOT an error.
 · (a)와 (b) 두 표시 모두 반드시 modified_passage 안에 존재해야 한다. 하나라도 빠지면 안 된다.
 · (a)는 지문 앞부분, (b)는 지문 뒷부분에 배치하여 두 빈칸이 지문 전체를 아우르도록 할 것.
 · 생성 후 "(a)"와 "(b)" 모두 modified_passage에 포함되어 있는지 반드시 확인할 것.
+· (a)는 modified_passage 전체에서 정확히 1번만 등장해야 한다. 2번 이상 등장하면 절대 금지.
+· (b)는 modified_passage 전체에서 정확히 1번만 등장해야 한다. 2번 이상 등장하면 절대 금지.
+· 대상 단어가 지문에 여러 번 반복 등장하는 경우, 그 단어를 (a)/(b) 대상으로 절대 선택하지 말 것.
+  예: 지문에 "perspective"가 4번 나오면 (a) 대상 금지 — 지문에서 딱 1번만 등장하는 단어를 선택할 것.
+· (a)로 교체한 단어의 나머지 등장 위치는 원문 단어를 그대로 유지할 것. 모두 (a)로 교체하는 것 절대 금지.
 
 - question_text:
 "다음 빈칸 (a), (b)에 들어갈 말로 가장 적절한 것은?"
@@ -1169,12 +1174,15 @@ ${text}
 2. (a) 후보 위치 3곳 선정 (지문 앞부분):
    - 조건: 글 전체 논리와 인과/대조 관계를 이해해야 적절성 판단 가능한 어휘
    - 원문 문장 그대로 인용 + 해당 어휘 명시
+   - 중요: 지문 전체에서 딱 1번만 등장하는 단어를 선택할 것. 같은 단어가 2번 이상 등장하면 후보에서 제외.
 3. (b) 후보 위치 3곳 선정 (지문 뒷부분):
    - 조건: (a)와 다른 의미 범주 (원인↔결과, 방법↔상태, 특성↔효과 등)
    - 원문 문장 그대로 인용 + 해당 어휘 명시
+   - 중요: 지문 전체에서 딱 1번만 등장하는 단어를 선택할 것. 같은 단어가 2번 이상 등장하면 후보에서 제외.
 4. 최종 (a)(b) 위치 확정:
    - (a)와 (b)가 지문의 conceptual backbone을 대표하는지 확인
    - 단순 동의어 암기로는 판단 불가능한지 확인
+   - (a)와 (b) 각각 modified_passage에서 정확히 1번만 등장하는지 최종 확인. 반복 단어 선택 금지.
 5. 정답 선지 설계: 정답은 ${targetAnswer}번
    - "(a) 단어 --- (b) 단어" 형식으로 정답 확정
    - 정답 단어는 원문 표현 직접 사용 금지 — conceptual paraphrase 사용
@@ -1523,6 +1531,15 @@ export async function POST(request: Request) {
           const missingBlanks = ['(a)', '(b)'].filter(b => !passage.toLowerCase().includes(b));
           if (missingBlanks.length > 0) {
             console.warn(`[vocab_blank] 누락 빈칸 ${missingBlanks.join(',')} — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+          // (a)(b) 각 1번씩만 등장해야 함
+          const passageLower = passage.toLowerCase();
+          const countA = (passageLower.match(/\(a\)/g) ?? []).length;
+          const countB = (passageLower.match(/\(b\)/g) ?? []).length;
+          if (countA !== 1 || countB !== 1) {
+            console.warn(`[vocab_blank] (a)=${countA}회, (b)=${countB}회 — 각 1회여야 함 — 재시도 ${attempt + 1}`);
             if (attempt < MAX_RETRIES) continue;
             return null;
           }
