@@ -260,6 +260,8 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
           const ch = gm ? gm[1] : (CIRCLE_NUMS[c.number - 1] ?? '');
           const wd = gm ? gm[2] : c.text;
           html += `<div style="display:flex;gap:4px;align-items:center;"><span style="font-size:12px;font-weight:900;color:#111827;">${esc(ch)}</span><span style="font-size:13px;font-weight:600;color:#1f2937;">${esc(wd)}</span></div>`;
+        } else if (q.type === 'sentence_order') {
+          html += `<div style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</div>`;
         } else {
           html += `<div style="display:flex;gap:4px;align-items:flex-start;"><span style="font-weight:900;color:#475569;flex-shrink:0;min-width:14px;font-size:13px;">${CIRCLE_NUMS[j] ?? (j+1)}</span><span style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</span></div>`;
         }
@@ -292,21 +294,21 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 
   const renderEl = async (html: string, w: number, padding: number) => {
     const { toJpeg } = await import('html-to-image');
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;';
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:99998;`;
-    el.innerHTML = html; document.body.appendChild(el);
+    el.style.cssText = `width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
+    el.innerHTML = html;
+    container.appendChild(el);
+    document.body.appendChild(container);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => setTimeout(r, 100));
     const fullH = el.scrollHeight;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: el.offsetWidth, height: fullH });
-    document.body.removeChild(el);
-    const ratio = fullH / Math.max(el.offsetWidth, 1);
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: w, height: fullH });
+    document.body.removeChild(container);
+    const ratio = fullH / Math.max(w, 1);
     return { url, ratio };
   };
-
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;pointer-events:none;';
-  document.body.appendChild(overlay);
 
   try {
     if (title) {
@@ -324,8 +326,6 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       placeImage(url, colW * ratio);
     }
     finalizePage(); return pdf.output('blob');
-  } finally {
-    document.body.removeChild(overlay);
   }
 }
 
@@ -360,21 +360,21 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
 
   const renderEl = async (html: string, w: number, padding: number) => {
     const { toJpeg } = await import('html-to-image');
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;';
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:99998;`;
-    el.innerHTML = html; document.body.appendChild(el);
+    el.style.cssText = `width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
+    el.innerHTML = html;
+    container.appendChild(el);
+    document.body.appendChild(container);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => setTimeout(r, 100));
     const fullH = el.scrollHeight;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: el.offsetWidth, height: fullH });
-    document.body.removeChild(el);
-    const ratio = fullH / Math.max(el.offsetWidth, 1);
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: w, height: fullH });
+    document.body.removeChild(container);
+    const ratio = fullH / Math.max(w, 1);
     return { url, ratio };
   };
-
-  const overlay2 = document.createElement('div');
-  overlay2.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;pointer-events:none;';
-  document.body.appendChild(overlay2);
 
   try {
     if (title) {
@@ -407,8 +407,6 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
       placeImage(url, colW * ratio);
     }
     finalizePage(); return pdf.output('blob');
-  } finally {
-    document.body.removeChild(overlay2);
   }
 }
 
