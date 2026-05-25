@@ -293,10 +293,10 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   const renderEl = async (html: string, w: number, padding: number) => {
     const html2canvas = (await import('html2canvas')).default;
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;opacity:0;pointer-events:none;z-index:-9999;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:100000;`;
     el.innerHTML = html; document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 100));
     const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     document.body.removeChild(el);
     const url = canvas.toDataURL('image/jpeg', 0.92);
@@ -304,21 +304,29 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     return { url, ratio };
   };
 
-  if (title) {
-    const { url: titleUrl, ratio: titleRatio } = await renderEl(
-      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;"><div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div></div>`,
-      760, 8
-    );
-    const fullW = W - 2 * M; const titleMmH = fullW * titleRatio;
-    pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-    leftY = M + titleMmH + 3; rightY = leftY; lineTopY = leftY;
-  }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;pointer-events:none;';
+  document.body.appendChild(overlay);
 
-  for (let i = 0; i < questions.length; i++) {
-    const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
-    placeImage(url, colW * ratio);
+  try {
+    if (title) {
+      const { url: titleUrl, ratio: titleRatio } = await renderEl(
+        `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;"><div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div></div>`,
+        760, 8
+      );
+      const fullW = W - 2 * M; const titleMmH = fullW * titleRatio;
+      pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
+      leftY = M + titleMmH + 3; rightY = leftY; lineTopY = leftY;
+    }
+
+    for (let i = 0; i < questions.length; i++) {
+      const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
+      placeImage(url, colW * ratio);
+    }
+    finalizePage(); return pdf.output('blob');
+  } finally {
+    document.body.removeChild(overlay);
   }
-  finalizePage(); return pdf.output('blob');
 }
 
 async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Promise<Blob> {
@@ -353,10 +361,10 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   const renderEl = async (html: string, w: number, padding: number) => {
     const html2canvas = (await import('html2canvas')).default;
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;opacity:0;pointer-events:none;z-index:-9999;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:100000;`;
     el.innerHTML = html; document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 100));
     const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     document.body.removeChild(el);
     const url = canvas.toDataURL('image/jpeg', 0.92);
@@ -364,36 +372,44 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     return { url, ratio };
   };
 
-  if (title) {
-    const { url: titleUrl, ratio: titleRatio } = await renderEl(
-      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;"><div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div></div>`,
-      760, 8
-    );
-    const fullW = W - 2 * M; const titleMmH = fullW * titleRatio;
-    pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-    leftY = M + titleMmH + 3; rightY = leftY; lineTopY = leftY;
-  }
+  const overlay2 = document.createElement('div');
+  overlay2.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;pointer-events:none;';
+  document.body.appendChild(overlay2);
 
-  for (let i = 0; i < questions.length; i++) {
-    const q = questions[i];
-    const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
-    const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
-      ? CIRCLE_NUMS[q.answer - 1] : `${q.answer}번`;
-    let html = `<div style="border-left:3px solid #4338ca;padding:6px 8px;border-radius:0 4px 4px 0;background:#fafafa;">`;
-    html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">`;
-    html += `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;font-weight:900;color:#1e293b;">${i + 1}번</span>`;
-    html += `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#e0e7ff;color:#4338ca;">${esc(typeLabel)}</span></div>`;
-    html += `<span style="font-size:11px;font-weight:900;color:#7c3aed;">정답 ${answerCircle}</span></div>`;
-    if (q.type === 'summary') {
-      const pts = q.question_text.split('\n\n');
-      const sumText = pts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
-      if (sumText) html += `<div style="font-size:9px;color:#475569;margin-bottom:6px;padding:5px 7px;background:#f0f4ff;border-radius:3px;line-height:1.6;border:1px solid #c7d2fe;">${esc(sumText)}</div>`;
+  try {
+    if (title) {
+      const { url: titleUrl, ratio: titleRatio } = await renderEl(
+        `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;"><div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div></div>`,
+        760, 8
+      );
+      const fullW = W - 2 * M; const titleMmH = fullW * titleRatio;
+      pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
+      leftY = M + titleMmH + 3; rightY = leftY; lineTopY = leftY;
     }
-    html += `<p style="font-size:9.5px;color:#374151;line-height:1.65;margin:0;">${esc(q.explanation)}</p></div>`;
-    const { url, ratio } = await renderEl(html, RENDER_W, 6);
-    placeImage(url, colW * ratio);
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
+      const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
+        ? CIRCLE_NUMS[q.answer - 1] : `${q.answer}번`;
+      let html = `<div style="border-left:3px solid #4338ca;padding:6px 8px;border-radius:0 4px 4px 0;background:#fafafa;">`;
+      html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">`;
+      html += `<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:11px;font-weight:900;color:#1e293b;">${i + 1}번</span>`;
+      html += `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#e0e7ff;color:#4338ca;">${esc(typeLabel)}</span></div>`;
+      html += `<span style="font-size:11px;font-weight:900;color:#7c3aed;">정답 ${answerCircle}</span></div>`;
+      if (q.type === 'summary') {
+        const pts = q.question_text.split('\n\n');
+        const sumText = pts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
+        if (sumText) html += `<div style="font-size:9px;color:#475569;margin-bottom:6px;padding:5px 7px;background:#f0f4ff;border-radius:3px;line-height:1.6;border:1px solid #c7d2fe;">${esc(sumText)}</div>`;
+      }
+      html += `<p style="font-size:9.5px;color:#374151;line-height:1.65;margin:0;">${esc(q.explanation)}</p></div>`;
+      const { url, ratio } = await renderEl(html, RENDER_W, 6);
+      placeImage(url, colW * ratio);
+    }
+    finalizePage(); return pdf.output('blob');
+  } finally {
+    document.body.removeChild(overlay2);
   }
-  finalizePage(); return pdf.output('blob');
 }
 
 // ─── SortableTypeCard ─────────────────────────────────────────────────────────

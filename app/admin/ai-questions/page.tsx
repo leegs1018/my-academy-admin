@@ -492,12 +492,12 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   const renderEl = async (html: string, w: number, padding: number) => {
     const html2canvas = (await import('html2canvas')).default;
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;opacity:0;pointer-events:none;z-index:-9999;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:100000;`;
     el.innerHTML = html;
     document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 100));
     const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     document.body.removeChild(el);
     const url = canvas.toDataURL('image/jpeg', 0.92);
@@ -505,30 +505,39 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     return { url, ratio };
   };
 
-  // Title spanning both columns
-  if (title) {
-    const { url: titleUrl, ratio: titleRatio } = await renderEl(
-      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
-        <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div>
-      </div>`,
-      760, 8
-    );
-    const fullW = W - 2 * M;
-    const titleMmH = fullW * titleRatio;
-    pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-    leftY = M + titleMmH + 3;
-    rightY = leftY;
-    lineTopY = leftY;
-  }
+  // 렌더링 중 화면 가리기
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;pointer-events:none;';
+  document.body.appendChild(overlay);
 
-  // Questions in 2-column layout
-  for (let i = 0; i < questions.length; i++) {
-    const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
-    placeImage(url, colW * ratio);
-  }
+  try {
+    // Title spanning both columns
+    if (title) {
+      const { url: titleUrl, ratio: titleRatio } = await renderEl(
+        `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
+          <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)}</div>
+        </div>`,
+        760, 8
+      );
+      const fullW = W - 2 * M;
+      const titleMmH = fullW * titleRatio;
+      pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
+      leftY = M + titleMmH + 3;
+      rightY = leftY;
+      lineTopY = leftY;
+    }
 
-  finalizePage();
-  return pdf.output('blob');
+    // Questions in 2-column layout
+    for (let i = 0; i < questions.length; i++) {
+      const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
+      placeImage(url, colW * ratio);
+    }
+
+    finalizePage();
+    return pdf.output('blob');
+  } finally {
+    document.body.removeChild(overlay);
+  }
 }
 
 async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Promise<Blob> {
@@ -587,12 +596,12 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   const renderEl = async (html: string, w: number, padding: number) => {
     const html2canvas = (await import('html2canvas')).default;
     const el = document.createElement('div');
-    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;opacity:0;pointer-events:none;z-index:-9999;`;
+    el.style.cssText = `position:fixed;top:0;left:0;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;z-index:100000;`;
     el.innerHTML = html;
     document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 100));
     const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
     document.body.removeChild(el);
     const url = canvas.toDataURL('image/jpeg', 0.92);
@@ -600,24 +609,29 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     return { url, ratio };
   };
 
-  // Title spanning both columns
-  if (title) {
-    const { url: titleUrl, ratio: titleRatio } = await renderEl(
-      `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
-        <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div>
-      </div>`,
-      760, 8
-    );
-    const fullW = W - 2 * M;
-    const titleMmH = fullW * titleRatio;
-    pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
-    leftY = M + titleMmH + 3;
-    rightY = leftY;
-    lineTopY = leftY;
-  }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;pointer-events:none;';
+  document.body.appendChild(overlay);
 
-  // Answer blocks per question
-  for (let i = 0; i < questions.length; i++) {
+  try {
+    // Title spanning both columns
+    if (title) {
+      const { url: titleUrl, ratio: titleRatio } = await renderEl(
+        `<div style="text-align:center;border-bottom:2px solid #334155;padding-bottom:6px;margin-bottom:2px;">
+          <div style="font-size:14px;font-weight:900;color:#1e293b;letter-spacing:-0.3px;">${esc(title)} — 정답 및 해설</div>
+        </div>`,
+        760, 8
+      );
+      const fullW = W - 2 * M;
+      const titleMmH = fullW * titleRatio;
+      pdf.addImage(titleUrl, 'JPEG', M, M, fullW, titleMmH);
+      leftY = M + titleMmH + 3;
+      rightY = leftY;
+      lineTopY = leftY;
+    }
+
+    // Answer blocks per question
+    for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
     const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
@@ -644,12 +658,15 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     html += `<p style="font-size:9.5px;color:#374151;line-height:1.65;margin:0;">${esc(q.explanation)}</p>`;
     html += `</div>`;
 
-    const { url, ratio } = await renderEl(html, RENDER_W, 6);
-    placeImage(url, colW * ratio);
-  }
+      const { url, ratio } = await renderEl(html, RENDER_W, 6);
+      placeImage(url, colW * ratio);
+    }
 
-  finalizePage();
-  return pdf.output('blob');
+    finalizePage();
+    return pdf.output('blob');
+  } finally {
+    document.body.removeChild(overlay);
+  }
 }
 
 export default function AiQuestionsPage() {
