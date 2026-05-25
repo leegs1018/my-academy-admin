@@ -58,19 +58,27 @@ export async function middleware(request: NextRequest) {
   // 3. 권한 초과 접근 차단
   // 일반 사용자의 /superadmin 접근 차단
   if (user && pathname.startsWith('/superadmin') && !isSuperAdmin) {
-    return NextResponse.redirect(new URL(role === 'admin' ? '/admin' : '/tool', request.url))
+    return NextResponse.redirect(new URL(role === 'admin' ? '/admin' : '/admin/pdf-editor', request.url))
   }
-  // ai_only 사용자의 /admin 접근 차단
-  if (user && pathname.startsWith('/admin') && role === 'ai_only' && !isSuperAdmin) {
-    return NextResponse.redirect(new URL('/tool', request.url))
+
+  // ai_only 사용자는 AI 도구 경로 외 /admin 접근 차단
+  const aiAllowed = ['/admin/pdf-editor', '/admin/ai-questions', '/admin/mock-exam-questions'];
+  if (user && pathname.startsWith('/admin') && role === 'ai_only' && !isSuperAdmin &&
+      !aiAllowed.some(p => pathname.startsWith(p))) {
+    return NextResponse.redirect(new URL('/admin/pdf-editor', request.url))
   }
 
   // 4. 로그인 후 리다이렉트 분기
   if (user && (pathname === '/login' || pathname === '/register')) {
-    let dest = '/tool';
+    let dest = '/admin/pdf-editor';
     if (isSuperAdmin) dest = '/superadmin';
     else if (role === 'admin') dest = '/admin';
     return NextResponse.redirect(new URL(dest, request.url))
+  }
+
+  // /tool 접근 시 ai_only → pdf-editor, admin → /admin 으로 이동
+  if (user && pathname === '/tool') {
+    return NextResponse.redirect(new URL(role === 'admin' ? '/admin' : '/admin/pdf-editor', request.url))
   }
 
   return response
