@@ -440,14 +440,12 @@ function SortableTypeCard({ cfg, onUpdate, onRemove }: { cfg: TypeConfig; onUpda
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 export default function MockExamQuestionsPage() {
   const [years, setYears] = useState<number[]>([]);
-  const [institutions, setInstitutions] = useState<string[]>([]);
   const [grades, setGrades] = useState<string[]>([]);
-  const [examNames, setExamNames] = useState<string[]>([]);
+  const [institutions, setInstitutions] = useState<string[]>([]);
   const [questionNumbers, setQuestionNumbers] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState('');
-  const [selectedInstitution, setSelectedInstitution] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
-  const [selectedExamName, setSelectedExamName] = useState('');
+  const [selectedInstitution, setSelectedInstitution] = useState('');
   const [selectedNumber, setSelectedNumber] = useState('');
   const [passageText, setPassageText] = useState('');
   const [passageLoading, setPassageLoading] = useState(false);
@@ -485,38 +483,31 @@ export default function MockExamQuestionsPage() {
 
   useEffect(() => {
     if (!selectedYear) return;
-    setSelectedInstitution(''); setSelectedGrade(''); setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
-    supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear))
-      .then(({ data }) => { setInstitutions([...new Set((data ?? []).map((r: { institution: string }) => r.institution))]); });
+    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumber(''); setPassageText('');
+    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear))
+      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, [selectedYear]);
 
   useEffect(() => {
-    if (!selectedYear || !selectedInstitution) return;
-    setSelectedGrade(''); setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
-    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution)
-      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
-  }, [selectedYear, selectedInstitution]);
+    if (!selectedYear || !selectedGrade) return;
+    setSelectedInstitution(''); setSelectedNumber(''); setPassageText('');
+    supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade)
+      .then(({ data }) => { setInstitutions([...new Set((data ?? []).map((r: { institution: string }) => r.institution))]); });
+  }, [selectedYear, selectedGrade]);
 
   useEffect(() => {
-    if (!selectedYear || !selectedInstitution || !selectedGrade) return;
-    setSelectedExamName(''); setSelectedNumber(''); setPassageText('');
-    supabase.from('mock_exam_passages').select('exam_name').eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution).eq('grade', selectedGrade)
-      .then(({ data }) => { setExamNames([...new Set((data ?? []).map((r: { exam_name: string }) => r.exam_name))]); });
-  }, [selectedYear, selectedInstitution, selectedGrade]);
-
-  useEffect(() => {
-    if (!selectedYear || !selectedInstitution || !selectedGrade || !selectedExamName) return;
+    if (!selectedYear || !selectedGrade || !selectedInstitution) return;
     setSelectedNumber(''); setPassageText('');
-    supabase.from('mock_exam_passages').select('question_number').eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution).eq('grade', selectedGrade).eq('exam_name', selectedExamName).order('question_number')
+    supabase.from('mock_exam_passages').select('question_number').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution).order('question_number')
       .then(({ data }) => { setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
-  }, [selectedYear, selectedInstitution, selectedGrade, selectedExamName]);
+  }, [selectedYear, selectedGrade, selectedInstitution]);
 
   useEffect(() => {
-    if (!selectedNumber || !selectedYear || !selectedInstitution || !selectedGrade || !selectedExamName) return;
+    if (!selectedNumber || !selectedYear || !selectedGrade || !selectedInstitution) return;
     setPassageLoading(true);
-    supabase.from('mock_exam_passages').select('passage_text').eq('year', parseInt(selectedYear)).eq('institution', selectedInstitution).eq('grade', selectedGrade).eq('exam_name', selectedExamName).eq('question_number', parseInt(selectedNumber)).single()
+    supabase.from('mock_exam_passages').select('passage_text').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution).eq('question_number', parseInt(selectedNumber)).single()
       .then(({ data }) => { setPassageText(data?.passage_text ?? ''); setPassageLoading(false); });
-  }, [selectedNumber, selectedYear, selectedInstitution, selectedGrade, selectedExamName]);
+  }, [selectedNumber, selectedYear, selectedGrade, selectedInstitution]);
 
   const updateConfig = (id: string, patch: Partial<TypeConfig>) => { setTypeConfigs(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c)); };
   const removeConfig = (id: string) => { setTypeConfigs(prev => prev.filter(c => c.id !== id)); };
@@ -597,13 +588,12 @@ export default function MockExamQuestionsPage() {
         {/* STEP 1 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             {[
               { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
-              { label: '기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedYear, options: institutions.map(i => ({ value: i, label: i })) },
-              { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedInstitution, options: grades.map(g => ({ value: g, label: g })) },
-              { label: '시험명', value: selectedExamName, onChange: setSelectedExamName, disabled: !selectedGrade, options: examNames.map(n => ({ value: n, label: n })) },
-              { label: '문제 번호', value: selectedNumber, onChange: setSelectedNumber, disabled: !selectedExamName, options: questionNumbers.map(n => ({ value: String(n), label: `${n}번` })) },
+              { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
+              { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
+              { label: '문제 번호', value: selectedNumber, onChange: setSelectedNumber, disabled: !selectedInstitution, options: questionNumbers.map(n => ({ value: String(n), label: `${n}번` })) },
             ].map(({ label, value, onChange, disabled, options }) => (
               <div key={label}>
                 <label className="block text-xs font-black text-gray-400 mb-1.5">{label}</label>
@@ -622,7 +612,7 @@ export default function MockExamQuestionsPage() {
               <p className="text-sm text-slate-700 font-medium leading-relaxed" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{passageText}</p>
             </div>
           )}
-          {!selectedYear && <p className="text-sm text-gray-400 font-medium">년도를 선택하면 기관, 시험명, 문제번호를 차례로 선택할 수 있습니다.</p>}
+          {!selectedYear && <p className="text-sm text-gray-400 font-medium">년도를 선택하면 학년, 시험명/기관, 문제번호를 차례로 선택할 수 있습니다.</p>}
         </div>
 
         {/* STEP 2 */}

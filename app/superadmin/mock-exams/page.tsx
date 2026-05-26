@@ -36,7 +36,6 @@ export default function MockExamsPage() {
   const [year, setYear] = useState('');
   const [institution, setInstitution] = useState('수능');
   const [grade, setGrade] = useState('1학년');
-  const [examName, setExamName] = useState('');
   const [questionNumber, setQuestionNumber] = useState('');
   const [passageText, setPassageText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -113,7 +112,7 @@ export default function MockExamsPage() {
 
   const handleSave = async () => {
     setError('');
-    if (!year || !examName || !grade || !questionNumber || !passageText.trim()) {
+    if (!year || !grade || !questionNumber || !passageText.trim()) {
       setError('모든 항목을 입력해주세요.');
       return;
     }
@@ -126,7 +125,7 @@ export default function MockExamsPage() {
           year: parseInt(year),
           institution,
           grade,
-          exam_name: examName,
+          exam_name: institution,
           question_number: parseInt(questionNumber),
           passage_text: passageText.trim(),
         }),
@@ -137,6 +136,7 @@ export default function MockExamsPage() {
       }
       setQuestionNumber(''); setPassageText('');
       setImageFile(null); setImagePreview(null); setOcrDone(false);
+
       await loadPassages();
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 오류');
@@ -167,7 +167,7 @@ export default function MockExamsPage() {
   const handleEditSave = async () => {
     if (!editingPassage) return;
     setEditError('');
-    if (!editForm.year || !editForm.exam_name || !editForm.question_number || !editForm.passage_text.trim()) {
+    if (!editForm.year || !editForm.question_number || !editForm.passage_text.trim()) {
       setEditError('모든 항목을 입력해주세요.');
       return;
     }
@@ -181,7 +181,7 @@ export default function MockExamsPage() {
           year: parseInt(editForm.year),
           institution: editForm.institution,
           grade: editForm.grade,
-          exam_name: editForm.exam_name,
+          exam_name: editForm.institution,
           question_number: parseInt(editForm.question_number),
           passage_text: editForm.passage_text.trim(),
         }),
@@ -221,7 +221,7 @@ export default function MockExamsPage() {
           <h2 className="text-base font-black text-white">지문 추가</h2>
         </div>
         <div className="p-6 space-y-5">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">년도</label>
               <input
@@ -234,16 +234,6 @@ export default function MockExamsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">기관</label>
-              <select
-                value={institution}
-                onChange={e => setInstitution(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500"
-              >
-                {INSTITUTIONS.map(i => <option key={i} value={i}>{i}</option>)}
-              </select>
-            </div>
-            <div>
               <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">학년</label>
               <select
                 value={grade}
@@ -254,14 +244,14 @@ export default function MockExamsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">시험명</label>
-              <input
-                type="text"
-                value={examName}
-                onChange={e => setExamName(e.target.value)}
-                placeholder="2024학년도 수능"
-                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500 placeholder-slate-600"
-              />
+              <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">시험명/기관</label>
+              <select
+                value={institution}
+                onChange={e => setInstitution(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500"
+              >
+                {INSTITUTIONS.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -270,7 +260,7 @@ export default function MockExamsPage() {
                   type="button"
                   onClick={() => {
                     setYear(''); setInstitution('수능'); setGrade('1학년');
-                    setExamName(''); setQuestionNumber(''); setPassageText('');
+                    setQuestionNumber(''); setPassageText('');
                     setImageFile(null); setImagePreview(null); setOcrDone(false);
                   }}
                   className="text-[10px] font-black text-slate-500 hover:text-rose-400 transition-colors"
@@ -378,7 +368,7 @@ export default function MockExamsPage() {
               </span>
             </h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-wider">년도</label>
               <select
@@ -388,17 +378,6 @@ export default function MockExamsPage() {
               >
                 <option value="">전체</option>
                 {uniqueYears.map(y => <option key={y} value={String(y)}>{y}년</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-wider">기관</label>
-              <select
-                value={filterInstitution}
-                onChange={e => setFilterInstitution(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-xs px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
-              >
-                <option value="">전체</option>
-                {INSTITUTIONS.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
             </div>
             <div>
@@ -413,14 +392,15 @@ export default function MockExamsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-wider">시험명</label>
-              <input
-                type="text"
-                value={filterExamName}
-                onChange={e => setFilterExamName(e.target.value)}
-                placeholder="검색..."
-                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-xs px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500 placeholder-slate-600"
-              />
+              <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-wider">시험명/기관</label>
+              <select
+                value={filterInstitution}
+                onChange={e => setFilterInstitution(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-xs px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">전체</option>
+                {INSTITUTIONS.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-black text-slate-500 mb-1 uppercase tracking-wider">목록 수</label>
@@ -455,9 +435,8 @@ export default function MockExamsPage() {
               <thead>
                 <tr className="border-b border-slate-800">
                   <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">년도</th>
-                  <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">기관</th>
                   <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">학년</th>
-                  <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">시험명</th>
+                  <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">시험명/기관</th>
                   <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">문제번호</th>
                   <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">지문 미리보기</th>
                   <th className="px-4 py-3 text-left text-xs font-black text-slate-400 uppercase tracking-wider">등록일</th>
@@ -468,9 +447,8 @@ export default function MockExamsPage() {
                 {filteredPassages.map((p) => (
                   <tr key={p.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                     <td className="px-4 py-3 font-bold text-white">{p.year}</td>
-                    <td className="px-4 py-3 text-slate-300 font-medium">{p.institution}</td>
                     <td className="px-4 py-3 text-slate-300 font-medium">{p.grade}</td>
-                    <td className="px-4 py-3 text-slate-300 font-medium">{p.exam_name}</td>
+                    <td className="px-4 py-3 text-slate-300 font-medium">{p.institution}</td>
                     <td className="px-4 py-3 text-slate-300 font-medium">{p.question_number}번</td>
                     <td
                       className="px-4 py-3 text-slate-400 font-medium max-w-xs truncate cursor-pointer hover:text-indigo-300 transition-colors"
@@ -510,7 +488,7 @@ export default function MockExamsPage() {
           <div className="absolute inset-0 bg-black/70" />
           <div className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-base font-black text-white">{viewingPassage.year}년 {viewingPassage.institution} {viewingPassage.grade} — {viewingPassage.exam_name} {viewingPassage.question_number}번</h3>
+              <h3 className="text-base font-black text-white">{viewingPassage.year}년 {viewingPassage.grade} {viewingPassage.institution} — {viewingPassage.question_number}번</h3>
               <button onClick={() => setViewingPassage(null)} className="text-slate-400 hover:text-white transition-colors text-xl font-bold">✕</button>
             </div>
             <div className="p-6 overflow-y-auto">
@@ -538,13 +516,6 @@ export default function MockExamsPage() {
                     className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">기관</label>
-                  <select value={editForm.institution} onChange={e => setEditForm(f => ({ ...f, institution: e.target.value }))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500">
-                    {INSTITUTIONS.map(i => <option key={i} value={i}>{i}</option>)}
-                  </select>
-                </div>
-                <div>
                   <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">학년</label>
                   <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value }))}
                     className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500">
@@ -552,9 +523,11 @@ export default function MockExamsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">시험명</label>
-                  <input type="text" value={editForm.exam_name} onChange={e => setEditForm(f => ({ ...f, exam_name: e.target.value }))}
-                    className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500" />
+                  <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">시험명/기관</label>
+                  <select value={editForm.institution} onChange={e => setEditForm(f => ({ ...f, institution: e.target.value }))}
+                    className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500">
+                    {INSTITUTIONS.map(i => <option key={i} value={i}>{i}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">문제 번호</label>
