@@ -508,6 +508,16 @@ Awkward wording alone is NOT an error.
 - 4개 정답 단어는 원문 단어 그대로 복사 금지 — 반드시 동의어·상위어·paraphrase로 교체할 것
   · 예: 원문 "accepted" → 교체어 "recognized" / 원문 "increase" → 교체어 "boost"
 - 오류 단어가 지문의 핵심 인과 관계나 대조 구조를 정확히 뒤집어야 최고 난이도 달성
+
+[오류 단어 설계 4대 조건 — 반드시 충족]
+1. Same semantic domain: 오류 단어는 정답 단어와 동일한 의미 영역(semantic domain) 안에 있어야 한다.
+   · 예: cognitive 영역이면 → perceive / distort / interpret / suppress 등에서 선택. "legislative / hydraulic" 같은 다른 도메인 단어 절대 금지.
+2. Local plausibility: 오류 단어가 포함된 문장 하나만 읽었을 때는 문법·의미 모두 자연스럽게 들려야 한다.
+   · 단일 문장 수준에서 어색하거나 문법 오류가 생기는 단어 선택 금지.
+3. No obvious antonym: happy→sad, increase→decrease처럼 즉각 반의어가 드러나는 교체는 금지한다.
+   · 오류는 단어 의미를 몰라도 직관적으로 눈치챌 수 있을 만큼 뻔해서는 안 된다.
+4. Discourse-level incorrectness only: 오류는 반드시 지문 전체의 논리 흐름(인과·대조·주장)을 이해한 후에만 발견 가능해야 한다.
+   · 단락 1~2문장만 읽고 오류를 발견할 수 있으면 실격. 전체 담화를 파악해야만 틀렸음을 알 수 있어야 함.
   · 특히 역접(however/although/yet/but) 뒤 또는 대조 구조 내 단어를 오류 위치로 선정하면 고난도 실현 가능
 `,
 
