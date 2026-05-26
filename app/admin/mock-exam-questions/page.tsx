@@ -133,6 +133,7 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string, originalPassage?: string): Promise<Blob | null> {
+  const { toJpeg } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
   const W = 210, M = 8, GAP = 4;
   const colW = (W - 2 * M - GAP) / 2;
@@ -293,20 +294,15 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   };
 
   const renderEl = async (html: string, w: number, padding: number) => {
-    const { toJpeg } = await import('html-to-image');
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;';
     const el = document.createElement('div');
-    el.style.cssText = `width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
+    el.style.cssText = `position:absolute;top:0;left:-${w * 2 + 50}px;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
     el.innerHTML = html;
-    container.appendChild(el);
-    document.body.appendChild(container);
+    document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => setTimeout(r, 100));
     const fullH = el.scrollHeight;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: w, height: fullH });
-    document.body.removeChild(container);
-    const ratio = fullH / Math.max(w, 1);
+    const ratio = fullH / el.offsetWidth;
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, width: el.offsetWidth, height: fullH });
+    document.body.removeChild(el);
     return { url, ratio };
   };
 
@@ -328,6 +324,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 }
 
 async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Promise<Blob> {
+  const { toJpeg } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
   const W = 210, M = 8, GAP = 4;
   const colW = (W - 2 * M - GAP) / 2;
@@ -357,20 +354,15 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   };
 
   const renderEl = async (html: string, w: number, padding: number) => {
-    const { toJpeg } = await import('html-to-image');
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:hidden;';
     const el = document.createElement('div');
-    el.style.cssText = `width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
+    el.style.cssText = `position:absolute;top:0;left:-${w * 2 + 50}px;width:${w}px;background:white;padding:${padding}px;box-sizing:border-box;font-family:'Malgun Gothic',Arial,Helvetica,sans-serif;`;
     el.innerHTML = html;
-    container.appendChild(el);
-    document.body.appendChild(container);
+    document.body.appendChild(el);
     await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => setTimeout(r, 100));
     const fullH = el.scrollHeight;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', width: w, height: fullH });
-    document.body.removeChild(container);
-    const ratio = fullH / Math.max(w, 1);
+    const ratio = fullH / el.offsetWidth;
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, width: el.offsetWidth, height: fullH });
+    document.body.removeChild(el);
     return { url, ratio };
   };
 
