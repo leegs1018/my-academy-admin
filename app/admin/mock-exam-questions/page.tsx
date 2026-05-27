@@ -16,6 +16,7 @@ interface ExamChoice { number: number; text: string; }
 interface ExamQuestion {
   type: string; question_text: string; modified_passage?: string | null;
   choices: ExamChoice[]; answer: number; explanation: string;
+  _passageText?: string; _passageNumber?: number;
 }
 interface TypeConfig {
   id: string; type: string; difficulty: 'b1' | 'b2' | 'c1' | 'c2';
@@ -202,6 +203,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 
   const buildHtml = (q: ExamQuestion, num: number) => {
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
+    const qPassage = q._passageText ?? originalPassage;
     let html = `<div style="font-size:9px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:4px;">${esc(typeLabel)}</div>\n`;
 
     if (q.type === 'vocab_paraphrase') {
@@ -212,15 +214,15 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       const instr = pts[0]?.trim() || '';
       const sumText = pts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
       html += instrP(`${num}. ${esc(instr)}`);
-      if (originalPassage) html += passageBox(escP(originalPassage));
+      if (qPassage) html += passageBox(escP(qPassage));
       if (sumText) {
         html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:10px;">`;
         html += `<div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:4px;">[요약문]</div>`;
         html += `<div style="font-size:12px;line-height:1.8;color:#334155;">${escP(sumText)}</div></div>`;
       }
-    } else if (q.type === 'topic_title' && originalPassage) {
+    } else if (q.type === 'topic_title' && qPassage) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
-      html += passageBox(escP(originalPassage));
+      html += passageBox(escP(qPassage));
     } else if (q.modified_passage && q.type === 'grammar') {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escGrammar(q.modified_passage.replace(/\[([^\]]+)\]/g, '$1'), q.choices));
@@ -446,9 +448,9 @@ export default function MockExamQuestionsPage() {
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
-  const [selectedNumber, setSelectedNumber] = useState('');
-  const [passageText, setPassageText] = useState('');
-  const [passageLoading, setPassageLoading] = useState(false);
+  const [selectedNumbers, setSelectedNumbers] = useState<string[]>([]);
+  const [passageMap, setPassageMap] = useState<Record<string, string>>({});
+  const [loadingNumbers, setLoadingNumbers] = useState<Set<string>>(new Set());
 
   const [typeConfigs, setTypeConfigs] = useState<TypeConfig[]>(() =>
     QUESTION_TYPE_OPTIONS.map(o => ({ id: crypto.randomUUID(), type: o.key, difficulty: 'b2' as const, count: 1, enabled: true, isCustom: false }))
@@ -483,31 +485,39 @@ export default function MockExamQuestionsPage() {
 
   useEffect(() => {
     if (!selectedYear) return;
-    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumber(''); setPassageText('');
+    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear))
       .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, [selectedYear]);
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade) return;
-    setSelectedInstitution(''); setSelectedNumber(''); setPassageText('');
+    setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade)
       .then(({ data }) => { setInstitutions([...new Set((data ?? []).map((r: { institution: string }) => r.institution))]); });
   }, [selectedYear, selectedGrade]);
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
-    setSelectedNumber(''); setPassageText('');
+    setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('question_number').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution).order('question_number')
       .then(({ data }) => { setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
   }, [selectedYear, selectedGrade, selectedInstitution]);
 
-  useEffect(() => {
-    if (!selectedNumber || !selectedYear || !selectedGrade || !selectedInstitution) return;
-    setPassageLoading(true);
-    supabase.from('mock_exam_passages').select('passage_text').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution).eq('question_number', parseInt(selectedNumber)).single()
-      .then(({ data }) => { setPassageText(data?.passage_text ?? ''); setPassageLoading(false); });
-  }, [selectedNumber, selectedYear, selectedGrade, selectedInstitution]);
+  const toggleNumber = async (num: string) => {
+    if (selectedNumbers.includes(num)) {
+      setSelectedNumbers(prev => prev.filter(n => n !== num));
+      setPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    } else {
+      setSelectedNumbers(prev => [...prev, num]);
+      setLoadingNumbers(prev => new Set([...prev, num]));
+      const { data } = await supabase.from('mock_exam_passages').select('passage_text')
+        .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
+        .eq('question_number', parseInt(num)).single();
+      setPassageMap(prev => ({ ...prev, [num]: data?.passage_text ?? '' }));
+      setLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+    }
+  };
 
   const updateConfig = (id: string, patch: Partial<TypeConfig>) => { setTypeConfigs(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c)); };
   const removeConfig = (id: string) => { setTypeConfigs(prev => prev.filter(c => c.id !== id)); };
@@ -528,34 +538,45 @@ export default function MockExamQuestionsPage() {
   };
 
   const validConfigs = typeConfigs.filter(c => c.enabled && c.type !== '');
+  const sortedSelectedNumbers = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+  const allPassagesReady = selectedNumbers.length > 0 && selectedNumbers.every(n => passageMap[n]) && loadingNumbers.size === 0;
 
   const handleGenerate = useCallback(async () => {
-    if (!passageText || validConfigs.length === 0 || !session) return;
-    setGenerating(true); setQuestions([]); setRevealedAnswers(new Set()); setProgress('문제 생성 중...');
-    try {
-      const res = await fetch('/api/generate-exam-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ text: passageText, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })) }),
-      });
-      const json = await res.json() as { questions?: ExamQuestion[]; error?: string };
-      if (!res.ok) throw new Error(json.error || '생성 실패');
-      setQuestions(json.questions ?? []);
-      setProgress(`${json.questions?.length ?? 0}개 문제 생성 완료`);
-      fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
-        .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
-    } catch (e) {
-      setProgress(e instanceof Error ? e.message : '생성 오류');
-    } finally {
-      setGenerating(false);
+    if (!allPassagesReady || validConfigs.length === 0 || !session) return;
+    setGenerating(true); setQuestions([]); setRevealedAnswers(new Set());
+    const allQuestions: ExamQuestion[] = [];
+    for (const num of sortedSelectedNumbers) {
+      const text = passageMap[num];
+      if (!text) continue;
+      setProgress(`${num}번 지문 문제 생성 중...`);
+      try {
+        const res = await fetch('/api/generate-exam-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })) }),
+        });
+        const json = await res.json() as { questions?: ExamQuestion[]; error?: string };
+        if (!res.ok) throw new Error(json.error || '생성 실패');
+        const tagged = (json.questions ?? []).map(q => ({ ...q, _passageText: text, _passageNumber: parseInt(num) }));
+        allQuestions.push(...tagged);
+      } catch (e) {
+        setProgress(e instanceof Error ? e.message : '생성 오류');
+        setGenerating(false);
+        return;
+      }
     }
-  }, [passageText, validConfigs, session]);
+    setQuestions(allQuestions);
+    setProgress(`${allQuestions.length}개 문제 생성 완료`);
+    fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
+      .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
+    setGenerating(false);
+  }, [allPassagesReady, sortedSelectedNumbers, passageMap, validConfigs, session]);
 
   const handleDownloadQuestion = async () => {
     if (!questions.length) return;
     setPdfLoading('문제');
     try {
-      const blob = await generateQuestionPdfBlob(questions, pdfTitle.trim(), passageText);
+      const blob = await generateQuestionPdfBlob(questions, pdfTitle.trim());
       if (blob) triggerDownload(blob, `${pdfTitle.trim() || '모의고사변형문제'}_문제.pdf`);
     } finally { setPdfLoading(false); }
   };
@@ -588,12 +609,11 @@ export default function MockExamQuestionsPage() {
         {/* STEP 1 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             {[
               { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
               { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
               { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
-              { label: '문제 번호', value: selectedNumber, onChange: setSelectedNumber, disabled: !selectedInstitution, options: questionNumbers.map(n => ({ value: String(n), label: `${n}번` })) },
             ].map(({ label, value, onChange, disabled, options }) => (
               <div key={label}>
                 <label className="block text-xs font-black text-gray-400 mb-1.5">{label}</label>
@@ -605,14 +625,62 @@ export default function MockExamQuestionsPage() {
               </div>
             ))}
           </div>
-          {passageLoading && <p className="text-sm font-bold text-gray-400 animate-pulse">지문 불러오는 중...</p>}
-          {passageText && !passageLoading && (
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <p className="text-xs font-black text-slate-400 mb-2">지문 미리보기</p>
-              <p className="text-sm text-slate-700 font-medium leading-relaxed" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{passageText}</p>
+
+          {/* 문제 번호 다중 선택 */}
+          {selectedInstitution && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-black text-gray-400">문제 번호 <span className="text-gray-300 font-normal">(복수 선택 가능)</span></label>
+                {selectedNumbers.length > 0 && (
+                  <button onClick={() => { setSelectedNumbers([]); setPassageMap({}); }}
+                    className="text-xs font-black text-gray-400 hover:text-red-400 transition-all">전체 해제</button>
+                )}
+              </div>
+              {questionNumbers.length === 0 ? (
+                <p className="text-sm text-gray-400">등록된 문제가 없습니다.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {questionNumbers.map(n => {
+                    const nStr = String(n);
+                    const isSelected = selectedNumbers.includes(nStr);
+                    const isLoading = loadingNumbers.has(nStr);
+                    return (
+                      <button key={n} onClick={() => toggleNumber(nStr)} disabled={isLoading}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                        } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
+                        {isLoading ? '...' : `${n}번`}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           {!selectedYear && <p className="text-sm text-gray-400 font-medium">년도를 선택하면 학년, 시험명/기관, 문제번호를 차례로 선택할 수 있습니다.</p>}
+
+          {/* 선택된 지문 미리보기 */}
+          {sortedSelectedNumbers.length > 0 && (
+            <div className="mt-2 space-y-3">
+              {sortedSelectedNumbers.map(num => (
+                <div key={num} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-black text-slate-500">{num}번 지문 미리보기</p>
+                    <button onClick={() => toggleNumber(num)} className="text-xs text-gray-400 hover:text-red-400 font-black transition-all">✕</button>
+                  </div>
+                  {loadingNumbers.has(num) ? (
+                    <p className="text-sm text-gray-400 animate-pulse">지문 불러오는 중...</p>
+                  ) : passageMap[num] ? (
+                    <p className="text-sm text-slate-700 font-medium leading-relaxed" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{passageMap[num]}</p>
+                  ) : (
+                    <p className="text-sm text-gray-400">지문 없음</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* STEP 2 */}
@@ -662,12 +730,13 @@ export default function MockExamQuestionsPage() {
             <input type="text" value={pdfTitle} onChange={e => setPdfTitle(e.target.value)} placeholder="예: 2024 수능 18번 변형"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
           </div>
-          <button onClick={handleGenerate} disabled={generating || !passageText || validConfigs.length === 0}
+          <button onClick={handleGenerate} disabled={generating || !allPassagesReady || validConfigs.length === 0}
             className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-            {generating ? '⏳ 생성 중...' : '🎯 문제 생성'}
+            {generating ? '⏳ 생성 중...' : `🎯 문제 생성${sortedSelectedNumbers.length > 1 ? ` (${sortedSelectedNumbers.length}개 지문)` : ''}`}
           </button>
-          {!passageText && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 1에서 지문을 먼저 선택하세요</p>}
-          {passageText && validConfigs.length === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 2에서 문제 유형을 선택하세요</p>}
+          {!allPassagesReady && loadingNumbers.size === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 1에서 지문 번호를 선택하세요</p>}
+          {loadingNumbers.size > 0 && <p className="text-xs font-bold text-indigo-400 mt-2 text-center animate-pulse">지문 불러오는 중...</p>}
+          {allPassagesReady && validConfigs.length === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 2에서 문제 유형을 선택하세요</p>}
           {progress && (
             <p className={`text-sm font-bold mt-3 text-center ${generating ? 'text-indigo-500 animate-pulse' : 'text-gray-500'}`}>{progress}</p>
           )}
@@ -680,11 +749,23 @@ export default function MockExamQuestionsPage() {
             {questions.map((q, idx) => {
               const typeOpt = QUESTION_TYPE_OPTIONS.find(o => o.key === q.type);
               const isRevealed = revealedAnswers.has(idx);
+              const prevQ = questions[idx - 1];
+              const showGroupHeader = q._passageNumber !== undefined && q._passageNumber !== prevQ?._passageNumber;
               const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
                 ? CIRCLE_NUMS[q.answer - 1]
                 : (q.type === 'sentence_order' ? (q.choices[q.answer - 1]?.text ?? `${q.answer}번`) : `${q.answer}번`);
               return (
-                <div key={idx} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div key={idx}>
+                {showGroupHeader && sortedSelectedNumbers.length > 1 && (
+                  <div className="flex items-center gap-3 py-2 mb-2">
+                    <div className="h-px flex-1 bg-indigo-100" />
+                    <span className="text-xs font-black text-indigo-400 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
+                      📄 {q._passageNumber}번 지문
+                    </span>
+                    <div className="h-px flex-1 bg-indigo-100" />
+                  </div>
+                )}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <span className={`text-xs font-black px-3 py-1 rounded-full border ${typeOpt?.color ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>{typeOpt?.label ?? q.type}</span>
                     <span className="text-base font-black text-gray-800">문제 {idx + 1}</span>
@@ -708,8 +789,8 @@ export default function MockExamQuestionsPage() {
                     return (
                       <>
                         <p className="text-sm font-bold text-gray-800 mb-3 whitespace-pre-wrap">{instruction}</p>
-                        {passageText && (
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{passageText}</div>
+                        {q._passageText && (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{q._passageText}</div>
                         )}
                         {summaryText && (
                           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
@@ -724,7 +805,7 @@ export default function MockExamQuestionsPage() {
                   {q.type === 'topic_title' && (
                     <>
                       <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">{q.question_text}</div>
-                      {passageText && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{passageText}</div>}
+                      {q._passageText && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{q._passageText}</div>}
                     </>
                   )}
 
@@ -846,6 +927,7 @@ export default function MockExamQuestionsPage() {
                       </div>
                     )}
                   </div>
+                </div>
                 </div>
               );
             })}
