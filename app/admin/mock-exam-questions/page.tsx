@@ -494,7 +494,15 @@ export default function MockExamQuestionsPage() {
     if (!selectedYear || !selectedGrade) return;
     setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).order('institution', { ascending: true })
-      .then(({ data }) => { setInstitutions([...new Set((data ?? []).map((r: { institution: string }) => r.institution))]); });
+      .then(({ data }) => {
+        const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
+        unique.sort((a, b) => {
+          const ma = parseInt(a.match(/^(\d+)/)?.[1] ?? '99');
+          const mb = parseInt(b.match(/^(\d+)/)?.[1] ?? '99');
+          return ma - mb;
+        });
+        setInstitutions(unique);
+      });
   }, [selectedYear, selectedGrade]);
 
   useEffect(() => {
