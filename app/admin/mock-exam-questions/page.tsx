@@ -486,14 +486,14 @@ export default function MockExamQuestionsPage() {
   useEffect(() => {
     if (!selectedYear) return;
     setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
-    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear))
+    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear)).order('grade', { ascending: true })
       .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, [selectedYear]);
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade) return;
     setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
-    supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade)
+    supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).order('institution', { ascending: true })
       .then(({ data }) => { setInstitutions([...new Set((data ?? []).map((r: { institution: string }) => r.institution))]); });
   }, [selectedYear, selectedGrade]);
 
