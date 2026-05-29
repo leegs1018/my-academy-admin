@@ -589,9 +589,7 @@ export default function GradeInputPage() {
         <>
           {/* 상단 컨트롤러 */}
           <div className="flex flex-wrap items-end mb-6 bg-white p-6 rounded-[2rem] shadow-sm border border-indigo-50 gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <p className="text-indigo-400 font-bold text-[10px] uppercase tracking-[0.2em]">클래스 및 과목 설정</p>
-            </div>
+
             <div className="flex flex-wrap gap-2 items-center">
               <select value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setSelectedCategoryId(''); }}
                 className="border-2 border-indigo-50 rounded-xl px-4 py-2 bg-indigo-50/30 font-black text-indigo-700 outline-none text-sm">
