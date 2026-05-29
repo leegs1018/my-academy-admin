@@ -45,7 +45,7 @@ export default function MockExamsPage() {
 
   // 추가 폼
   const [year, setYear] = useState('');
-  const [institution, setInstitution] = useState('수능');
+  const [institution, setInstitution] = useState(INSTITUTIONS[0]);
   const [grade, setGrade] = useState('1학년');
   const [questionNumber, setQuestionNumber] = useState('');
   const [passageText, setPassageText] = useState('');
@@ -67,7 +67,7 @@ export default function MockExamsPage() {
   // 모달
   const [viewingPassage, setViewingPassage] = useState<Passage | null>(null);
   const [editingPassage, setEditingPassage] = useState<Passage | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ year: '', institution: '수능', grade: '1학년', exam_name: '', question_number: '', passage_text: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ year: '', institution: INSTITUTIONS[0], grade: '1학년', exam_name: '', question_number: '', passage_text: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -270,7 +270,7 @@ export default function MockExamsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setYear(''); setInstitution('수능'); setGrade('1학년');
+                    setYear(''); setInstitution(INSTITUTIONS[0]); setGrade('1학년');
                     setQuestionNumber(''); setPassageText('');
                     setImageFile(null); setImagePreview(null); setOcrDone(false);
                   }}
