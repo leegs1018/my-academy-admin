@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const [ongoingClasses, setOngoingClasses] = useState<any[]>([]);
   const [recentNotices, setRecentNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [todayStr, setTodayStr] = useState('');
 
 
   const fetchDashboardData = useCallback(async (userId: string) => {
@@ -70,6 +71,10 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    setTodayStr(new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }));
+  }, []);
+
+  useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -102,7 +107,7 @@ export default function DashboardPage() {
         </div>
         <div className="bg-white px-5 py-2.5 rounded-2xl border border-gray-100 shadow-sm">
           <p className="font-black text-gray-700 text-sm">
-            {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            {todayStr}
           </p>
         </div>
       </header>

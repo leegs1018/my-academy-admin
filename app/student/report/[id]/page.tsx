@@ -36,6 +36,11 @@ export default function StudentReport({ params }: { params: Promise<{ id: string
   const [studentInfo, setStudentInfo] = useState<any>(null);
   const [reportData, setReportData] = useState<any>(null);
   const [stats, setStats] = useState({ myAvg: 0, classAvg: 0, growth: 0 });
+  const [todayStr, setTodayStr] = useState('');
+
+  useEffect(() => {
+    setTodayStr(new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }));
+  }, []);
 
   useEffect(() => {
     if (id) fetchReportData();
@@ -159,7 +164,7 @@ export default function StudentReport({ params }: { params: Promise<{ id: string
           </div>
           <div className="text-left md:text-right font-black">
             <p className="text-slate-400 text-sm mb-1 uppercase tracking-widest">Analysis Date</p>
-            <p className="text-2xl text-slate-800">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p className="text-2xl text-slate-800">{todayStr}</p>
           </div>
         </div>
 
