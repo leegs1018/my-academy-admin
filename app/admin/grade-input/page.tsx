@@ -205,14 +205,14 @@ export default function GradeInputPage() {
         setSendGradeMap(gradeMap);
         setSendMaxScoreMap(maxScoreMap);
 
+        // 클래스에 등록된 모든 과목을 표시 (해당 날짜에 성적이 없는 과목도 포함)
+        // 실제 메시지 생성 시 성적이 없는 과목은 자동으로 제외됨
         const currentClass = classList.find(c => c.id.toString() === sendClassId);
         const classCats = Array.isArray(currentClass?.test_categories) ? currentClass.test_categories : [];
-        const presentIds = new Set(data.map((g: any) => g.category_id));
-        const avail = classCats.filter((c: any) => presentIds.has(c.id));
-        setSendAvailableCategories(avail);
-        setSendSelectedCategoryIds(new Set(avail.map((c: any) => c.id)));
+        setSendAvailableCategories(classCats);
+        setSendSelectedCategoryIds(new Set(classCats.map((c: any) => c.id)));
       });
-  }, [sendSelectedSession]);
+  }, [sendSelectedSession, sendClassId, userId, classList]);
 
   // ── 탭2: 메시지 미리보기 재생성 ───────────────────
   useEffect(() => {
