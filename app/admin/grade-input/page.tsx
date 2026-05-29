@@ -189,9 +189,9 @@ export default function GradeInputPage() {
       });
   }, [sendClassId, userId, classList]);
 
-  // ── 탭2: selectedSession 변경 시 ─────────────────
+  // ── 탭2: selectedSession 변경 or 발송 탭 전환 시 성적 새로고침 ──
   useEffect(() => {
-    if (!sendSelectedSession || !sendClassId) return;
+    if (activeTab !== 'send' || !sendSelectedSession || !sendClassId || !userId) return;
     supabase.from('grades').select('student_id,category_id,score,max_score')
       .eq('class_id', parseInt(sendClassId)).eq('academy_id', userId).eq('test_date', sendSelectedSession)
       .then(({ data }) => {
@@ -199,20 +199,19 @@ export default function GradeInputPage() {
         const gradeMap: Record<string, number> = {};
         const maxScoreMap: Record<string, number> = {};
         data.forEach((g: any) => {
-          gradeMap[`${g.student_id}__${g.category_id}`] = g.score;
-          if (g.max_score != null) maxScoreMap[g.category_id] = g.max_score;
+          gradeMap[`${String(g.student_id).trim()}__${String(g.category_id).trim()}`] = g.score;
+          if (g.max_score != null) maxScoreMap[String(g.category_id).trim()] = g.max_score;
         });
         setSendGradeMap(gradeMap);
         setSendMaxScoreMap(maxScoreMap);
 
         // 클래스에 등록된 모든 과목을 표시 (해당 날짜에 성적이 없는 과목도 포함)
-        // 실제 메시지 생성 시 성적이 없는 과목은 자동으로 제외됨
         const currentClass = classList.find(c => c.id.toString() === sendClassId);
         const classCats = Array.isArray(currentClass?.test_categories) ? currentClass.test_categories : [];
         setSendAvailableCategories(classCats);
-        setSendSelectedCategoryIds(new Set(classCats.map((c: any) => c.id)));
+        setSendSelectedCategoryIds(new Set(classCats.map((c: any) => String(c.id).trim())));
       });
-  }, [sendSelectedSession, sendClassId, userId, classList]);
+  }, [sendSelectedSession, sendClassId, userId, classList, activeTab]);
 
   // ── 탭2: 메시지 미리보기 재생성 ───────────────────
   useEffect(() => {
