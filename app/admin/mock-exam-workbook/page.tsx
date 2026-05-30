@@ -175,6 +175,9 @@ export default function MockExamWorkbookPage() {
   const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
   const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
+  const [editMode, setEditMode] = useState(false);
+  const [editedResult, setEditedResult] = useState<GeneratedMaterials | null>(null);
+  const [editSaveStatus, setEditSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
 
   // 이력
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
@@ -290,6 +293,7 @@ export default function MockExamWorkbookPage() {
   const handleGenerate = async () => {
     if (!passageText.trim() || loading || !session) return;
     setLoading(true); setError(null); setResult(null); setShowAnswerKey(false); setSaveStatus('idle');
+    setEditMode(false); setEditedResult(null); setEditSaveStatus('idle');
     const msgs = ['AI가 지문을 읽고 있어요... 🤖', '문제를 생성하고 있어요... ✍️', '어휘 표를 만들고 있어요... 📚', '거의 완성됐어요! 잠시만요... ✨'];
     let idx = 0; setLoadingMsg(msgs[0]);
     const interval = setInterval(() => { idx = (idx + 1) % msgs.length; setLoadingMsg(msgs[idx]); }, 8000);
@@ -316,22 +320,56 @@ export default function MockExamWorkbookPage() {
 
   const handleDownloadProblem = async () => {
     setPdfLoading('문제');
+    const wasEditing = editMode;
     try {
+      if (wasEditing) { setEditMode(false); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
       const blob = await generatePdfBlob(true);
+      if (wasEditing) setEditMode(true);
       if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
       triggerDownload(blob, `${pdfTitle.trim() || '모의고사워크북'}_문제.pdf`);
-    } catch (e) { alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
+    } catch (e) { if (wasEditing) setEditMode(true); alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
     finally { setPdfLoading(false); }
   };
 
   const handleDownloadAnswer = async () => {
-    if (!result) return;
+    const d = editedResult ?? result;
+    if (!d) return;
     setPdfLoading('답안');
     try {
-      const blob = await buildAnswerPdfBlob(result, pdfTitle.trim());
+      const blob = await buildAnswerPdfBlob(d, pdfTitle.trim());
       triggerDownload(blob, `${pdfTitle.trim() || '모의고사워크북'}_답안해설.pdf`);
     } catch (e) { alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
     finally { setPdfLoading(false); }
+  };
+
+  const handleEditSave = async () => {
+    if (!editedResult || !session) return;
+    setEditSaveStatus('saving');
+    const wasEditing = editMode;
+    try {
+      if (wasEditing) { setEditMode(false); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
+      const [pdfBlob, answerBlob] = await Promise.all([generatePdfBlob(true), buildAnswerPdfBlob(editedResult, pdfTitle.trim())]);
+      if (wasEditing) setEditMode(true);
+      if (!pdfBlob) { setEditSaveStatus('error'); return; }
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
+      const res = await fetch('/api/save-mock-workbook-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          pdfBase64, answerPdfBase64,
+          year: parseInt(selectedYear), grade: selectedGrade, institution: selectedInstitution,
+          questionNumber: parseInt(selectedNumber), difficulty,
+        }),
+      });
+      const json = await res.json() as { success?: boolean };
+      setEditSaveStatus(res.ok && json.success ? 'done' : 'error');
+    } catch { if (wasEditing) setEditMode(true); setEditSaveStatus('error'); }
   };
 
   const downloadFromHistory = async (path: string, filename: string) => {
@@ -456,7 +494,9 @@ export default function MockExamWorkbookPage() {
           </div>
 
           {/* ── 결과 영역 ── */}
-          {result && (
+          {result && (() => {
+            const d = editedResult ?? result;
+            return (
             <>
               <div id="mw-print-area" className="space-y-0">
                 {/* 1페이지: 원문 + 변형지문 + T/F 문제 */}
@@ -478,17 +518,34 @@ export default function MockExamWorkbookPage() {
                   </div>
 
                   <SectionCard number="01" title="변형 지문" color="bg-teal-600" theme={printTheme}
-                    onCopy={() => copy(result.paraphrased_passage ?? '', 'paraphrase')} copied={copiedSection === 'paraphrase'}>
-                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{result.paraphrased_passage}</p>
+                    onCopy={() => copy(d.paraphrased_passage ?? '', 'paraphrase')} copied={copiedSection === 'paraphrase'}>
+                    {editMode ? (
+                      <textarea className="w-full p-3 border-2 border-teal-200 rounded-xl font-bold text-slate-700 text-base leading-relaxed resize-y focus:outline-none focus:border-teal-400 min-h-[120px]"
+                        value={editedResult?.paraphrased_passage ?? ''}
+                        onChange={e => setEditedResult(prev => prev ? { ...prev, paraphrased_passage: e.target.value } : prev)} />
+                    ) : (
+                      <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{d.paraphrased_passage}</p>
+                    )}
                   </SectionCard>
 
                   <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500" theme={printTheme}
                     onCopy={() => copy(result.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
                     <div className="space-y-1 mb-2">
-                      {result.tf_questions.map((q) => (
+                      {d.tf_questions.map((q, qi) => (
                         <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
                           <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
-                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-xl">{q.statement}</p>
+                          {editMode ? (
+                            <textarea className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
+                              value={q.statement}
+                              onChange={e => setEditedResult(prev => {
+                                if (!prev) return prev;
+                                const tf = [...prev.tf_questions];
+                                tf[qi] = { ...tf[qi], statement: e.target.value };
+                                return { ...prev, tf_questions: tf };
+                              })} />
+                          ) : (
+                            <p className="text-slate-700 font-bold leading-relaxed flex-1 text-xl">{q.statement}</p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -502,7 +559,7 @@ export default function MockExamWorkbookPage() {
                         <div className="mt-3">
                           <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
                             <p className={`font-black text-sm mb-1 ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</p>
-                            <p className="font-black text-slate-700 tracking-wide text-sm">{result.answer_key}</p>
+                            <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
                           </div>
                         </div>
                       )}
@@ -513,18 +570,29 @@ export default function MockExamWorkbookPage() {
                 {/* 2페이지: 한글요약 + 영어제목 + 1문장요약 + 어휘 */}
                 <div id="mw-pdf-page-2" className="space-y-3">
                   <SectionCard number="03" title="한글 요약" color="bg-indigo-500" theme={printTheme}
-                    onCopy={() => copy(result.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')} copied={copiedSection === 'korean'}>
+                    onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')} copied={copiedSection === 'korean'}>
                     <div>
                       <span className={`inline-block mb-3 text-base font-black px-3 py-1 rounded-full ${printTheme === 'color' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
-                        {result.korean_summary.type === '일반' ? '일반 지문' : result.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
+                        {d.korean_summary.type === '일반' ? '일반 지문' : d.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
                       </span>
                       <table className="w-full border-collapse">
                         <tbody>
-                          {result.korean_summary.rows.map((row, i) => (
+                          {d.korean_summary.rows.map((row, i) => (
                             <tr key={i} className={printTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
                               <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${printTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
                               <td className={`p-2.5 border ${printTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
-                                <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
+                                {editMode ? (
+                                  <textarea className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
+                                    value={row.content}
+                                    onChange={e => setEditedResult(prev => {
+                                      if (!prev) return prev;
+                                      const rows = [...prev.korean_summary.rows];
+                                      rows[i] = { ...rows[i], content: e.target.value };
+                                      return { ...prev, korean_summary: { ...prev.korean_summary, rows } };
+                                    })} />
+                                ) : (
+                                  <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -534,17 +602,28 @@ export default function MockExamWorkbookPage() {
                   </SectionCard>
 
                   <SectionCard number="04" title="영어 제목 3가지" color="bg-amber-500" theme={printTheme}
-                    onCopy={() => copy(result.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
+                    onCopy={() => copy(d.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
                     <div className="space-y-2">
-                      {result.english_titles.map((title, i) => {
+                      {d.english_titles.map((title, i) => {
                         const { english, korean } = parseTitleKorean(title);
                         return (
                           <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
                             <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
-                            <div className="flex-1">
-                              <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
-                              {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
-                            </div>
+                            {editMode ? (
+                              <input className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
+                                value={title}
+                                onChange={e => setEditedResult(prev => {
+                                  if (!prev) return prev;
+                                  const titles = [...prev.english_titles];
+                                  titles[i] = e.target.value;
+                                  return { ...prev, english_titles: titles };
+                                })} />
+                            ) : (
+                              <div className="flex-1">
+                                <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
+                                {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -552,16 +631,37 @@ export default function MockExamWorkbookPage() {
                   </SectionCard>
 
                   <SectionCard number="05" title="1문장 영어 요약 3가지" color="bg-rose-500" theme={printTheme}
-                    onCopy={() => copy(result.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
+                    onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                     <div className="space-y-2">
-                      {result.one_sentence_summaries.map((s, i) => (
+                      {d.one_sentence_summaries.map((s, i) => (
                         <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-200'}`}>
                           <div className="flex items-start gap-2">
                             <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
-                            <div className="flex-1">
-                              <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
-                              <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
-                            </div>
+                            {editMode ? (
+                              <div className="flex-1 flex flex-col gap-1">
+                                <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-rose-400"
+                                  value={s.english}
+                                  onChange={e => setEditedResult(prev => {
+                                    if (!prev) return prev;
+                                    const sums = [...prev.one_sentence_summaries];
+                                    sums[i] = { ...sums[i], english: e.target.value };
+                                    return { ...prev, one_sentence_summaries: sums };
+                                  })} />
+                                <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-500 text-sm focus:outline-none focus:border-rose-400"
+                                  value={s.korean}
+                                  onChange={e => setEditedResult(prev => {
+                                    if (!prev) return prev;
+                                    const sums = [...prev.one_sentence_summaries];
+                                    sums[i] = { ...sums[i], korean: e.target.value };
+                                    return { ...prev, one_sentence_summaries: sums };
+                                  })} />
+                              </div>
+                            ) : (
+                              <div className="flex-1">
+                                <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
+                                <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -582,28 +682,58 @@ export default function MockExamWorkbookPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {result.vocabulary_table.map((row, i) => (
+                        {d.vocabulary_table.map((row, i) => {
+                          const updateVocab = (patch: Partial<VocabRow>) => setEditedResult(prev => {
+                            if (!prev) return prev;
+                            const vocab = [...prev.vocabulary_table];
+                            vocab[i] = { ...vocab[i], ...patch };
+                            return { ...prev, vocabulary_table: vocab };
+                          });
+                          return (
                           <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
                             <td className="px-2 py-2 border-b border-slate-100">
-                              <span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-sm ml-1">({row.meaning})</span>
+                              {editMode ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
+                                  <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
+                                </div>
+                              ) : (
+                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-sm ml-1">({row.meaning})</span></>
+                              )}
                             </td>
                             {([['syn1', 'syn1_m'], ['syn2', 'syn2_m'], ['syn3', 'syn3_m']] as const).map(([wk, mk], j) => (
                               <td key={j} className="px-2 py-2 border-b border-slate-100">
-                                <span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-sm ml-1">({row[mk]})</span>
+                                {editMode ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
+                                    <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
+                                  </div>
+                                ) : (
+                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-sm ml-1">({row[mk]})</span></>
+                                )}
                               </td>
                             ))}
                             <td className="px-2 py-2 border-b border-slate-100">
-                              <span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-sm ml-1">({row.antonym_m})</span>
+                              {editMode ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
+                                  <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
+                                </div>
+                              ) : (
+                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-sm ml-1">({row.antonym_m})</span></>
+                              )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </SectionCard>
                 </div>
               </div>
             </>
-          )}
+            );
+          })()}
 
           {/* 다운로드 버튼 + 저장 상태 */}
           {result && (
@@ -631,7 +761,30 @@ export default function MockExamWorkbookPage() {
               {saveStatus === 'error' && (
                 <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-rose-600 max-w-xs">⚠️ 이력 저장 실패: {saveErrorMsg}</div>
               )}
-              <div className="flex gap-3">
+              {editMode && editSaveStatus !== 'idle' && (
+                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-lg border
+                  ${editSaveStatus === 'saving' ? 'bg-white border-slate-200 text-slate-500' : editSaveStatus === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
+                  {editSaveStatus === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : editSaveStatus === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
+                </div>
+              )}
+              <div className="flex gap-3 flex-wrap justify-end">
+                <button
+                  onClick={() => {
+                    if (!editMode) {
+                      if (!editedResult) setEditedResult(JSON.parse(JSON.stringify(result)));
+                      setEditSaveStatus('idle');
+                    }
+                    setEditMode(prev => !prev);
+                  }}
+                  className={`px-5 py-3 rounded-2xl font-black text-sm shadow-lg transition-all active:scale-95 ${editMode ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
+                  {editMode ? '✏️ 편집 종료' : '✏️ 편집'}
+                </button>
+                {editMode && (
+                  <button onClick={handleEditSave} disabled={editSaveStatus === 'saving'}
+                    className="px-5 py-3 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                    {editSaveStatus === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
+                  </button>
+                )}
                 <button onClick={handleDownloadProblem} disabled={!!pdfLoading}
                   className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
                   {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 PDF'}
