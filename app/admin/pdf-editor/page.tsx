@@ -994,7 +994,7 @@ export default function PdfEditorPage() {
                 <SectionCard number="06" title="관련 어휘 10개"
                   color="bg-slate-700" theme={printTheme} onCopy={() => copy(d.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
                   <div>
-                    <table id="vocab-table" className="w-full text-base border-collapse table-fixed">
+                    <table id="vocab-table" className="w-full text-lg border-collapse table-fixed">
                       <colgroup>
                         <col style={{width:'22%'}} />
                         <col style={{width:'19%'}} />
@@ -1026,7 +1026,7 @@ export default function PdfEditorPage() {
                                   <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
                                 </div>
                               ) : (
-                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-sm ml-1">({row.meaning})</span></>
+                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-base ml-1">({row.meaning})</span></>
                               )}
                             </td>
                             {([['syn1','syn1_m'], ['syn2','syn2_m'], ['syn3','syn3_m']] as const).map(([wk, mk], j) => (
@@ -1037,7 +1037,7 @@ export default function PdfEditorPage() {
                                     <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
                                   </div>
                                 ) : (
-                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-sm ml-1">({row[mk]})</span></>
+                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-base ml-1">({row[mk]})</span></>
                                 )}
                               </td>
                             ))}
@@ -1048,7 +1048,7 @@ export default function PdfEditorPage() {
                                   <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
                                 </div>
                               ) : (
-                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-sm ml-1">({row.antonym_m})</span></>
+                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-base ml-1">({row.antonym_m})</span></>
                               )}
                             </td>
                           </tr>
