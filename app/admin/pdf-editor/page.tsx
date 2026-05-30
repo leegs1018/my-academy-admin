@@ -828,7 +828,7 @@ export default function PdfEditorPage() {
                             })}
                           />
                         ) : (
-                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-xl">{q.statement}</p>
+                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-2xl">{q.statement}</p>
                         )}
                       </div>
                     ))}
