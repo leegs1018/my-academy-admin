@@ -889,7 +889,7 @@ export default function MockExamQuestionsPage() {
                   {loadingNumbers.has(num) ? (
                     <p className="text-sm text-gray-400 animate-pulse">지문 불러오는 중...</p>
                   ) : passageMap[num] ? (
-                    <p className="text-sm text-slate-700 font-medium leading-relaxed" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{passageMap[num]}</p>
+                    <p className="text-sm text-slate-700 font-medium leading-relaxed select-none" style={{ textAlign: 'justify', wordBreak: 'break-word' }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>{passageMap[num]}</p>
                   ) : (
                     <p className="text-sm text-gray-400">지문 없음</p>
                   )}
@@ -910,7 +910,17 @@ export default function MockExamQuestionsPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-black text-gray-800">STEP 3 — 문제 유형 설정</h2>
-            <button onClick={addCustomConfig} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all">+ 유형 추가</button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const allEnabled = typeConfigs.every(c => c.enabled);
+                  setTypeConfigs(prev => prev.map(c => ({ ...c, enabled: !allEnabled })));
+                }}
+                className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-black rounded-xl hover:bg-gray-200 transition-all">
+                {typeConfigs.every(c => c.enabled) ? '전체 해제' : '전체 선택'}
+              </button>
+              <button onClick={addCustomConfig} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all">+ 유형 추가</button>
+            </div>
           </div>
           <div className="flex items-center justify-end gap-2 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
             <span className="text-xs font-black text-gray-500 flex-shrink-0 mr-1">일괄 설정</span>

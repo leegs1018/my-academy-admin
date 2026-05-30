@@ -459,7 +459,8 @@ export default function MockExamWorkbookPage() {
               </div>
               {passageLoading && <p className="text-sm text-indigo-400 font-bold animate-pulse">지문 불러오는 중...</p>}
               {passageText && !passageLoading && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 font-medium leading-relaxed" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 font-medium leading-relaxed select-none" style={{ textAlign: 'justify', wordBreak: 'break-word' }}
+                  onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
                   {passageText}
                 </div>
               )}
