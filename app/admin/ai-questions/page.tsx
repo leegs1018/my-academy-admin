@@ -715,7 +715,7 @@ export default function AiQuestionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [passageModal, setPassageModal] = useState<ExamHistoryItem | null>(null);
+  const [passageModal, setPassageModal] = useState<{ title: string; text: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -865,7 +865,8 @@ export default function AiQuestionsPage() {
   }, [pdfLayout, typeConfigs]);
 
   // ── 자동 저장 ──
-  const autoSaveExam = useCallback(async (qs: ExamQuestion[], text: string, types: string[], titleSnapshot: string, originalPassage: string, difficultyLevel: string) => {
+  const autoSaveExam = useCallback(async (qs: ExamQuestion[], text: string, types: string[], titleSnapshot: string, allPassages: string[], difficultyLevel: string) => {
+    const originalPassage = allPassages[0] ?? text;
     setSaveStatus('saving');
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -916,8 +917,8 @@ export default function AiQuestionsPage() {
           questionPdfPath: qUrl.path,
           answerPdfPath: aUrl?.path ?? null,
           title: titleSnapshot.trim() || null,
-          passageExcerpt: text.slice(0, 150),
-          passageFull: text,
+          passageExcerpt: (allPassages[0] ?? text).slice(0, 150),
+          passageFull: allPassages.length > 1 ? JSON.stringify(allPassages) : (allPassages[0] ?? text),
           questionTypes: types,
           difficulty: difficultyLevel,
         }),
@@ -1102,8 +1103,7 @@ export default function AiQuestionsPage() {
       const typesArr = validConfigs.map(c => c.type);
       const diffLabel = validConfigs.map(c => c.difficulty).join(',');
       const titleSnapshot = pdfTitle;
-      const passageSnapshot = allPassageTexts[0];
-      setTimeout(() => autoSaveExam(allQuestions, passageSnapshot, typesArr, titleSnapshot, passageSnapshot, diffLabel), 800);
+      setTimeout(() => autoSaveExam(allQuestions, allPassageTexts[0], typesArr, titleSnapshot, allPassageTexts, diffLabel), 800);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
@@ -2035,14 +2035,23 @@ export default function AiQuestionsPage() {
                             );
                           })}
                         </div>
-                        {/* 지문 요약 */}
-                        <p className="text-xs text-gray-500 line-clamp-2 mb-3">
-                          {item.passage_excerpt}
-                          <button onClick={() => setPassageModal(item)}
-                            className="ml-1 text-indigo-500 hover:text-indigo-700 font-bold">
-                            [전체 보기]
-                          </button>
-                        </p>
+                        {/* 지문 요약 — 다중 지문 지원 */}
+                        <div className="space-y-1 mb-3">
+                          {(() => {
+                            let passages: string[];
+                            try { const p = JSON.parse(item.passage_full); passages = Array.isArray(p) ? p : [item.passage_full]; } catch { passages = [item.passage_full]; }
+                            return passages.map((p, pi) => (
+                              <p key={pi} className="text-xs text-gray-500 line-clamp-2">
+                                {passages.length > 1 && <span className="font-black text-indigo-400 mr-1">{String.fromCharCode(65 + pi)}.</span>}
+                                {p.slice(0, 80)}...
+                                <button onClick={() => setPassageModal({ title: passages.length > 1 ? `지문 ${String.fromCharCode(65 + pi)}` : '원문 지문', text: p })}
+                                  className="ml-1 text-indigo-500 hover:text-indigo-700 font-bold whitespace-nowrap">
+                                  [전체 보기]
+                                </button>
+                              </p>
+                            ));
+                          })()}
+                        </div>
                         {/* 다운로드 버튼 */}
                         <div className="flex gap-2">
                           {item.question_pdf_path && (
@@ -2073,11 +2082,11 @@ export default function AiQuestionsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPassageModal(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h3 className="text-base font-black text-gray-900">원문 지문</h3>
+              <h3 className="text-base font-black text-gray-900">{passageModal.title}</h3>
               <button onClick={() => setPassageModal(null)} className="text-gray-400 hover:text-gray-600 font-black text-xl">✕</button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{passageModal.passage_full}</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{passageModal.text}</p>
             </div>
           </div>
         </div>
