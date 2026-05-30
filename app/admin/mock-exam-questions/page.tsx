@@ -465,6 +465,7 @@ export default function MockExamQuestionsPage() {
   const [session, setSession] = useState<{ user: { id: string }; access_token: string } | null>(null);
   const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
   const [pdfTitle, setPdfTitle] = useState('');
+  const [pdfLayout, setPdfLayout] = useState<'passage' | 'type' | 'random'>('passage');
   const [pdfLoading, setPdfLoading] = useState<false | '문제' | '답안'>(false);
 
   useEffect(() => {
@@ -580,11 +581,32 @@ export default function MockExamQuestionsPage() {
     setGenerating(false);
   }, [allPassagesReady, sortedSelectedNumbers, passageMap, validConfigs, session]);
 
+  const sortQuestionsForPdf = useCallback((qs: ExamQuestion[]): ExamQuestion[] => {
+    if (pdfLayout === 'passage') return [...qs];
+    if (pdfLayout === 'type') {
+      const typeOrder = typeConfigs.filter(c => c.enabled && c.type).map(c => c.type);
+      return [...qs].sort((a, b) => {
+        const ai = typeOrder.indexOf(a.type);
+        const bi = typeOrder.indexOf(b.type);
+        const safeA = ai === -1 ? 999 : ai;
+        const safeB = bi === -1 ? 999 : bi;
+        if (safeA !== safeB) return safeA - safeB;
+        return (a._passageNumber ?? 0) - (b._passageNumber ?? 0);
+      });
+    }
+    const arr = [...qs];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [pdfLayout, typeConfigs]);
+
   const handleDownloadQuestion = async () => {
     if (!questions.length) return;
     setPdfLoading('문제');
     try {
-      const blob = await generateQuestionPdfBlob(questions, pdfTitle.trim());
+      const blob = await generateQuestionPdfBlob(sortQuestionsForPdf(questions), pdfTitle.trim());
       if (blob) triggerDownload(blob, `${pdfTitle.trim() || '모의고사변형문제'}_문제.pdf`);
     } finally { setPdfLoading(false); }
   };
@@ -593,7 +615,7 @@ export default function MockExamQuestionsPage() {
     if (!questions.length) return;
     setPdfLoading('답안');
     try {
-      const blob = await buildAnswerPdfBlob(questions, pdfTitle.trim());
+      const blob = await buildAnswerPdfBlob(sortQuestionsForPdf(questions), pdfTitle.trim());
       triggerDownload(blob, `${pdfTitle.trim() || '모의고사변형문제'}_답안해설.pdf`);
     } finally { setPdfLoading(false); }
   };
@@ -737,6 +759,26 @@ export default function MockExamQuestionsPage() {
             <label className="block text-xs font-black text-gray-400 mb-1.5">PDF 제목 (선택)</label>
             <input type="text" value={pdfTitle} onChange={e => setPdfTitle(e.target.value)} placeholder="예: 2024 수능 18번 변형"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+          <div className="mb-4">
+            <label className="block text-xs font-black text-gray-400 mb-1.5">PDF 문제 배치</label>
+            <div className="flex gap-2">
+              {([
+                { key: 'passage', label: '지문별', desc: 'A지문 → B지문 순서' },
+                { key: 'type',    label: '유형별', desc: '어법 → 어휘 → 빈칸 순서' },
+                { key: 'random',  label: '무작위', desc: '지문·유형 모두 섞기' },
+              ] as const).map(({ key, label, desc }) => (
+                <button key={key} type="button" onClick={() => setPdfLayout(key)}
+                  className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-xs font-black transition-all text-center ${
+                    pdfLayout === key
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}>
+                  <div>{label}</div>
+                  <div className={`text-[10px] mt-0.5 font-medium ${pdfLayout === key ? 'text-indigo-200' : 'text-gray-400'}`}>{desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
           <button onClick={handleGenerate} disabled={generating || !allPassagesReady || validConfigs.length === 0}
             className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
