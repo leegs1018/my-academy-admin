@@ -22,6 +22,12 @@ interface TypeConfig {
   id: string; type: string; difficulty: 'b1' | 'b2' | 'c1' | 'c2';
   count: number; enabled: boolean; isCustom: boolean;
 }
+interface MockExamHistoryItem {
+  id: string; created_at: string;
+  year: number; grade: string; institution: string;
+  question_numbers: number[]; question_types: string[];
+  difficulty: string; question_pdf_path: string; answer_pdf_path?: string;
+}
 
 const DIFF_OPTIONS = [
   { key: 'b1' as const, label: '하',   sub: 'B1', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
@@ -458,6 +464,7 @@ export default function MockExamQuestionsPage() {
   const [bulkDifficulty, setBulkDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2' | ''>('');
   const [bulkCount, setBulkCount] = useState<number | ''>(1);
 
+  const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
@@ -466,7 +473,15 @@ export default function MockExamQuestionsPage() {
   const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
   const [pdfTitle, setPdfTitle] = useState('');
   const [pdfLayout, setPdfLayout] = useState<'passage' | 'type' | 'random'>('passage');
+  const [pdfSortedQuestions, setPdfSortedQuestions] = useState<ExamQuestion[]>([]);
   const [pdfLoading, setPdfLoading] = useState<false | '문제' | '답안'>(false);
+  const [aiPrice, setAiPrice] = useState<number>(20);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+  const [historyList, setHistoryList] = useState<MockExamHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => { if (s) setSession(s as typeof session); });
@@ -477,6 +492,15 @@ export default function MockExamQuestionsPage() {
     fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
       .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
   }, [session]);
+
+  useEffect(() => {
+    fetch('/api/credits/pricing').then(r => r.ok ? r.json() : null).then(data => {
+      const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question_per_type');
+      if (item) setAiPrice(item.cost_per_use);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => { setPdfSortedQuestions([]); }, [questions, pdfLayout]);
 
   // 캐스케이드 셀렉트
   useEffect(() => {
@@ -579,7 +603,84 @@ export default function MockExamQuestionsPage() {
     fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
       .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
     setGenerating(false);
+    // 자동 저장 (백그라운드)
+    setTimeout(() => autoSaveHistory(allQuestions, session), 1000);
   }, [allPassagesReady, sortedSelectedNumbers, passageMap, validConfigs, session]);
+
+  const autoSaveHistory = async (qs: ExamQuestion[], sess: typeof session) => {
+    if (!sess || qs.length === 0 || !selectedYear || !selectedGrade || !selectedInstitution) return;
+    setAutoSaveStatus('saving');
+    try {
+      const urlRes = await fetch('/api/storage/get-upload-urls', { method: 'POST', headers: { Authorization: `Bearer ${sess.access_token}` } });
+      if (!urlRes.ok) throw new Error('URL 생성 실패');
+      const { question: qUrl, answer: aUrl } = await urlRes.json() as {
+        question: { path: string; signedUrl: string };
+        answer: { path: string; signedUrl: string } | null;
+      };
+      const [qBlob, aBlob] = await Promise.all([
+        generateQuestionPdfBlob(qs, pdfTitle.trim()),
+        buildAnswerPdfBlob(qs, pdfTitle.trim()),
+      ]);
+      if (!qBlob || !aBlob) throw new Error('PDF 생성 실패');
+      await fetch(qUrl.signedUrl, { method: 'PUT', body: qBlob, headers: { 'Content-Type': 'application/pdf' } });
+      if (aUrl) await fetch(aUrl.signedUrl, { method: 'PUT', body: aBlob, headers: { 'Content-Type': 'application/pdf' } });
+      const difficultyLabel = [...new Set(validConfigs.map(c => c.difficulty))].join(',');
+      const res = await fetch('/api/save-mock-exam-question-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.access_token}` },
+        body: JSON.stringify({
+          questionPdfPath: qUrl.path,
+          answerPdfPath: aUrl?.path ?? null,
+          year: parseInt(selectedYear),
+          grade: selectedGrade,
+          institution: selectedInstitution,
+          questionNumbers: sortedSelectedNumbers.map(n => parseInt(n)),
+          questionTypes: [...new Set(qs.map(q => q.type))],
+          difficulty: difficultyLabel,
+        }),
+      });
+      setAutoSaveStatus(res.ok ? 'done' : 'error');
+    } catch { setAutoSaveStatus('error'); }
+  };
+
+  const fetchHistory = useCallback(async () => {
+    if (!session) return;
+    setHistoryLoading(true); setHistoryError(null);
+    try {
+      await fetch('/api/cleanup-old-history', { method: 'POST' });
+      const { data, error: fetchErr } = await supabase
+        .from('mock_exam_question_history').select('*').eq('academy_id', session.user.id)
+        .order('created_at', { ascending: false });
+      if (fetchErr) { setHistoryError(`조회 오류: ${fetchErr.message}`); return; }
+      setHistoryList(data ?? []);
+    } catch (e) { setHistoryError(e instanceof Error ? e.message : '오류'); }
+    finally { setHistoryLoading(false); }
+  }, [session]);
+
+  useEffect(() => { if (activeTab === 'history' && session) fetchHistory(); }, [activeTab, session]);
+
+  const downloadFromHistory = async (path: string, filename: string) => {
+    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(path, 60);
+    if (!data?.signedUrl) { alert('다운로드 URL을 가져올 수 없습니다.'); return; }
+    const a = document.createElement('a'); a.href = data.signedUrl; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  const deleteHistorySelected = async () => {
+    if (!session || selectedHistoryIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      await fetch('/api/delete-mock-exam-question-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ ids: [...selectedHistoryIds] }),
+      });
+      setSelectedHistoryIds(new Set()); fetchHistory();
+    } finally { setBulkDeleting(false); }
+  };
+
+  const TYPE_LABEL_MAP_LOCAL: Record<string, string> = {};
+  QUESTION_TYPE_OPTIONS.forEach(o => { TYPE_LABEL_MAP_LOCAL[o.key] = o.label; });
 
   const sortQuestionsForPdf = useCallback((qs: ExamQuestion[]): ExamQuestion[] => {
     if (pdfLayout === 'passage') return [...qs];
@@ -606,7 +707,9 @@ export default function MockExamQuestionsPage() {
     if (!questions.length) return;
     setPdfLoading('문제');
     try {
-      const blob = await generateQuestionPdfBlob(sortQuestionsForPdf(questions), pdfTitle.trim());
+      const sorted = sortQuestionsForPdf(questions);
+      setPdfSortedQuestions(sorted);
+      const blob = await generateQuestionPdfBlob(sorted, pdfTitle.trim());
       if (blob) triggerDownload(blob, `${pdfTitle.trim() || '모의고사변형문제'}_문제.pdf`);
     } finally { setPdfLoading(false); }
   };
@@ -615,10 +718,14 @@ export default function MockExamQuestionsPage() {
     if (!questions.length) return;
     setPdfLoading('답안');
     try {
-      const blob = await buildAnswerPdfBlob(sortQuestionsForPdf(questions), pdfTitle.trim());
+      const sorted = pdfSortedQuestions.length ? pdfSortedQuestions : sortQuestionsForPdf(questions);
+      const blob = await buildAnswerPdfBlob(sorted, pdfTitle.trim());
       triggerDownload(blob, `${pdfTitle.trim() || '모의고사변형문제'}_답안해설.pdf`);
     } finally { setPdfLoading(false); }
   };
+
+  const totalQuestions = sortedSelectedNumbers.length * validConfigs.reduce((s, c) => s + c.count, 0);
+  const totalCon = totalQuestions * aiPrice;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -635,7 +742,86 @@ export default function MockExamQuestionsPage() {
         )}
       </div>
 
-      <div className="space-y-6">
+      {/* 탭 */}
+      <div className="flex gap-2 mb-6 border-b-2 border-gray-100">
+        {(['generate', 'history'] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`px-6 py-3 font-black text-base rounded-t-xl transition-all ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
+            {tab === 'generate' ? '✏️ 문제 생성' : '📋 생성 이력'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'history' && (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
+            생성 이력은 생성일로부터 3일 후 자동 삭제됩니다.
+          </div>
+          {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
+          {selectedHistoryIds.size > 0 && (
+            <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
+              <span className="font-black text-indigo-700 text-sm">{selectedHistoryIds.size}개 선택됨</span>
+              <div className="flex gap-2 ml-auto">
+                <button onClick={deleteHistorySelected} disabled={bulkDeleting}
+                  className="px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 disabled:opacity-50 transition-all">
+                  {bulkDeleting ? '삭제 중...' : '삭제'}
+                </button>
+                <button onClick={() => setSelectedHistoryIds(new Set())} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
+              </div>
+            </div>
+          )}
+          {historyLoading ? (
+            <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
+          ) : historyList.length === 0 ? (
+            <div className="bg-white rounded-[2rem] p-16 text-center shadow-lg border border-slate-100">
+              <p className="text-5xl mb-4">📭</p>
+              <p className="font-black text-slate-500 text-lg">생성된 이력이 없습니다</p>
+              <p className="text-slate-400 font-bold text-sm mt-2">문제를 생성하면 자동으로 이곳에 기록돼요</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
+              <div className="grid grid-cols-[40px_150px_60px_80px_1fr_1fr_80px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
+                <input type="checkbox" checked={selectedHistoryIds.size === historyList.length && historyList.length > 0}
+                  onChange={() => setSelectedHistoryIds(selectedHistoryIds.size === historyList.length ? new Set() : new Set(historyList.map(i => i.id)))}
+                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
+                {['날짜', '년도', '학년', '시험명/기관', '문제번호 · 유형', 'PDF'].map((h, i) => <span key={i}>{h}</span>)}
+              </div>
+              {historyList.map((item, i) => (
+                <div key={item.id}
+                  className={`grid grid-cols-[40px_150px_60px_80px_1fr_1fr_80px] gap-3 px-5 py-4 items-center border-b border-slate-100 last:border-0 transition-colors
+                    ${selectedHistoryIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                  <input type="checkbox" checked={selectedHistoryIds.has(item.id)}
+                    onChange={() => setSelectedHistoryIds(prev => { const n = new Set(prev); if (n.has(item.id)) n.delete(item.id); else n.add(item.id); return n; })}
+                    className="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
+                  <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
+                    {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="text-sm font-bold text-slate-700">{item.year}년</span>
+                  <span className="text-sm font-bold text-slate-700">{item.grade}</span>
+                  <span className="text-xs text-slate-600 font-medium">{item.institution}<br />{(item.question_numbers ?? []).join('·')}번</span>
+                  <div className="flex flex-wrap gap-1">
+                    {(item.question_types ?? []).map(t => (
+                      <span key={t} className="text-[10px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100">{TYPE_LABEL_MAP_LOCAL[t] ?? t}</span>
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {item.question_pdf_path && (
+                      <button onClick={() => downloadFromHistory(item.question_pdf_path, `${item.year}_${item.institution}_문제.pdf`)}
+                        className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">문제</button>
+                    )}
+                    {item.answer_pdf_path && (
+                      <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.year}_${item.institution}_해설.pdf`)}
+                        className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">해설</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'generate' && <div className="space-y-6">
         {/* STEP 1 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
@@ -713,10 +899,17 @@ export default function MockExamQuestionsPage() {
           )}
         </div>
 
-        {/* STEP 2 */}
+        {/* STEP 2 — 문제 제목 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-base font-black text-gray-800 mb-4">STEP 2 — 문제 제목</h2>
+          <input type="text" value={pdfTitle} onChange={e => setPdfTitle(e.target.value)} placeholder="예: 2024 수능 18번 변형"
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        </div>
+
+        {/* STEP 3 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-black text-gray-800">STEP 2 — 문제 유형 설정</h2>
+            <h2 className="text-base font-black text-gray-800">STEP 3 — 문제 유형 설정</h2>
             <button onClick={addCustomConfig} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all">+ 유형 추가</button>
           </div>
           <div className="flex items-center justify-end gap-2 mb-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200">
@@ -749,44 +942,40 @@ export default function MockExamQuestionsPage() {
           </DndContext>
         </div>
 
-        {/* STEP 3 */}
+        {/* STEP 4 — PDF 문제 배치 */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-black text-gray-800">STEP 3 — 문제 생성</h2>
-            <div className="text-sm font-bold text-gray-400">선택된 유형: {validConfigs.length}가지 / 총 {validConfigs.reduce((s, c) => s + c.count, 0)}문제</div>
+          <h2 className="text-base font-black text-gray-800 mb-4">STEP 4 — PDF 문제 배치</h2>
+          <div className="flex gap-2">
+            {([
+              { key: 'passage', label: '지문별', desc: 'A지문 → B지문 순서' },
+              { key: 'type',    label: '유형별', desc: '어법 → 어휘 → 빈칸 순서' },
+              { key: 'random',  label: '무작위', desc: '지문·유형 모두 섞기' },
+            ] as const).map(({ key, label, desc }) => (
+              <button key={key} type="button" onClick={() => setPdfLayout(key)}
+                className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-xs font-black transition-all text-center ${
+                  pdfLayout === key ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                }`}>
+                <div>{label}</div>
+                <div className={`text-[10px] mt-0.5 font-medium ${pdfLayout === key ? 'text-indigo-200' : 'text-gray-400'}`}>{desc}</div>
+              </button>
+            ))}
           </div>
-          <div className="mb-4">
-            <label className="block text-xs font-black text-gray-400 mb-1.5">PDF 제목 (선택)</label>
-            <input type="text" value={pdfTitle} onChange={e => setPdfTitle(e.target.value)} placeholder="예: 2024 수능 18번 변형"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-          </div>
-          <div className="mb-4">
-            <label className="block text-xs font-black text-gray-400 mb-1.5">PDF 문제 배치</label>
-            <div className="flex gap-2">
-              {([
-                { key: 'passage', label: '지문별', desc: 'A지문 → B지문 순서' },
-                { key: 'type',    label: '유형별', desc: '어법 → 어휘 → 빈칸 순서' },
-                { key: 'random',  label: '무작위', desc: '지문·유형 모두 섞기' },
-              ] as const).map(({ key, label, desc }) => (
-                <button key={key} type="button" onClick={() => setPdfLayout(key)}
-                  className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-xs font-black transition-all text-center ${
-                    pdfLayout === key
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
-                  }`}>
-                  <div>{label}</div>
-                  <div className={`text-[10px] mt-0.5 font-medium ${pdfLayout === key ? 'text-indigo-200' : 'text-gray-400'}`}>{desc}</div>
-                </button>
-              ))}
-            </div>
+        </div>
+
+        {/* CON 안내 + 생성 버튼 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 font-bold text-center space-y-1">
+            <p>문제당 {aiPrice}콘 차감</p>
+            <p>총 {sortedSelectedNumbers.length || 0}지문 × 총 {validConfigs.reduce((s, c) => s + c.count, 0)}유형 = {totalQuestions}문제 생성 시 <span className="font-black text-amber-900">{totalCon.toLocaleString()} CON</span> 차감 예정</p>
+            <p className="text-xs text-amber-600 font-medium">생성되는 유형이 많을수록 시간이 더 소요됩니다.</p>
           </div>
           <button onClick={handleGenerate} disabled={generating || !allPassagesReady || validConfigs.length === 0}
             className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-            {generating ? '⏳ 생성 중...' : `🎯 문제 생성${sortedSelectedNumbers.length > 1 ? ` (${sortedSelectedNumbers.length}개 지문)` : ''}`}
+            {generating ? '⏳ 생성 중...' : 'AI 문제 생성하기'}
           </button>
           {!allPassagesReady && loadingNumbers.size === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 1에서 지문 번호를 선택하세요</p>}
           {loadingNumbers.size > 0 && <p className="text-xs font-bold text-indigo-400 mt-2 text-center animate-pulse">지문 불러오는 중...</p>}
-          {allPassagesReady && validConfigs.length === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 2에서 문제 유형을 선택하세요</p>}
+          {allPassagesReady && validConfigs.length === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 3에서 문제 유형을 선택하세요</p>}
           {progress && (
             <p className={`text-sm font-bold mt-3 text-center ${generating ? 'text-indigo-500 animate-pulse' : 'text-gray-500'}`}>{progress}</p>
           )}
@@ -983,19 +1172,29 @@ export default function MockExamQuestionsPage() {
             })}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* 다운로드 버튼 */}
-      {questions.length > 0 && (
-        <div className="fixed bottom-8 right-8 flex flex-row items-end gap-3 z-50">
-          <button onClick={handleDownloadQuestion} disabled={!!pdfLoading}
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-2xl shadow-lg disabled:opacity-50 transition-all">
-            {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 다운로드'}
-          </button>
-          <button onClick={handleDownloadAnswer} disabled={!!pdfLoading}
-            className="px-5 py-3 bg-slate-700 hover:bg-slate-800 text-white font-black text-sm rounded-2xl shadow-lg disabled:opacity-50 transition-all">
-            {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안해설 다운로드'}
-          </button>
+      {activeTab === 'generate' && questions.length > 0 && (
+        <div className="fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
+          {autoSaveStatus === 'saving' && (
+            <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
+              <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />이력 자동 저장 중...
+            </div>
+          )}
+          {autoSaveStatus === 'done' && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-emerald-600">✅ 이력에 저장됨</div>
+          )}
+          <div className="flex flex-row items-end gap-3">
+            <button onClick={handleDownloadQuestion} disabled={!!pdfLoading}
+              className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm rounded-2xl shadow-lg disabled:opacity-50 transition-all">
+              {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 다운로드'}
+            </button>
+            <button onClick={handleDownloadAnswer} disabled={!!pdfLoading}
+              className="px-5 py-3 bg-slate-700 hover:bg-slate-800 text-white font-black text-sm rounded-2xl shadow-lg disabled:opacity-50 transition-all">
+              {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안해설 다운로드'}
+            </button>
+          </div>
         </div>
       )}
     </div>

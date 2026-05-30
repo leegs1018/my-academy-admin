@@ -24,6 +24,8 @@ interface ExamQuestion {
   choices: ExamChoice[];
   answer: number;
   explanation: string;
+  _passageText?: string;
+  _passageNumber?: number;
 }
 
 interface ExamHistoryItem {
@@ -663,6 +665,12 @@ export default function AiQuestionsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [pdfTitle, setPdfTitle] = useState('');
 
+  // 다중 지문 (지문 1은 기존 manualText/ocrText, 추가 지문은 extraPassages)
+  interface ExtraPassage { text: string; mode: 'text' | 'image'; ocrText: string; ocrDone: boolean; ocrLoading: boolean; imageFile: File | null; imagePreview: string | null; }
+  const [extraPassages, setExtraPassages] = useState<ExtraPassage[]>([]);
+  const [pdfLayout, setPdfLayout] = useState<'passage' | 'type' | 'random'>('passage');
+  const [pdfSortedQuestions, setPdfSortedQuestions] = useState<ExamQuestion[]>([]);
+
   const [typeConfigs, setTypeConfigs] = useState<TypeConfig[]>(() =>
     QUESTION_TYPE_OPTIONS.map(o => ({
       id: crypto.randomUUID(),
@@ -732,6 +740,7 @@ export default function AiQuestionsPage() {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
+      await fetch('/api/cleanup-old-history', { method: 'POST' });
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setHistoryError('로그인 정보를 확인할 수 없습니다.'); return; }
 
@@ -835,6 +844,25 @@ export default function AiQuestionsPage() {
     }
   };
   const validConfigs = typeConfigs.filter(c => c.enabled && c.type !== '');
+
+  // pdfSortedQuestions 초기화 (questions 또는 pdfLayout 변경 시)
+  useEffect(() => { setPdfSortedQuestions([]); }, [questions, pdfLayout]);
+
+  const sortQuestionsForPdf = useCallback((qs: ExamQuestion[]): ExamQuestion[] => {
+    if (pdfLayout === 'passage') return [...qs];
+    if (pdfLayout === 'type') {
+      const typeOrder = typeConfigs.filter(c => c.enabled && c.type).map(c => c.type);
+      return [...qs].sort((a, b) => {
+        const ai = typeOrder.indexOf(a.type); const bi = typeOrder.indexOf(b.type);
+        const safeA = ai === -1 ? 999 : ai; const safeB = bi === -1 ? 999 : bi;
+        if (safeA !== safeB) return safeA - safeB;
+        return (a._passageNumber ?? 0) - (b._passageNumber ?? 0);
+      });
+    }
+    const arr = [...qs];
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  }, [pdfLayout, typeConfigs]);
 
   // ── 자동 저장 ──
   const autoSaveExam = useCallback(async (qs: ExamQuestion[], text: string, types: string[], titleSnapshot: string, originalPassage: string, difficultyLevel: string) => {
@@ -1026,50 +1054,56 @@ export default function AiQuestionsPage() {
 
   // ── 문제 생성 ──
   const handleGenerate = async () => {
-    if (validConfigs.length === 0 || textToSend.trim().length < 50) return;
+    // 모든 지문 수집
+    const allPassageTexts = [
+      textToSend.trim(),
+      ...extraPassages.map(p => (p.mode === 'text' ? p.text : p.ocrText).trim()),
+    ].filter(t => t.length >= 50);
+
+    if (validConfigs.length === 0 || allPassageTexts.length === 0) return;
     setLoading(true);
     setError(null);
     setQuestions(null);
     setRevealedAnswers(new Set());
     setSaveStatus('idle');
 
-    const msgs = [
-      'AI가 지문을 분석하고 있어요... 🤖',
-      '수능 스타일 문제를 생성하고 있어요... ✍️',
-      '선지와 해설을 작성하고 있어요... 📝',
-      '거의 완성됐어요! 잠시만요... ✨',
-    ];
-    let idx = 0;
+    const msgs = ['AI가 지문을 분석하고 있어요... 🤖', '수능 스타일 문제를 생성하고 있어요... ✍️', '선지와 해설을 작성하고 있어요... 📝', '거의 완성됐어요! 잠시만요... ✨'];
+    let msgIdx = 0;
     setLoadingMsg(msgs[0]);
-    msgIntervalRef.current = setInterval(() => {
-      idx = (idx + 1) % msgs.length;
-      setLoadingMsg(msgs[idx]);
-    }, 8000);
+    msgIntervalRef.current = setInterval(() => { msgIdx = (msgIdx + 1) % msgs.length; setLoadingMsg(msgs[msgIdx]); }, 8000);
 
     try {
-      const res = await fetch('/api/generate-exam-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: textToSend.trim(),
-          typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })),
-          academy_id: userId || undefined,
-        }),
-      });
-      const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
-      if (json.error === 'INSUFFICIENT_CON') {
-        setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 });
-        return;
+      const allQuestions: ExamQuestion[] = [];
+      for (let pi = 0; pi < allPassageTexts.length; pi++) {
+        const passageText = allPassageTexts[pi];
+        if (allPassageTexts.length > 1) setLoadingMsg(`${pi + 1}번 지문 문제 생성 중...`);
+        const res = await fetch('/api/generate-exam-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: passageText,
+            typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })),
+            academy_id: userId || undefined,
+          }),
+        });
+        const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
+        if (json.error === 'INSUFFICIENT_CON') {
+          setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 });
+          return;
+        }
+        if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
+        const tagged = (json.questions ?? []).map(q => ({ ...q, _passageText: passageText, _passageNumber: pi + 1 }));
+        allQuestions.push(...tagged);
       }
-      if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
-      setOriginalPassageText(textToSend.trim());
-      setQuestions(json.questions ?? []);
+
+      setOriginalPassageText(allPassageTexts[0]);
+      setQuestions(allQuestions);
 
       const typesArr = validConfigs.map(c => c.type);
       const diffLabel = validConfigs.map(c => c.difficulty).join(',');
       const titleSnapshot = pdfTitle;
-      const passageSnapshot = textToSend.trim();
-      setTimeout(() => autoSaveExam(json.questions ?? [], passageSnapshot, typesArr, titleSnapshot, passageSnapshot, diffLabel), 800);
+      const passageSnapshot = allPassageTexts[0];
+      setTimeout(() => autoSaveExam(allQuestions, passageSnapshot, typesArr, titleSnapshot, passageSnapshot, diffLabel), 800);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
@@ -1083,7 +1117,9 @@ export default function AiQuestionsPage() {
     if (!questions) return;
     setPdfLoading('문제');
     try {
-      const blob = await generateQuestionPdfBlob(questions, pdfTitle.trim(), originalPassageText);
+      const sorted = sortQuestionsForPdf(questions);
+      setPdfSortedQuestions(sorted);
+      const blob = await generateQuestionPdfBlob(sorted, pdfTitle.trim(), originalPassageText);
       if (blob) triggerDownload(blob, `${pdfTitle.trim() || '수능형문제'}_문제.pdf`);
     } finally {
       setPdfLoading(false);
@@ -1094,7 +1130,8 @@ export default function AiQuestionsPage() {
     if (!questions) return;
     setPdfLoading('답안');
     try {
-      const blob = await buildAnswerPdfBlob(questions, pdfTitle.trim());
+      const sorted = pdfSortedQuestions.length ? pdfSortedQuestions : sortQuestionsForPdf(questions);
+      const blob = await buildAnswerPdfBlob(sorted, pdfTitle.trim());
       triggerDownload(blob, `${pdfTitle.trim() || '수능형문제'}_답안해설.pdf`);
     } finally {
       setPdfLoading(false);
@@ -1201,76 +1238,114 @@ export default function AiQuestionsPage() {
             />
           </div>
 
-          {/* 지문 입력 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-black text-gray-800">📄 지문 입력</h2>
-              <div className="flex gap-2">
-                {(['text', 'image'] as const).map(mode => (
-                  <button key={mode} onClick={() => setInputMode(mode)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all
-                      ${inputMode === mode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                    {mode === 'text' ? '📝 직접 입력' : '📷 사진 등록'}
-                  </button>
-                ))}
+          {/* 지문 입력 (다중 지문 지원) */}
+          <div className="space-y-3">
+            {/* 지문 1 — 기존 UI */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-black text-gray-800">📄 지문 1</h2>
+                <div className="flex gap-2">
+                  {(['text', 'image'] as const).map(mode => (
+                    <button key={mode} onClick={() => setInputMode(mode)}
+                      className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${inputMode === mode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      {mode === 'text' ? '📝 직접 입력' : '📷 사진 등록'}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-
-            {inputMode === 'text' ? (
-              <textarea
-                value={manualText}
-                onChange={e => setManualText(e.target.value)}
-                placeholder="영어 지문을 여기에 입력하세요..."
-                rows={8}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none leading-relaxed"
-              />
-            ) : (
-              <div className="space-y-4">
-                <div
-                  onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
-                    ${isDragging ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'}`}
-                >
-                  {imagePreview ? (
-                    <img src={imagePreview} alt="preview" className="max-h-48 mx-auto rounded-lg object-contain" />
-                  ) : (
-                    <div className="text-gray-400">
-                      <div className="text-4xl mb-2">📷</div>
-                      <p className="font-bold text-sm">클릭하거나 이미지를 드래그하세요</p>
-                      <p className="text-xs mt-1">JPG, PNG, GIF, WebP (최대 10MB)</p>
+              {inputMode === 'text' ? (
+                <textarea value={manualText} onChange={e => setManualText(e.target.value)}
+                  placeholder="영어 지문을 여기에 입력하세요..." rows={8}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none leading-relaxed" />
+              ) : (
+                <div className="space-y-4">
+                  <div onDragOver={e => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${isDragging ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'}`}>
+                    {imagePreview ? <img src={imagePreview} alt="preview" className="max-h-48 mx-auto rounded-lg object-contain" /> : (
+                      <div className="text-gray-400"><div className="text-4xl mb-2">📷</div><p className="font-bold text-sm">클릭하거나 이미지를 드래그하세요</p><p className="text-xs mt-1">JPG, PNG, GIF, WebP (최대 10MB)</p></div>
+                    )}
+                  </div>
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); }} />
+                  {imageFile && !ocrDone && (
+                    <button onClick={runOcr} disabled={ocrLoading} className="w-full py-3 rounded-xl font-black text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                      {ocrLoading ? '🔍 텍스트 추출 중...' : '🔍 텍스트 추출 (OCR)'}
+                    </button>
+                  )}
+                  {ocrDone && ocrText && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-black text-green-600">✅ 텍스트 추출 완료</p>
+                      <textarea value={ocrText} onChange={e => setOcrText(e.target.value)} rows={6}
+                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
                     </div>
                   )}
                 </div>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); }} />
+              )}
+              <p className="mt-2 text-xs text-gray-400">{textToSend.length > 0 ? `${textToSend.length}자 입력됨` : '지문을 입력하세요 (최소 50자)'}</p>
+            </div>
 
-                {imageFile && !ocrDone && (
-                  <button onClick={runOcr} disabled={ocrLoading}
-                    className="w-full py-3 rounded-xl font-black text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all">
-                    {ocrLoading ? '🔍 텍스트 추출 중...' : '🔍 텍스트 추출 (OCR)'}
-                  </button>
-                )}
-
-                {ocrDone && ocrText && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-black text-green-600">✅ 텍스트 추출 완료</p>
-                    <textarea
-                      value={ocrText}
-                      onChange={e => setOcrText(e.target.value)}
-                      rows={6}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-                    />
+            {/* 추가 지문 카드 */}
+            {extraPassages.map((ep, i) => (
+              <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-black text-gray-800">📄 지문 {i + 2}</h2>
+                  <div className="flex items-center gap-2">
+                    {(['text', 'image'] as const).map(mode => (
+                      <button key={mode} onClick={() => setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, mode } : p))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${ep.mode === mode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                        {mode === 'text' ? '📝 직접 입력' : '📷 사진 등록'}
+                      </button>
+                    ))}
+                    <button onClick={() => setExtraPassages(prev => prev.filter((_, j) => j !== i))}
+                      className="text-xs font-black text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">✕ 제거</button>
+                  </div>
+                </div>
+                {ep.mode === 'text' ? (
+                  <textarea value={ep.text} onChange={e => setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, text: e.target.value } : p))}
+                    placeholder="영어 지문을 여기에 입력하세요..." rows={6}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none leading-relaxed" />
+                ) : (
+                  <div className="space-y-3">
+                    <div onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = async (ev) => { const f = (ev.target as HTMLInputElement).files?.[0]; if (!f) return; const reader = new FileReader(); reader.onloadend = () => setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, imageFile: f, imagePreview: reader.result as string, ocrDone: false, ocrText: '' } : p)); reader.readAsDataURL(f); }; input.click(); }}
+                      className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer hover:border-indigo-300 hover:bg-gray-50 transition-all">
+                      {ep.imagePreview ? <img src={ep.imagePreview} alt="preview" className="max-h-40 mx-auto rounded-lg object-contain" /> : (
+                        <div className="text-gray-400"><div className="text-3xl mb-1">📷</div><p className="font-bold text-sm">클릭하여 이미지 등록</p></div>
+                      )}
+                    </div>
+                    {ep.imageFile && !ep.ocrDone && (
+                      <button disabled={ep.ocrLoading} onClick={async () => {
+                        if (!ep.imageFile) return;
+                        setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, ocrLoading: true } : p));
+                        try {
+                          const fd = new FormData(); fd.append('image', ep.imageFile);
+                          const r = await fetch('/api/ocr', { method: 'POST', body: fd });
+                          const json = await r.json() as { text?: string };
+                          setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, ocrText: json.text || '', ocrDone: true, ocrLoading: false } : p));
+                        } catch { setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, ocrLoading: false } : p)); }
+                      }} className="w-full py-3 rounded-xl font-black text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                        {ep.ocrLoading ? '🔍 텍스트 추출 중...' : '🔍 텍스트 추출 (OCR)'}
+                      </button>
+                    )}
+                    {ep.ocrDone && ep.ocrText && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-black text-green-600">✅ 텍스트 추출 완료</p>
+                        <textarea value={ep.ocrText} onChange={e => setExtraPassages(prev => prev.map((p, j) => j === i ? { ...p, ocrText: e.target.value } : p))} rows={5}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
+                      </div>
+                    )}
                   </div>
                 )}
+                <p className="mt-2 text-xs text-gray-400">{(ep.mode === 'text' ? ep.text : ep.ocrText).length}자 입력됨</p>
               </div>
-            )}
+            ))}
 
-            <p className="mt-2 text-xs text-gray-400">
-              {textToSend.length > 0 ? `${textToSend.length}자 입력됨` : '지문을 입력하세요 (최소 50자)'}
-            </p>
+            {/* 지문 추가 버튼 */}
+            {extraPassages.length < 4 && (
+              <button onClick={() => setExtraPassages(prev => [...prev, { text: '', mode: 'text', ocrText: '', ocrDone: false, ocrLoading: false, imageFile: null, imagePreview: null }])}
+                className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-2xl text-sm font-black text-indigo-500 hover:border-indigo-400 hover:bg-indigo-50 transition-all">
+                + 지문 추가 ({1 + extraPassages.length}/5)
+              </button>
+            )}
           </div>
 
           {/* 문제 유형 슬라이드 */}
@@ -1338,29 +1413,38 @@ export default function AiQuestionsPage() {
               </SortableContext>
             </DndContext>
 
-            <p className="mt-2 text-[11px] text-gray-400">
-              체크된 유형 {validConfigs.length}개 · 총 {validConfigs.reduce((s, c) => s + c.count, 0)}문제 생성 예정
-            </p>
+          </div>
+
+          {/* PDF 배치 선택 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+            <h2 className="text-base font-black text-gray-800 mb-3">📐 PDF 문제 배치</h2>
+            <div className="flex gap-2">
+              {([
+                { key: 'passage', label: '지문별', desc: 'A지문 → B지문 순서' },
+                { key: 'type',    label: '유형별', desc: '어법 → 어휘 → 빈칸 순서' },
+                { key: 'random',  label: '무작위', desc: '지문·유형 모두 섞기' },
+              ] as const).map(({ key, label, desc }) => (
+                <button key={key} type="button" onClick={() => setPdfLayout(key)}
+                  className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-xs font-black transition-all text-center ${
+                    pdfLayout === key ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}>
+                  <div>{label}</div>
+                  <div className={`text-[10px] mt-0.5 font-medium ${pdfLayout === key ? 'text-indigo-200' : 'text-gray-400'}`}>{desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* CON 차감 안내 */}
           {aiPrice !== null && aiPrice > 0 && (() => {
-            const totalQ = validConfigs.reduce((s, c) => s + c.count, 0);
+            const passageCount = 1 + extraPassages.length;
+            const typeTotal = validConfigs.reduce((s, c) => s + c.count, 0);
+            const totalQ = passageCount * typeTotal;
             return (
-              <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">⭐</span>
-                  <span className="text-xs font-black text-yellow-700">문제당 {aiPrice} CON 차감</span>
-                </div>
-                {totalQ > 0 && (
-                  <>
-                    <p className="text-xs font-black text-yellow-800 ml-6">
-                      총 {totalQ}문제 생성 시{' '}
-                      <span className="text-yellow-900">{(aiPrice * totalQ).toLocaleString()} CON</span> 차감 예정
-                    </p>
-                    <p className="text-[11px] text-yellow-600 ml-6">⏱ 생성되는 유형이 많을수록 시간이 더 소요됩니다</p>
-                  </>
-                )}
+              <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800 font-bold text-center space-y-1">
+                <p>문제당 {aiPrice}콘 차감</p>
+                <p>총 {passageCount}지문 × 총 {typeTotal}유형 = {totalQ}문제 생성 시 <span className="font-black text-amber-900">{(aiPrice * totalQ).toLocaleString()} CON</span> 차감 예정</p>
+                <p className="text-xs text-amber-600 font-medium">생성되는 유형이 많을수록 시간이 더 소요됩니다.</p>
               </div>
             );
           })()}
@@ -1371,7 +1455,7 @@ export default function AiQuestionsPage() {
             disabled={loading || textToSend.trim().length < 50 || validConfigs.length === 0}
             className="w-full py-4 rounded-2xl font-black text-base bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
           >
-            {loading ? loadingMsg : '🤖 AI 문제 생성하기'}
+            {loading ? loadingMsg : 'AI 문제 생성하기'}
           </button>
 
           {/* 에러 */}
@@ -1826,6 +1910,9 @@ export default function AiQuestionsPage() {
       {/* ── 생성 이력 탭 ── */}
       {activeTab === 'history' && (
         <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
+            생성 이력은 생성일로부터 3일 후 자동 삭제됩니다.
+          </div>
           {/* 검색 필터 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3">
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}

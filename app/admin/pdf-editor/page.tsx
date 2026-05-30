@@ -263,6 +263,7 @@ export default function PdfEditorPage() {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
+      await fetch('/api/cleanup-old-history', { method: 'POST' });
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setHistoryError('로그인 정보를 확인할 수 없습니다.'); return; }
 
@@ -1149,6 +1150,9 @@ export default function PdfEditorPage() {
       {/* ══ 생성 이력 탭 ══ */}
       {activeTab === 'history' && (
         <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
+            생성 이력은 생성일로부터 3일 후 자동 삭제됩니다.
+          </div>
           <div className="bg-white p-5 rounded-[2rem] shadow-lg border border-slate-100">
             <div className="flex flex-wrap gap-3 items-end">
               <div className="flex flex-col gap-1">
