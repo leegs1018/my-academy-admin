@@ -31,8 +31,8 @@ export async function POST(request: Request) {
     if (!pdfBase64) return NextResponse.json({ error: 'PDF 데이터가 없습니다.' }, { status: 400 });
 
     const ts = Date.now();
-    const fileName = `mock-workbook/${user.id}/${ts}.pdf`;
-    const answerFileName = answerPdfBase64 ? `mock-workbook/${user.id}/${ts}_answer.pdf` : null;
+    const fileName = `${user.id}/mock-workbook/${ts}.pdf`;
+    const answerFileName = answerPdfBase64 ? `${user.id}/mock-workbook/${ts}_answer.pdf` : null;
 
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
     const { error: uploadErr } = await adminClient.storage

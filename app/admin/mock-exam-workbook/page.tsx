@@ -243,7 +243,11 @@ export default function MockExamWorkbookPage() {
     supabase.from('mock_exam_passages').select('passage_text')
       .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
       .eq('question_number', parseInt(selectedNumber)).single()
-      .then(({ data }) => { setPassageText(data?.passage_text ?? ''); setPassageLoading(false); });
+      .then(({ data }) => {
+        const text = (data?.passage_text ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+        setPassageText(text);
+        setPassageLoading(false);
+      });
   }, [selectedNumber, selectedYear, selectedGrade, selectedInstitution]);
 
   // 이력 조회
@@ -373,10 +377,11 @@ export default function MockExamWorkbookPage() {
   };
 
   const downloadFromHistory = async (path: string, filename: string) => {
-    if (!session) return;
-    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(path, 60);
-    if (!data?.signedUrl) { alert('다운로드 URL을 가져올 수 없습니다.'); return; }
-    const a = document.createElement('a'); a.href = data.signedUrl; a.download = filename;
+    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(path, 3600);
+    if (!data?.signedUrl) return;
+    const a = document.createElement('a');
+    a.href = data.signedUrl; a.download = filename;
+    a.target = '_blank'; a.rel = 'noopener noreferrer';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
@@ -513,7 +518,7 @@ export default function MockExamWorkbookPage() {
                       <h2 className="font-black text-lg leading-tight text-white">원문 지문</h2>
                     </div>
                     <div className="p-4">
-                      <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{passageText}</p>
+                      <p className="text-slate-700 font-bold leading-relaxed text-xl" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{passageText}</p>
                     </div>
                   </div>
 
