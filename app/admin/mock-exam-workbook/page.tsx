@@ -124,13 +124,13 @@ function renderSingleBold(text: string) {
   );
 }
 
-function SectionCard({ number, title, color, onCopy, copied, children }: {
+function SectionCard({ number, title, color, onCopy, copied, children, theme = 'mono' }: {
   number: string; title: string; color: string;
-  onCopy: () => void; copied: boolean; children: React.ReactNode;
+  onCopy: () => void; copied: boolean; children: React.ReactNode; theme?: 'color' | 'mono';
 }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-      <div className={`bg-slate-700 px-5 py-2.5 flex items-center justify-between`}>
+      <div className={`${theme === 'color' ? color : 'bg-slate-700'} px-5 py-2.5 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
           <span className="font-black text-2xl leading-none text-white/70">{number}</span>
           <h2 className="font-black text-lg leading-tight text-white">{title}</h2>
@@ -174,6 +174,7 @@ export default function MockExamWorkbookPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
+  const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
 
   // 이력
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
@@ -476,31 +477,31 @@ export default function MockExamWorkbookPage() {
                     </div>
                   </div>
 
-                  <SectionCard number="01" title="변형 지문" color="bg-teal-600"
+                  <SectionCard number="01" title="변형 지문" color="bg-teal-600" theme={printTheme}
                     onCopy={() => copy(result.paraphrased_passage ?? '', 'paraphrase')} copied={copiedSection === 'paraphrase'}>
                     <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{result.paraphrased_passage}</p>
                   </SectionCard>
 
-                  <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500"
+                  <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500" theme={printTheme}
                     onCopy={() => copy(result.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
                     <div className="space-y-1 mb-2">
                       {result.tf_questions.map((q) => (
-                        <div key={q.number} className="flex items-start gap-2 px-2 py-1 rounded-lg">
-                          <span className="font-black w-7 shrink-0 text-lg text-slate-600">{q.number}.</span>
+                        <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
+                          <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
                           <p className="text-slate-700 font-bold leading-relaxed flex-1 text-xl">{q.statement}</p>
                         </div>
                       ))}
                     </div>
-                    <div className="mw-answer-area border-t pt-3 border-slate-200">
+                    <div className={`mw-answer-area border-t pt-3 ${printTheme === 'color' ? 'border-violet-100' : 'border-slate-200'}`}>
                       <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                        className="no-print flex items-center gap-2 font-black hover:transition-colors text-sm text-slate-600 hover:text-slate-800">
+                        className={`no-print flex items-center gap-2 font-black text-sm ${printTheme === 'color' ? 'text-violet-600 hover:text-violet-800' : 'text-slate-600 hover:text-slate-800'}`}>
                         <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
                         해설지 {showAnswerKey ? '닫기' : '보기'}
                       </button>
                       {showAnswerKey && (
-                        <div className="mt-3 space-y-3">
-                          <div className="p-3 rounded-2xl border bg-white border-slate-200">
-                            <p className="font-black text-sm text-slate-700 mb-1">정답</p>
+                        <div className="mt-3">
+                          <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
+                            <p className={`font-black text-sm mb-1 ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</p>
                             <p className="font-black text-slate-700 tracking-wide text-sm">{result.answer_key}</p>
                           </div>
                         </div>
@@ -511,18 +512,18 @@ export default function MockExamWorkbookPage() {
 
                 {/* 2페이지: 한글요약 + 영어제목 + 1문장요약 + 어휘 */}
                 <div id="mw-pdf-page-2" className="space-y-3">
-                  <SectionCard number="03" title="한글 요약" color="bg-indigo-500"
+                  <SectionCard number="03" title="한글 요약" color="bg-indigo-500" theme={printTheme}
                     onCopy={() => copy(result.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')} copied={copiedSection === 'korean'}>
                     <div>
-                      <span className="inline-block mb-3 text-base font-black px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                      <span className={`inline-block mb-3 text-base font-black px-3 py-1 rounded-full ${printTheme === 'color' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
                         {result.korean_summary.type === '일반' ? '일반 지문' : result.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
                       </span>
                       <table className="w-full border-collapse">
                         <tbody>
                           {result.korean_summary.rows.map((row, i) => (
-                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                              <td className="w-28 p-2.5 font-black text-base border border-slate-200 whitespace-nowrap align-top text-slate-700">{row.label}</td>
-                              <td className="p-2.5 border border-slate-200">
+                            <tr key={i} className={printTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
+                              <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${printTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
+                              <td className={`p-2.5 border ${printTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
                                 <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
                               </td>
                             </tr>
@@ -532,14 +533,14 @@ export default function MockExamWorkbookPage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard number="04" title="영어 제목 3가지" color="bg-amber-500"
+                  <SectionCard number="04" title="영어 제목 3가지" color="bg-amber-500" theme={printTheme}
                     onCopy={() => copy(result.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
                     <div className="space-y-2">
                       {result.english_titles.map((title, i) => {
                         const { english, korean } = parseTitleKorean(title);
                         return (
-                          <div key={i} className="flex items-start gap-2 px-3 py-2.5 rounded-xl border bg-white border-slate-200">
-                            <span className="font-black w-8 shrink-0 text-lg text-slate-600">{i + 1}.</span>
+                          <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
+                            <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
                             <div className="flex-1">
                               <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
                               {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
@@ -550,13 +551,13 @@ export default function MockExamWorkbookPage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard number="05" title="1문장 영어 요약 3가지" color="bg-rose-500"
+                  <SectionCard number="05" title="1문장 영어 요약 3가지" color="bg-rose-500" theme={printTheme}
                     onCopy={() => copy(result.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
                     <div className="space-y-2">
                       {result.one_sentence_summaries.map((s, i) => (
-                        <div key={i} className="px-3 py-2.5 rounded-xl border bg-white border-slate-200">
+                        <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-200'}`}>
                           <div className="flex items-start gap-2">
-                            <span className="font-black w-8 shrink-0 text-lg text-slate-600">{i + 1}.</span>
+                            <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
                             <div className="flex-1">
                               <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
                               <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
@@ -567,7 +568,7 @@ export default function MockExamWorkbookPage() {
                     </div>
                   </SectionCard>
 
-                  <SectionCard number="06" title="관련 어휘 10개" color="bg-slate-700"
+                  <SectionCard number="06" title="관련 어휘 10개" color="bg-slate-700" theme={printTheme}
                     onCopy={() => copy(result.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
                     <table className="w-full text-base border-collapse table-fixed">
                       <colgroup>
@@ -582,7 +583,7 @@ export default function MockExamWorkbookPage() {
                       </thead>
                       <tbody>
                         {result.vocabulary_table.map((row, i) => (
-                          <tr key={i} className={i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
+                          <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
                             <td className="px-2 py-2 border-b border-slate-100">
                               <span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-sm ml-1">({row.meaning})</span>
                             </td>
@@ -607,6 +608,18 @@ export default function MockExamWorkbookPage() {
           {/* 다운로드 버튼 + 저장 상태 */}
           {result && (
             <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
+              {/* 테마 토글 */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 shadow-lg px-3 py-2 rounded-2xl">
+                <span className="text-slate-400 text-xs font-bold mr-1">테마</span>
+                <button onClick={() => setPrintTheme('color')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'color' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
+                  컬러
+                </button>
+                <button onClick={() => setPrintTheme('mono')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'mono' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
+                  흑백
+                </button>
+              </div>
               {saveStatus === 'saving' && (
                 <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />이력 자동 저장 중...
