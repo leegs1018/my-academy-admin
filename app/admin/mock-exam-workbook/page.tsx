@@ -182,6 +182,8 @@ export default function MockExamWorkbookPage() {
   // 이력
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [searchDate, setSearchDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -251,20 +253,21 @@ export default function MockExamWorkbookPage() {
   }, [selectedNumber, selectedYear, selectedGrade, selectedInstitution]);
 
   // 이력 조회
-  const fetchHistory = useCallback(async () => {
+  const fetchHistory = useCallback(async (date = searchDate, query = searchQuery) => {
     if (!session) return;
     setHistoryLoading(true); setHistoryError(null);
     try {
       await fetch('/api/cleanup-old-history', { method: 'POST' });
-      const { data, error: fetchErr } = await supabase
-        .from('mock_workbook_history').select('*').eq('academy_id', session.user.id)
-        .order('created_at', { ascending: false });
+      let q = supabase.from('mock_workbook_history').select('*').eq('academy_id', session.user.id).order('created_at', { ascending: false });
+      if (date) q = q.gte('created_at', date).lte('created_at', date + 'T23:59:59');
+      if (query) q = q.ilike('institution', `%${query}%`);
+      const { data, error: fetchErr } = await q;
       if (fetchErr) { setHistoryError(`조회 오류: ${fetchErr.message}`); return; }
       setHistoryList(data ?? []);
     } catch (e) {
       setHistoryError(e instanceof Error ? e.message : '알 수 없는 오류');
     } finally { setHistoryLoading(false); }
-  }, [session]);
+  }, [session, searchDate, searchQuery]);
 
   useEffect(() => { if (activeTab === 'history' && session) fetchHistory(); }, [activeTab, session]);
 
@@ -817,16 +820,36 @@ export default function MockExamWorkbookPage() {
             생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
           </div>
 
-          {historyError && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>
-          )}
+          {/* 필터 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-black text-slate-500">날짜</label>
+              <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+              <label className="text-xs font-black text-slate-500">키워드 검색</label>
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && fetchHistory()}
+                placeholder="시험명/기관 검색..."
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <button onClick={() => fetchHistory()} disabled={historyLoading}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50">🔍 검색</button>
+            {(searchDate || searchQuery) && (
+              <button onClick={() => { setSearchDate(''); setSearchQuery(''); fetchHistory('', ''); }}
+                className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">초기화</button>
+            )}
+          </div>
+
+          {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
 
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
               <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
               <div className="flex gap-2 ml-auto">
                 <button onClick={deleteSelected} disabled={bulkDeleting}
-                  className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 active:scale-95 transition-all disabled:opacity-50">
+                  className="px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 disabled:opacity-50 transition-all">
                   {bulkDeleting ? '삭제 중...' : '삭제'}
                 </button>
                 <button onClick={() => setSelectedIds(new Set())} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
@@ -844,15 +867,17 @@ export default function MockExamWorkbookPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              <div className="grid grid-cols-[40px_150px_80px_80px_1fr_56px_80px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
+              <div className="grid grid-cols-[32px_140px_60px_60px_1fr_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
                 <input type="checkbox" checked={selectedIds.size === historyList.length && historyList.length > 0}
                   onChange={() => setSelectedIds(selectedIds.size === historyList.length ? new Set() : new Set(historyList.map(i => i.id)))}
                   className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
-                {['날짜', '년도', '학년', '시험명/기관', '난이도', 'PDF'].map((h, i) => <span key={i}>{h}</span>)}
+                {['날짜', '년도', '학년', '시험명/기관', '난이도', '문제', '해설'].map((h, i) => (
+                  <span key={i} className={i >= 5 ? 'text-center' : ''}>{h}</span>
+                ))}
               </div>
               {historyList.map((item, i) => (
                 <div key={item.id}
-                  className={`grid grid-cols-[40px_150px_80px_80px_1fr_56px_80px] gap-3 px-5 py-4 items-center border-b border-slate-100 last:border-0 transition-colors
+                  className={`grid grid-cols-[32px_140px_60px_60px_1fr_52px_64px_64px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
                     ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                   <input type="checkbox" checked={selectedIds.has(item.id)}
                     onChange={() => setSelectedIds(prev => { const n = new Set(prev); if (n.has(item.id)) n.delete(item.id); else n.add(item.id); return n; })}
@@ -860,19 +885,21 @@ export default function MockExamWorkbookPage() {
                   <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
                     {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span className="text-sm font-bold text-slate-700">{item.year}년</span>
-                  <span className="text-sm font-bold text-slate-700">{item.grade}</span>
-                  <span className="text-sm text-slate-600 font-medium truncate">{item.institution} {item.question_number}번</span>
-                  <span className="text-xs font-black px-2 py-1 rounded-full bg-slate-100 text-slate-600 w-fit">{item.difficulty || '-'}</span>
-                  <div className="flex flex-col gap-1">
-                    {item.pdf_path && (
+                  <span className="text-xs font-bold text-slate-700">{item.year}년</span>
+                  <span className="text-xs font-bold text-slate-700">{item.grade}</span>
+                  <span className="text-xs text-slate-600 font-medium truncate">{item.institution} {item.question_number}번</span>
+                  <span className="text-xs font-black px-2 py-1 rounded-full bg-slate-100 text-slate-600 text-center">{item.difficulty || '-'}</span>
+                  <div className="flex justify-center">
+                    {item.pdf_path ? (
                       <button onClick={() => downloadFromHistory(item.pdf_path, `${item.year}_${item.institution}_${item.question_number}번_문제.pdf`)}
-                        className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">문제</button>
-                    )}
-                    {item.answer_pdf_path && (
+                        className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 문제</button>
+                    ) : <span className="text-xs text-slate-300 text-center w-full">-</span>}
+                  </div>
+                  <div className="flex justify-center">
+                    {item.answer_pdf_path ? (
                       <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.year}_${item.institution}_${item.question_number}번_해설.pdf`)}
-                        className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">해설</button>
-                    )}
+                        className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 해설</button>
+                    ) : <span className="text-xs text-slate-300 text-center w-full">-</span>}
                   </div>
                 </div>
               ))}

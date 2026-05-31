@@ -217,7 +217,7 @@ export default function PdfEditorPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [passageModal, setPassageModal] = useState<PdfHistoryItem | null>(null);
+  const [passageModal, setPassageModal] = useState<{ title: string; text: string } | null>(null);
   const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
   const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
 
@@ -1154,61 +1154,50 @@ export default function PdfEditorPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
             생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
           </div>
-          <div className="bg-white p-5 rounded-[2rem] shadow-lg border border-slate-100">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-black text-slate-500">날짜</label>
-                <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)}
-                  className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-indigo-400 transition-colors" />
-              </div>
-              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
-                <label className="text-xs font-black text-slate-500">지문 내 단어 검색</label>
-                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && fetchHistory()}
-                  placeholder="단어를 입력하세요..."
-                  className="px-4 py-2.5 border-2 border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-indigo-400 transition-colors" />
-              </div>
-              <button onClick={() => fetchHistory()} disabled={historyLoading}
-                className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
-                🔍 검색
-              </button>
-              {(searchDate || searchQuery) && (
-                <button onClick={() => { setSearchDate(''); setSearchQuery(''); fetchHistory('', ''); }}
-                  className="px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">
-                  초기화
-                </button>
-              )}
+
+          {/* 필터 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-black text-slate-500">날짜</label>
+              <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
             </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+              <label className="text-xs font-black text-slate-500">키워드 검색</label>
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && fetchHistory()}
+                placeholder="지문 내 단어를 입력하세요..."
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <button onClick={() => fetchHistory()} disabled={historyLoading}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50">🔍 검색</button>
+            {(searchDate || searchQuery) && (
+              <button onClick={() => { setSearchDate(''); setSearchQuery(''); fetchHistory('', ''); }}
+                className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">초기화</button>
+            )}
           </div>
 
-          {historyError && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
-              <p className="text-rose-600 font-black">⚠️ {historyError}</p>
-            </div>
-          )}
+          {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
 
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
               <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
               <div className="flex gap-2 ml-auto">
                 <button onClick={downloadSelected} disabled={bulkDownloading}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
-                  {bulkDownloading ? '다운로드 중...' : 'PDF 다운로드'}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                  {bulkDownloading ? '다운로드 중...' : '⬇️ PDF 다운로드'}
                 </button>
                 <button onClick={deleteSelected} disabled={bulkDeleting}
-                  className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 active:scale-95 transition-all disabled:opacity-50">
+                  className="px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 disabled:opacity-50 transition-all">
                   {bulkDeleting ? '삭제 중...' : '삭제'}
                 </button>
-                <button onClick={() => setSelectedIds(new Set())}
-                  className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
               </div>
             </div>
           )}
 
           {historyLoading ? (
-            <div className="flex justify-center py-16">
-              <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-            </div>
+            <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
           ) : historyList.length === 0 ? (
             <div className="bg-white rounded-[2rem] p-16 text-center shadow-lg border border-slate-100">
               <p className="text-5xl mb-4">📭</p>
@@ -1217,48 +1206,44 @@ export default function PdfEditorPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              <div className="grid grid-cols-[40px_150px_56px_220px_1fr_80px] gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
+              <div className="grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
                 <input type="checkbox" checked={selectedIds.size === historyList.length && historyList.length > 0}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
-                {['날짜', '난이도', '제목', '지문 요약', 'PDF'].map((h, i) => (
-                  <span key={i} className={`text-xs font-black text-slate-500 ${i === 4 ? 'text-center' : ''}`}>{h}</span>
+                {['날짜', '제목', '지문 요약', '난이도', '문제', '해설'].map((h, i) => (
+                  <span key={i} className={i >= 4 ? 'text-center' : ''}>{h}</span>
                 ))}
               </div>
               {historyList.map((item, i) => (
                 <div key={item.id}
-                  className={`grid grid-cols-[40px_150px_56px_220px_1fr_80px] gap-3 px-5 py-4 items-center
-                    ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
-                    border-b border-slate-100 last:border-0 hover:bg-indigo-50/60 transition-colors`}>
+                  className={`grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
+                    ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                   <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)}
                     className="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
-                  <span className="text-sm font-bold text-slate-600 whitespace-nowrap">
+                  <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
                     {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <span className={`text-xs font-black px-2 py-1 rounded-full w-fit ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
-                    {item.difficulty || '-'}
                   </span>
                   <span className="text-sm font-bold text-slate-700 truncate" title={item.title || ''}>
                     {item.title || <span className="text-slate-300">-</span>}
                   </span>
-                  <button onClick={() => setPassageModal(item)}
-                    className="text-sm text-slate-600 font-bold truncate text-left hover:text-indigo-600 hover:underline transition-colors w-full">
+                  <button onClick={() => setPassageModal({ title: '원문 지문', text: item.passage_full })}
+                    className="text-xs text-slate-600 font-bold truncate text-left hover:text-indigo-600 hover:underline transition-colors w-full">
                     {item.passage_excerpt}
+                    <span className="ml-1 text-indigo-400 font-black whitespace-nowrap">[전체 보기]</span>
                   </button>
-                  <div className="flex flex-col gap-1 items-center">
+                  <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
+                    {item.difficulty || '-'}
+                  </span>
+                  <div className="flex justify-center">
                     {item.pdf_path ? (
-                      <button onClick={() => downloadFromHistory(item.pdf_path, `${item.title || '영어문제'}_문제.pdf`)} title="문제지 다운로드"
-                        className="flex items-center gap-1 px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all active:scale-90 w-full justify-center">
-                        문제
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-300 font-bold">저장중</span>
-                    )}
-                    {item.answer_pdf_path && (
-                      <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '영어문제'}_답안해설.pdf`)} title="답안·해설 다운로드"
-                        className="flex items-center gap-1 px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all active:scale-90 w-full justify-center">
-                        해설
-                      </button>
-                    )}
+                      <button onClick={() => downloadFromHistory(item.pdf_path, `${item.title || '영어문제'}_문제.pdf`)}
+                        className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 문제</button>
+                    ) : <span className="text-xs text-slate-300 font-bold text-center w-full">저장중</span>}
+                  </div>
+                  <div className="flex justify-center">
+                    {item.answer_pdf_path ? (
+                      <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '영어문제'}_해설.pdf`)}
+                        className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 해설</button>
+                    ) : <span className="text-xs text-slate-300 font-bold text-center w-full">-</span>}
                   </div>
                 </div>
               ))}
@@ -1269,32 +1254,14 @@ export default function PdfEditorPage() {
 
       {/* ── 지문 전체 보기 모달 ── */}
       {passageModal && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          onClick={() => setPassageModal(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setPassageModal(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <div className="flex flex-wrap items-center gap-2">
-                {passageModal.title && (
-                  <span className="font-black text-slate-800 text-sm mr-1">{passageModal.title}</span>
-                )}
-                <span className={`text-xs font-black px-2 py-1 rounded-full ${TYPE_COLORS[passageModal.passage_type] ?? 'bg-slate-100 text-slate-600'}`}>
-                  {passageModal.passage_type || '-'}
-                </span>
-                <span className={`text-xs font-black px-2 py-1 rounded-full ${DIFF_COLORS[passageModal.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
-                  난이도 {passageModal.difficulty || '-'}
-                </span>
-                <span className="text-xs text-slate-400 font-bold">
-                  {new Date(passageModal.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-              <button onClick={() => setPassageModal(null)}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors font-black text-lg">
-                ✕
-              </button>
+              <h3 className="text-base font-black text-slate-900">{passageModal.title}</h3>
+              <button onClick={() => setPassageModal(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors font-black text-lg">✕</button>
             </div>
             <div className="overflow-y-auto p-6">
-              <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">{passageModal.passage_full}</p>
+              <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">{passageModal.text}</p>
             </div>
           </div>
         </div>

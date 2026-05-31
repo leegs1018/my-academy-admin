@@ -1934,141 +1934,109 @@ export default function AiQuestionsPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
             생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
           </div>
-          {/* 검색 필터 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3">
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && fetchHistory(searchQuery, searchDate)}
-              placeholder="키워드 검색..." className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex-1 min-w-32" />
-            <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-            <button onClick={() => fetchHistory(searchQuery, searchDate)}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all">
-              🔍 검색
-            </button>
-            <button onClick={() => { setSearchQuery(''); setSearchDate(''); fetchHistory('', ''); }}
-              className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">
-              초기화
-            </button>
+
+          {/* 필터 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-black text-slate-500">날짜</label>
+              <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)}
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+              <label className="text-xs font-black text-slate-500">키워드 검색</label>
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && fetchHistory(searchQuery, searchDate)}
+                placeholder="지문 내 단어를 입력하세요..."
+                className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <button onClick={() => fetchHistory(searchQuery, searchDate)} disabled={historyLoading}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50">🔍 검색</button>
+            {(searchDate || searchQuery) && (
+              <button onClick={() => { setSearchQuery(''); setSearchDate(''); fetchHistory('', ''); }}
+                className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">초기화</button>
+            )}
           </div>
 
-          {/* 일괄 작업 버튼 */}
           {selectedIds.size > 0 && (
-            <div className="flex gap-3 items-center bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
-              <span className="text-sm font-black text-indigo-700">{selectedIds.size}개 선택됨</span>
-              <button onClick={downloadSelected} disabled={bulkDownloading}
-                className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all">
-                {bulkDownloading ? '⏳ 다운로드 중...' : '⬇️ 일괄 다운로드'}
-              </button>
-              <button onClick={deleteSelected} disabled={bulkDeleting}
-                className="px-4 py-2 bg-red-500 text-white text-sm font-black rounded-xl hover:bg-red-600 disabled:opacity-50 transition-all">
-                {bulkDeleting ? '⏳ 삭제 중...' : '🗑️ 일괄 삭제'}
-              </button>
-              <button onClick={() => setSelectedIds(new Set())}
-                className="px-3 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all ml-auto">
-                선택 해제
-              </button>
+            <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
+              <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
+              <div className="flex gap-2 ml-auto">
+                <button onClick={downloadSelected} disabled={bulkDownloading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                  {bulkDownloading ? '다운로드 중...' : '⬇️ PDF 다운로드'}
+                </button>
+                <button onClick={deleteSelected} disabled={bulkDeleting}
+                  className="px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 disabled:opacity-50 transition-all">
+                  {bulkDeleting ? '삭제 중...' : '삭제'}
+                </button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
+              </div>
             </div>
           )}
 
-          {/* 이력 목록 */}
           {historyLoading ? (
-            <div className="text-center py-12 text-gray-400 font-bold">불러오는 중...</div>
+            <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
           ) : historyError ? (
-            <div className="text-center py-12 text-red-500 font-bold">{historyError}</div>
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>
           ) : filteredHistory.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
-              <div className="text-5xl mb-3">📭</div>
-              <p className="font-black text-lg">생성 이력이 없습니다.</p>
-              <p className="text-sm mt-1">문제를 생성하면 자동으로 저장됩니다.</p>
+            <div className="bg-white rounded-[2rem] p-16 text-center shadow-lg border border-slate-100">
+              <p className="text-5xl mb-4">📭</p>
+              <p className="font-black text-slate-500 text-lg">생성된 이력이 없습니다</p>
+              <p className="text-slate-400 font-bold text-sm mt-2">문제를 생성하면 자동으로 이곳에 기록돼요</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {/* 전체 선택 */}
-              <div className="flex items-center gap-2 px-2">
-                <input type="checkbox"
-                  checked={selectedIds.size === filteredHistory.length && filteredHistory.length > 0}
-                  onChange={e => {
-                    if (e.target.checked) setSelectedIds(new Set(filteredHistory.map(i => i.id)));
-                    else setSelectedIds(new Set());
-                  }}
-                  className="w-4 h-4 rounded accent-indigo-600" />
-                <span className="text-sm font-bold text-gray-500">전체 선택 ({filteredHistory.length}개)</span>
+            <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
+              <div className="grid grid-cols-[32px_140px_150px_1fr_120px_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
+                <input type="checkbox" checked={selectedIds.size === filteredHistory.length && filteredHistory.length > 0}
+                  onChange={e => { if (e.target.checked) setSelectedIds(new Set(filteredHistory.map(i => i.id))); else setSelectedIds(new Set()); }}
+                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
+                {['날짜', '제목', '지문 요약', '유형', '난이도', '문제', '해설'].map((h, i) => (
+                  <span key={i} className={i >= 5 ? 'text-center' : ''}>{h}</span>
+                ))}
               </div>
-
-              {filteredHistory.map(item => {
-                const date = new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+              {filteredHistory.map((item, i) => {
+                let passages: string[];
+                try { const p = JSON.parse(item.passage_full); passages = Array.isArray(p) ? p : [item.passage_full]; } catch { passages = [item.passage_full]; }
+                const diffMap: Record<string, string> = { b1: 'bg-sky-100 text-sky-700', b2: 'bg-emerald-100 text-emerald-700', c1: 'bg-orange-100 text-orange-700', c2: 'bg-rose-100 text-rose-700' };
                 return (
-                  <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                    <div className="flex items-start gap-3">
-                      <input type="checkbox" checked={selectedIds.has(item.id)}
-                        onChange={e => {
-                          setSelectedIds(prev => {
-                            const next = new Set(prev);
-                            if (e.target.checked) next.add(item.id); else next.delete(item.id);
-                            return next;
-                          });
-                        }}
-                        className="w-4 h-4 mt-1 rounded accent-indigo-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        {/* 날짜 + 제목 + 난이도 */}
-                        <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <span className="text-xs font-bold text-gray-400">{date}</span>
-                          {item.difficulty && (() => {
-                            const diffMap: Record<string, { label: string; cls: string }> = {
-                              b1: { label: '중등',    cls: 'bg-sky-50 text-sky-700 border-sky-300' },
-                              b2: { label: '고등 중', cls: 'bg-emerald-50 text-emerald-700 border-emerald-300' },
-                              c1: { label: '고등 중상', cls: 'bg-orange-50 text-orange-700 border-orange-300' },
-                              c2: { label: '고등 최상', cls: 'bg-rose-50 text-rose-700 border-rose-300' },
-                            };
-                            const d = diffMap[item.difficulty] ?? { label: item.difficulty, cls: 'bg-gray-50 text-gray-600 border-gray-200' };
-                            return <span className={`text-xs font-black px-2 py-0.5 rounded-full border ${d.cls}`}>{d.label}</span>;
-                          })()}
-                          {item.title && <span className="text-sm font-black text-gray-800">{item.title}</span>}
-                        </div>
-                        {/* 유형 태그 */}
-                        <div className="flex flex-wrap gap-1.5 mb-2">
-                          {(item.question_types || []).map(type => {
-                            const opt = QUESTION_TYPE_OPTIONS.find(o => o.key === type);
-                            return (
-                              <span key={type} className={`text-xs font-bold px-2 py-0.5 rounded-full border ${opt?.color ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                                {opt?.label ?? type}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        {/* 지문 요약 — 다중 지문 지원 */}
-                        <div className="space-y-1 mb-3">
-                          {(() => {
-                            let passages: string[];
-                            try { const p = JSON.parse(item.passage_full); passages = Array.isArray(p) ? p : [item.passage_full]; } catch { passages = [item.passage_full]; }
-                            return passages.map((p, pi) => (
-                              <p key={pi} className="text-xs text-gray-500 line-clamp-2">
-                                {passages.length > 1 && <span className="font-black text-indigo-400 mr-1">{String.fromCharCode(65 + pi)}.</span>}
-                                {p.slice(0, 80)}...
-                                <button onClick={() => setPassageModal({ title: passages.length > 1 ? `지문 ${String.fromCharCode(65 + pi)}` : '원문 지문', text: p })}
-                                  className="ml-1 text-indigo-500 hover:text-indigo-700 font-bold whitespace-nowrap">
-                                  [전체 보기]
-                                </button>
-                              </p>
-                            ));
-                          })()}
-                        </div>
-                        {/* 다운로드 버튼 */}
-                        <div className="flex gap-2">
-                          {item.question_pdf_path && (
-                            <button onClick={() => downloadFromHistory(item.question_pdf_path, `${item.title || '문제'}_문제.pdf`)}
-                              className="text-xs font-black text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-all">
-                              ⬇️ 문제
-                            </button>
-                          )}
-                          {item.answer_pdf_path && (
-                            <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '문제'}_답안해설.pdf`)}
-                              className="text-xs font-black text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-all">
-                              ⬇️ 답안/해설
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                  <div key={item.id}
+                    className={`grid grid-cols-[32px_140px_150px_1fr_120px_52px_64px_64px] gap-2 px-4 py-3 items-start border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
+                      ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                    <input type="checkbox" checked={selectedIds.has(item.id)}
+                      onChange={e => { setSelectedIds(prev => { const n = new Set(prev); if (e.target.checked) n.add(item.id); else n.delete(item.id); return n; }); }}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
+                    <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
+                      {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-xs font-bold text-slate-700 truncate">{item.title || <span className="text-slate-300">-</span>}</span>
+                    <div className="space-y-0.5">
+                      {passages.map((p, pi) => (
+                        <p key={pi} className="text-xs text-slate-500 line-clamp-1">
+                          {passages.length > 1 && <span className="font-black text-indigo-400 mr-1">{String.fromCharCode(65 + pi)}.</span>}
+                          {p.slice(0, 60)}...
+                          <button onClick={() => setPassageModal({ title: passages.length > 1 ? `지문 ${String.fromCharCode(65 + pi)}` : '원문 지문', text: p })}
+                            className="ml-1 text-indigo-400 hover:text-indigo-600 font-black whitespace-nowrap">[전체 보기]</button>
+                        </p>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(item.question_types || []).map(type => {
+                        const opt = QUESTION_TYPE_OPTIONS.find(o => o.key === type);
+                        return <span key={type} className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${opt?.color ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>{opt?.label ?? type}</span>;
+                      })}
+                    </div>
+                    <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${diffMap[item.difficulty ?? ''] ?? 'bg-slate-100 text-slate-600'}`}>{item.difficulty || '-'}</span>
+                    <div className="flex justify-center">
+                      {item.question_pdf_path ? (
+                        <button onClick={() => downloadFromHistory(item.question_pdf_path, `${item.title || '문제'}_문제.pdf`)}
+                          className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 문제</button>
+                      ) : <span className="text-xs text-slate-300 text-center w-full">-</span>}
+                    </div>
+                    <div className="flex justify-center">
+                      {item.answer_pdf_path ? (
+                        <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '문제'}_해설.pdf`)}
+                          className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 해설</button>
+                      ) : <span className="text-xs text-slate-300 text-center w-full">-</span>}
                     </div>
                   </div>
                 );
