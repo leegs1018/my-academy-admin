@@ -816,17 +816,20 @@ export default function MockExamQuestionsPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              <div className="grid grid-cols-[32px_140px_50px_70px_1fr_120px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
+              <div className="grid grid-cols-[32px_140px_50px_70px_1fr_120px_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
                 <input type="checkbox" checked={selectedHistoryIds.size === historyList.length && historyList.length > 0}
                   onChange={() => setSelectedHistoryIds(selectedHistoryIds.size === historyList.length ? new Set() : new Set(historyList.map(i => i.id)))}
                   className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
-                {['날짜', '년도', '학년', '시험명/기관', '문제번호 · 유형', '문제', '해설'].map((h, i) => (
-                  <span key={i} className={i >= 5 ? 'text-center' : ''}>{h}</span>
+                {['날짜', '년도', '학년', '시험명/기관', '문제번호 · 유형', '난이도', '문제', '해설'].map((h, i) => (
+                  <span key={i} className={i >= 6 ? 'text-center' : ''}>{h}</span>
                 ))}
               </div>
-              {historyList.map((item, i) => (
+              {historyList.map((item, i) => {
+                const diffMap: Record<string, string> = { b1: 'bg-sky-100 text-sky-700', b2: 'bg-emerald-100 text-emerald-700', c1: 'bg-orange-100 text-orange-700', c2: 'bg-rose-100 text-rose-700' };
+                const diffVal = item.difficulty?.split(',')[0] ?? '';
+                return (
                 <div key={item.id}
-                  className={`grid grid-cols-[32px_140px_50px_70px_1fr_120px_64px_64px] gap-2 px-4 py-3 items-start border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
+                  className={`grid grid-cols-[32px_140px_50px_70px_1fr_120px_52px_64px_64px] gap-2 px-4 py-3 items-start border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
                     ${selectedHistoryIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                   <input type="checkbox" checked={selectedHistoryIds.has(item.id)}
                     onChange={() => setSelectedHistoryIds(prev => { const n = new Set(prev); if (n.has(item.id)) n.delete(item.id); else n.add(item.id); return n; })}
@@ -842,6 +845,7 @@ export default function MockExamQuestionsPage() {
                       <span key={t} className="text-[10px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100">{TYPE_LABEL_MAP_LOCAL[t] ?? t}</span>
                     ))}
                   </div>
+                  <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${diffMap[diffVal] ?? 'bg-slate-100 text-slate-600'}`}>{diffVal || '-'}</span>
                   <div className="flex justify-center">
                     {item.question_pdf_path ? (
                       <button onClick={() => downloadFromHistory(item.question_pdf_path, `${item.year}_${item.institution}_문제.pdf`)}
@@ -855,7 +859,8 @@ export default function MockExamQuestionsPage() {
                     ) : <span className="text-xs text-slate-300 text-center w-full">-</span>}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

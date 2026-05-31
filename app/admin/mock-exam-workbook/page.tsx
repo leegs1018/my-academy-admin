@@ -888,7 +888,10 @@ export default function MockExamWorkbookPage() {
                   <span className="text-xs font-bold text-slate-700">{item.year}년</span>
                   <span className="text-xs font-bold text-slate-700">{item.grade}</span>
                   <span className="text-xs text-slate-600 font-medium truncate">{item.institution} {item.question_number}번</span>
-                  <span className="text-xs font-black px-2 py-1 rounded-full bg-slate-100 text-slate-600 text-center">{item.difficulty || '-'}</span>
+                  {(() => {
+                    const diffMap: Record<string, string> = { b1: 'bg-sky-100 text-sky-700', b2: 'bg-emerald-100 text-emerald-700', c1: 'bg-orange-100 text-orange-700', c2: 'bg-rose-100 text-rose-700' };
+                    return <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${diffMap[item.difficulty ?? ''] ?? 'bg-slate-100 text-slate-600'}`}>{item.difficulty || '-'}</span>;
+                  })()}
                   <div className="flex justify-center">
                     {item.pdf_path ? (
                       <button onClick={() => downloadFromHistory(item.pdf_path, `${item.year}_${item.institution}_${item.question_number}번_문제.pdf`)}
