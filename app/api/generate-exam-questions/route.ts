@@ -924,6 +924,14 @@ modified_passage는 반드시 아래 형식으로 작성:
 - (A)(B)(C)는 원본 문장을 묶어 만든 단락 (문장 순서 섞기 허용).
 - 각 단락은 지시어·연결어·대명사를 통해 앞 내용 없이는 이해 불가한 구조여야 함.
 
+⚠️ 절대 금지 — 문장 중복 [가장 중요한 규칙]:
+- 원본의 각 문장은 [주어진 글], (A), (B), (C) 중 정확히 하나에만 배치.
+- 같은 문장이 (A)에도 나오고 (C)에도 나오는 것 절대 금지.
+- (A)에 배치한 문장은 (B), (C)에 다시 써선 안 됨.
+- (C)는 새로운 문장만 포함해야 함 — (A)나 (B)의 내용을 반복·포함·요약하지 말 것.
+- (C) 작성 전 반드시 (A)와 (B)에 배치된 모든 문장을 확인하고, 그 문장을 (C)에 절대 포함하지 말 것.
+- 자기검증 필수: 생성 후 (C)의 각 문장이 (A) 또는 (B)에 이미 나온다면 즉시 (C)에서 제거할 것.
+
 ━━━━━━━━━━━━━━━━━━
 [choices — 고정 형식]
 ━━━━━━━━━━━━━━━━━━
@@ -1114,7 +1122,7 @@ ${selectedRules}
 이번 문제의 정답(answer) 번호는 반드시 ${targetAnswer}번이어야 한다. 다른 번호는 정답이 될 수 없다.` : ''}`;
 }
 
-const MULTI_STEP_TYPES = new Set(['vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary']);
+const MULTI_STEP_TYPES = new Set(['vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary', 'sentence_order']);
 
 function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number): string {
   if (questionType === 'grammar') {
@@ -1454,10 +1462,11 @@ export async function POST(request: Request) {
           return null;
         }
 
-        // targetAnswer 일치 검증 (모든 유형) — 마지막 시도는 그냥 허용
-        if (q.answer !== targetAnswer && attempt < MAX_RETRIES) {
+        // targetAnswer 일치 검증 (모든 유형) — 불일치 시 항상 재시도, 소진 시 null
+        if (q.answer !== targetAnswer) {
           console.warn(`[${questionType}] 정답 불일치: 요청=${targetAnswer} 실제=${q.answer} — 재시도 ${attempt + 1}`);
-          continue;
+          if (attempt < MAX_RETRIES) continue;
+          return null;
         }
 
         // flow 검증: ①~⑤ 모두 modified_passage에 존재해야 함
@@ -1639,6 +1648,33 @@ export async function POST(request: Request) {
             console.warn(`[sentence_order] 누락 단락 ${missingParts.join(',')} — 재시도 ${attempt + 1}`);
             if (attempt < MAX_RETRIES) continue;
             return null;
+          }
+          // 중복 문장 검증: (C)에 (A)(B) 내용이 반복되면 안 됨
+          const getSection = (label: string): string => {
+            const tag = `(${label})`;
+            const start = passage.indexOf(tag);
+            if (start === -1) return '';
+            const afterTag = start + tag.length;
+            const rest = passage.slice(afterTag);
+            const nextIdx = rest.search(/\([ABC]\)/);
+            return (nextIdx === -1 ? rest : rest.slice(0, nextIdx)).trim().toLowerCase();
+          };
+          const sA = getSection('A');
+          const sB = getSection('B');
+          const sC = getSection('C');
+          if (sA && sB && sC) {
+            const CHUNK = 45;
+            let dup = false;
+            for (const src of [sA, sB]) {
+              for (let i = 0; i <= src.length - CHUNK && !dup; i += 15) {
+                if (sC.includes(src.slice(i, i + CHUNK))) dup = true;
+              }
+            }
+            if (dup) {
+              console.warn(`[sentence_order] (C)에 (A)(B) 중복 내용 발견 — 재시도 ${attempt + 1}`);
+              if (attempt < MAX_RETRIES) continue;
+              return null;
+            }
           }
         }
 
