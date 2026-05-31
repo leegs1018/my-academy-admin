@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { generateId } from '@/lib/uuid';
 import { supabase } from '@/lib/supabase';
 import ConInsufficientModal from '@/components/ConInsufficientModal';
 import {
@@ -673,7 +674,7 @@ export default function AiQuestionsPage() {
 
   const [typeConfigs, setTypeConfigs] = useState<TypeConfig[]>(() =>
     QUESTION_TYPE_OPTIONS.map(o => ({
-      id: crypto.randomUUID(),
+      id: generateId(),
       type: o.key,
       difficulty: 'b2' as const,
       count: 1,
@@ -814,7 +815,7 @@ export default function AiQuestionsPage() {
   };
   const addCustomConfig = () => {
     setTypeConfigs(prev => [...prev, {
-      id: crypto.randomUUID(),
+      id: generateId(),
       type: '',
       difficulty: 'b2',
       count: 1,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { generateId } from '../../../lib/uuid';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -144,7 +145,7 @@ export default function ClassPage() {
 
   // 새 과목 생성 시 고유 ID 부여 (이 ID는 평생 갑니다)
   const createInitialSubject = (): Subject => ({
-    id: crypto.randomUUID(), 
+    id: generateId(), 
     name: '',
     description: ''
   });

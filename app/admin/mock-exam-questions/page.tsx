@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { generateId } from '@/lib/uuid';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -459,7 +460,7 @@ export default function MockExamQuestionsPage() {
   const [loadingNumbers, setLoadingNumbers] = useState<Set<string>>(new Set());
 
   const [typeConfigs, setTypeConfigs] = useState<TypeConfig[]>(() =>
-    QUESTION_TYPE_OPTIONS.map(o => ({ id: crypto.randomUUID(), type: o.key, difficulty: 'b2' as const, count: 1, enabled: true, isCustom: false }))
+    QUESTION_TYPE_OPTIONS.map(o => ({ id: generateId(), type: o.key, difficulty: 'b2' as const, count: 1, enabled: true, isCustom: false }))
   );
   const [bulkDifficulty, setBulkDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2' | ''>('');
   const [bulkCount, setBulkCount] = useState<number | ''>(1);
@@ -554,7 +555,7 @@ export default function MockExamQuestionsPage() {
 
   const updateConfig = (id: string, patch: Partial<TypeConfig>) => { setTypeConfigs(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c)); };
   const removeConfig = (id: string) => { setTypeConfigs(prev => prev.filter(c => c.id !== id)); };
-  const addCustomConfig = () => { setTypeConfigs(prev => [...prev, { id: crypto.randomUUID(), type: '', difficulty: 'b2', count: 1, enabled: true, isCustom: true }]); };
+  const addCustomConfig = () => { setTypeConfigs(prev => [...prev, { id: generateId(), type: '', difficulty: 'b2', count: 1, enabled: true, isCustom: true }]); };
   const applyBulk = () => {
     setTypeConfigs(prev => prev.map(c => {
       if (!c.enabled) return c;
