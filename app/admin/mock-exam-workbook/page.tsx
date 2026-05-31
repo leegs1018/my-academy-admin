@@ -809,7 +809,7 @@ export default function MockExamWorkbookPage() {
       {activeTab === 'history' && (
         <div className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
-            생성 이력은 생성일로부터 3일 후 자동 삭제됩니다.
+            생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
           </div>
 
           {historyError && (

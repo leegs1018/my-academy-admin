@@ -10,7 +10,7 @@ export async function POST() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     // pdf_history
     const { data: pdfOld } = await adminClient
