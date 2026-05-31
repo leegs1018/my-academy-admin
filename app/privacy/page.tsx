@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
 };
 
 export default function PrivacyPage() {
-  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<SiteSettings | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -30,20 +30,20 @@ export default function PrivacyPage() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
       const { data } = await supabase.from('site_settings').select('key, value');
-      if (data && data.length > 0) {
-        const map: Record<string, string> = {};
-        data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
-        setSettings({
-          company_name: map.company_name ?? DEFAULT_SETTINGS.company_name,
-          company_address: map.company_address ?? DEFAULT_SETTINGS.company_address,
-          privacy_manager_name: map.privacy_manager_name ?? DEFAULT_SETTINGS.privacy_manager_name,
-          privacy_manager_phone: map.privacy_manager_phone ?? DEFAULT_SETTINGS.privacy_manager_phone,
-          privacy_manager_email: map.privacy_manager_email ?? DEFAULT_SETTINGS.privacy_manager_email,
-        });
-      }
+      const map: Record<string, string> = {};
+      if (data) data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
+      setSettings({
+        company_name: map.company_name ?? DEFAULT_SETTINGS.company_name,
+        company_address: map.company_address ?? DEFAULT_SETTINGS.company_address,
+        privacy_manager_name: map.privacy_manager_name ?? DEFAULT_SETTINGS.privacy_manager_name,
+        privacy_manager_phone: map.privacy_manager_phone ?? DEFAULT_SETTINGS.privacy_manager_phone,
+        privacy_manager_email: map.privacy_manager_email ?? DEFAULT_SETTINGS.privacy_manager_email,
+      });
     };
     load();
   }, []);
+
+  if (!settings) return null;
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
