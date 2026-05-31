@@ -32,6 +32,12 @@ export default function LandingPage() {
         </Link>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/kiosk"
+            className="px-5 py-2.5 text-sm font-bold border-2 border-slate-200 text-slate-500 rounded-full hover:border-slate-400 hover:text-slate-700 transition-all"
+          >
+            출결 키오스크
+          </Link>
           {isLoggedIn ? (
             <Link
               href="/admin/pdf-editor"
