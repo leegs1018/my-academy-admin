@@ -26,8 +26,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '파일 경로가 없습니다.' }, { status: 400 });
     }
 
-    // 본인 파일만 접근 허용
-    if (!path.startsWith(`exam/${user.id}/`)) {
+    // 본인 파일만 접근 허용 (exam/{id}/ 또는 {id}/ 로 시작해야 함)
+    const validPrefixes = [`exam/${user.id}/`, `${user.id}/`];
+    if (!validPrefixes.some(prefix => path.startsWith(prefix))) {
       return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 });
     }
 

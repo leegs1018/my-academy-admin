@@ -661,12 +661,17 @@ export default function MockExamQuestionsPage() {
   useEffect(() => { if (activeTab === 'history' && session) fetchHistory(); }, [activeTab, session]);
 
   const downloadFromHistory = async (path: string, filename: string) => {
-    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(path, 3600);
-    if (!data?.signedUrl) return;
-    const a = document.createElement('a');
-    a.href = data.signedUrl; a.download = filename;
-    a.target = '_blank'; a.rel = 'noopener noreferrer';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    const { data: { session: sess } } = await supabase.auth.getSession();
+    if (!sess) { alert('로그인이 필요합니다.'); return; }
+    const res = await fetch('/api/get-signed-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.access_token}` },
+      body: JSON.stringify({ path }),
+    });
+    const json = await res.json() as { signedUrl?: string; error?: string };
+    if (!res.ok || !json.signedUrl) { alert('다운로드 링크 생성에 실패했습니다.'); return; }
+    const blob = await fetch(json.signedUrl).then(r => r.blob());
+    triggerDownload(blob, filename);
   };
 
   const deleteHistorySelected = async () => {
