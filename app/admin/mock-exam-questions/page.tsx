@@ -661,9 +661,11 @@ export default function MockExamQuestionsPage() {
   useEffect(() => { if (activeTab === 'history' && session) fetchHistory(); }, [activeTab, session]);
 
   const downloadFromHistory = async (path: string, filename: string) => {
-    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(path, 60);
-    if (!data?.signedUrl) { alert('다운로드 URL을 가져올 수 없습니다.'); return; }
-    const a = document.createElement('a'); a.href = data.signedUrl; a.download = filename;
+    const { data } = await supabase.storage.from('pdf-history').createSignedUrl(path, 3600);
+    if (!data?.signedUrl) return;
+    const a = document.createElement('a');
+    a.href = data.signedUrl; a.download = filename;
+    a.target = '_blank'; a.rel = 'noopener noreferrer';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
