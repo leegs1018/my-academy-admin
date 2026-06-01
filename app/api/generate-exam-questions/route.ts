@@ -1155,7 +1155,7 @@ ${selectedRules}
 이번 문제의 정답(answer) 번호는 반드시 ${targetAnswer}번이어야 한다. 다른 번호는 정답이 될 수 없다.` : ''}`;
 }
 
-const MULTI_STEP_TYPES = new Set(['vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary', 'sentence_order', 'grammar']);
+const MULTI_STEP_TYPES = new Set(['vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary', 'sentence_order']);
 
 function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number | undefined): string {
   if (questionType === 'grammar') {
@@ -1438,7 +1438,9 @@ export async function POST(request: Request) {
 
     const CIRCLES = ['①','②','③','④','⑤'];
 
-    const TYPE_MODEL_MAP: Record<string, string> = {};
+    const TYPE_MODEL_MAP: Record<string, string> = {
+      grammar: 'gpt-5.4',
+    };
     const DEFAULT_MODEL = 'gpt-5.1';
 
     const TYPE_TOKENS_MAP: Record<string, number> = {
