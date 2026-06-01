@@ -921,7 +921,8 @@ modified_passage는 반드시 아래 형식으로 작성:
 
 규칙:
 - [주어진 글]은 독립적으로 이해 가능한 원본 도입부.
-- (A)(B)(C)는 원본 문장을 묶어 만든 단락 (문장 순서 섞기 허용).
+- (A)(B)(C)는 원본 문장을 묶어 만든 단락. 단락 간 배치 순서를 섞는 것이지, 단락 내 문장 순서는 반드시 원본 지문 순서를 유지해야 한다.
+- Sentences within each segment (A)(B)(C) must appear in the EXACT same order as they appear in the original passage. Do NOT reorder sentences within a segment.
 - 각 단락은 지시어·연결어·대명사를 통해 앞 내용 없이는 이해 불가한 구조여야 함.
 
 [Critical Constraint]
@@ -1196,6 +1197,7 @@ Split the passage ONLY at valid discourse transition points.
 - Do NOT determine split points primarily by transition words
 - Prioritize: discourse progression > topic continuity > referential cohesion > semantic development
 - Transition markers alone are insufficient evidence for a split
+- CRITICAL: sentences within each segment must remain in the EXACT original passage order — do NOT reorder sentences inside A, B, or C
 
 STEP 3
 Generate A/B/C groupings:
