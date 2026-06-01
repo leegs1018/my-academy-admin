@@ -1201,13 +1201,13 @@ STEP 3
 Generate A/B/C groupings:
 - Intro: 1~2 sentences that can stand alone as an opening
 - A, B, C: remaining sentences grouped by logical role
-- Target answer must be choice ${targetAnswer} (1=(A)-(B)-(C), 2=(A)-(C)-(B), 3=(B)-(A)-(C), 4=(B)-(C)-(A), 5=(C)-(A)-(B))
-- Adjust groupings so that choice ${targetAnswer} is the ONLY correct order
+- Determine the ONLY correct order based on logical progression, referential cohesion, and discourse continuity
+- State which choice number (1~5) the correct order maps to: 1=(A)-(B)-(C), 2=(A)-(C)-(B), 3=(B)-(A)-(C), 4=(B)-(C)-(A), 5=(C)-(A)-(B)
 
 STEP 4
 Verify:
 - no duplicated sentence across intro/A/B/C
-- exactly one coherent order exists (choice ${targetAnswer})
+- exactly one coherent order exists
 - pronoun references resolve correctly within each segment
 - no segment can independently serve as the opening
 - alternative orders fail due to referential or logical breakdown
@@ -1450,7 +1450,8 @@ export async function POST(request: Request) {
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
       const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 4 : 4;
-      const targetAnswer = Math.floor(Math.random() * 5) + 1;
+      // sentence_order는 지문 자체가 논리 순서를 결정하므로 targetAnswer 강제 불가
+      const targetAnswer = questionType === 'sentence_order' ? undefined : Math.floor(Math.random() * 5) + 1;
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       const isMultiStep = MULTI_STEP_TYPES.has(questionType);
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1476,10 +1477,13 @@ export async function POST(request: Request) {
             }
 
             if (analysis) {
+              const step2Instruction = questionType === 'sentence_order'
+                ? `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 자연스러운 논리 순서를 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, undefined)}`
+                : `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 구조와 정답(${targetAnswer}번)을 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, targetAnswer)}`;
               messages = [
                 { role: 'user', content: analysisPrompt },
                 { role: 'assistant', content: analysis },
-                { role: 'user', content: `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 구조와 정답(${targetAnswer}번)을 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, targetAnswer)}` },
+                { role: 'user', content: step2Instruction },
               ];
             } else {
               messages = [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }];
@@ -1514,8 +1518,8 @@ export async function POST(request: Request) {
           return null;
         }
 
-        // targetAnswer 일치 검증 (모든 유형) — 불일치 시 항상 재시도, 소진 시 null
-        if (q.answer !== targetAnswer) {
+        // targetAnswer 일치 검증 — sentence_order는 지문 논리가 정답을 결정하므로 제외
+        if (targetAnswer !== undefined && q.answer !== targetAnswer) {
           console.warn(`[${questionType}] 정답 불일치: 요청=${targetAnswer} 실제=${q.answer} — 재시도 ${attempt + 1}`);
           if (attempt < MAX_RETRIES) continue;
           return null;
