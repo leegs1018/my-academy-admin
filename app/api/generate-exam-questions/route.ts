@@ -924,13 +924,29 @@ modified_passage는 반드시 아래 형식으로 작성:
 - (A)(B)(C)는 원본 문장을 묶어 만든 단락 (문장 순서 섞기 허용).
 - 각 단락은 지시어·연결어·대명사를 통해 앞 내용 없이는 이해 불가한 구조여야 함.
 
-⚠️ 절대 금지 — 문장 중복 [가장 중요한 규칙]:
-- 원본의 각 문장은 [주어진 글], (A), (B), (C) 중 정확히 하나에만 배치.
-- 같은 문장이 (A)에도 나오고 (C)에도 나오는 것 절대 금지.
-- (A)에 배치한 문장은 (B), (C)에 다시 써선 안 됨.
-- (C)는 새로운 문장만 포함해야 함 — (A)나 (B)의 내용을 반복·포함·요약하지 말 것.
-- (C) 작성 전 반드시 (A)와 (B)에 배치된 모든 문장을 확인하고, 그 문장을 (C)에 절대 포함하지 말 것.
-- 자기검증 필수: 생성 후 (C)의 각 문장이 (A) 또는 (B)에 이미 나온다면 즉시 (C)에서 제거할 것.
+[Critical Constraint]
+No sentence from the original passage may appear more than once across:
+- the introduction paragraph
+- A/B/C segments
+
+Each sentence must belong to exactly ONE location.
+If any sentence is duplicated, regenerate the entire question.
+
+The task is NOT to arbitrarily split the passage.
+The reordered segments must form a valid discourse progression.
+
+Each segment must:
+- continue logically from the previous segment
+- introduce new information naturally
+- preserve referential cohesion
+- avoid repeated topic introduction
+
+Exactly ONE order must satisfy:
+- logical progression
+- referential consistency
+- discourse continuity.
+
+Alternative plausible orders must be eliminated.
 
 ━━━━━━━━━━━━━━━━━━
 [choices — 고정 형식]
@@ -1000,6 +1016,12 @@ choices는 반드시 아래 5개를 그대로 사용:
 ❌ 키워드만 반복되는 단락
 ❌ 단락 길이 극단적 차이
 ❌ 선택지 하나만 압도적으로 자연스러운 경우
+
+Do NOT create segments that:
+- begin with unexplained pronouns
+- repeat already introduced concepts
+- contain duplicated transition signals
+- can logically follow multiple locations equally well
 
 ━━━━━━━━━━━━━━━━━━
 [정답 자기검증]
@@ -1143,24 +1165,41 @@ ${text}
   }
 
   if (questionType === 'sentence_order') {
-    return `수능 순서 배열 문제 출제 계획을 세워라.
+    return `You are a KICE-style CSAT English item writer. Analyze the passage below and plan a sentence ordering question.
 
-[지문]
+[Passage]
 ${text}
 
-수행 순서:
-1. 지문의 모든 문장을 S1, S2, S3... 으로 번호 매기고 전체 나열
-2. [주어진 글]에 적합한 문장(들) 선정 + 이유 (독립적으로 이해 가능한 도입부)
-3. 나머지 문장들을 (A)(B)(C) 단락으로 나누는 방안:
-   - 각 단락의 논리적 역할 (설명/예시/결론/역접 등)
-   - 단락 내 문장 목록 (S번호로 명시)
-   - 단락 간 연결 장치 (지시어/대명사/연결어 명시)
-4. 올바른 배열 순서 확정:
-   - 반드시 ${targetAnswer}번 선택지가 정답이 되도록 단락 구성 조정
-   - 1=(A)-(B)-(C), 2=(A)-(C)-(B), 3=(B)-(A)-(C), 4=(B)-(C)-(A), 5=(C)-(A)-(B)
-5. 오답 배열 2~3개가 부분 연결되지만 전체 구조에서 실패하는 이유
+STEP 1
+Identify:
+1. topic sentence
+2. supporting progression
+3. causal relations
+4. referential links (pronouns, demonstratives, definite articles)
+5. concluding statements
 
-분석 텍스트만 출력. JSON 금지.`;
+STEP 2
+Split the passage ONLY at valid discourse transition points.
+- List every sentence as S1, S2, S3...
+- Assign each sentence to exactly ONE location: intro / A / B / C
+- No sentence may appear in more than one location
+
+STEP 3
+Generate A/B/C groupings:
+- Intro: 1~2 sentences that can stand alone as an opening
+- A, B, C: remaining sentences grouped by logical role
+- Target answer must be choice ${targetAnswer} (1=(A)-(B)-(C), 2=(A)-(C)-(B), 3=(B)-(A)-(C), 4=(B)-(C)-(A), 5=(C)-(A)-(B))
+- Adjust groupings so that choice ${targetAnswer} is the ONLY correct order
+
+STEP 4
+Verify:
+- no duplicated sentence across intro/A/B/C
+- exactly one coherent order exists (choice ${targetAnswer})
+- pronoun references resolve correctly within each segment
+- no segment can independently serve as the opening
+- alternative orders fail due to referential or logical breakdown
+
+Output analysis text only. No JSON.`;
   }
 
   if (questionType === 'phrase_meaning') {
