@@ -1156,7 +1156,7 @@ ${selectedRules}
 
 const MULTI_STEP_TYPES = new Set(['vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary', 'sentence_order']);
 
-function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number): string {
+function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number | undefined): string {
   if (questionType === 'grammar') {
     return `수능 어법 문제 출제 계획을 세워라.
 
