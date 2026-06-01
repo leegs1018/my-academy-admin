@@ -1023,6 +1023,16 @@ Do NOT create segments that:
 - contain duplicated transition signals
 - can logically follow multiple locations equally well
 
+Do NOT determine order primarily by transition words.
+
+Prioritize:
+1. discourse progression
+2. topic continuity
+3. referential cohesion
+4. semantic development
+
+Transition markers alone are insufficient evidence.
+
 ━━━━━━━━━━━━━━━━━━
 [정답 자기검증]
 ━━━━━━━━━━━━━━━━━━
@@ -1183,6 +1193,9 @@ Split the passage ONLY at valid discourse transition points.
 - List every sentence as S1, S2, S3...
 - Assign each sentence to exactly ONE location: intro / A / B / C
 - No sentence may appear in more than one location
+- Do NOT determine split points primarily by transition words
+- Prioritize: discourse progression > topic continuity > referential cohesion > semantic development
+- Transition markers alone are insufficient evidence for a split
 
 STEP 3
 Generate A/B/C groupings:
