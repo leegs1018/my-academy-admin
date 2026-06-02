@@ -118,9 +118,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isSuperAdminPage = pathname.startsWith('/superadmin');
   const showLayout = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage && !isSuperAdminPage;
 
+  const naverVerification = <meta name="naver-site-verification" content="bf9c306ad8ce9920ad4d151d86ff1f54918f9977" />;
+
   if (!showLayout) {
     return (
       <html lang="ko">
+        <head>{naverVerification}</head>
         <body className={isSuperAdminPage ? 'bg-slate-950' : ''}>{children}</body>
       </html>
     );
@@ -128,6 +131,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="ko">
+      <head>{naverVerification}</head>
       <body className="bg-gray-50 dark:bg-gray-900">
         <div className="flex h-screen overflow-hidden">
 
