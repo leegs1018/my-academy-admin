@@ -37,7 +37,7 @@ export default function SMSPage() {
 
   // 수신자 선택
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [recipientType, setRecipientType] = useState<'student' | 'parent'>('parent');
+  const [recipientType, setRecipientType] = useState<'student' | 'parent' | 'both'>('parent');
 
   // 메시지 작성
   const [message, setMessage] = useState('');
@@ -147,10 +147,14 @@ export default function SMSPage() {
   // ── 선택된 학생 + 번호 계산 ──────────────────────
   const selectedStudents = students.filter(s => selectedIds.has(s.id));
   const validRecipients = selectedStudents.filter(s =>
-    recipientType === 'student' ? !!s.student_phone : !!s.parent_phone
+    recipientType === 'student' ? !!s.student_phone :
+    recipientType === 'parent'  ? !!s.parent_phone :
+    !!(s.student_phone || s.parent_phone)
   );
   const noPhoneStudents = selectedStudents.filter(s =>
-    recipientType === 'student' ? !s.student_phone : !s.parent_phone
+    recipientType === 'student' ? !s.student_phone :
+    recipientType === 'parent'  ? !s.parent_phone :
+    !s.student_phone && !s.parent_phone
   );
 
   // ── 필터 초기화 ─────────────────────────────────
@@ -199,11 +203,15 @@ export default function SMSPage() {
     setIsSending(true);
     setShowConfirmModal(false);
 
-    const recipients = validRecipients.map(s => ({
-      student_id: s.id,
-      name: s.name,
-      phone: (recipientType === 'student' ? s.student_phone : s.parent_phone) as string,
-    }));
+    const recipients = validRecipients.flatMap(s => {
+      if (recipientType === 'both') {
+        const entries = [];
+        if (s.parent_phone) entries.push({ student_id: s.id, name: s.name, phone: s.parent_phone as string });
+        if (s.student_phone) entries.push({ student_id: s.id, name: s.name, phone: s.student_phone as string });
+        return entries;
+      }
+      return [{ student_id: s.id, name: s.name, phone: (recipientType === 'student' ? s.student_phone : s.parent_phone) as string }];
+    });
 
     try {
       const res = await fetch('/api/sms/send', {
@@ -417,14 +425,14 @@ export default function SMSPage() {
                       <th className="py-3 px-2 text-left text-xs font-black text-gray-400 hidden sm:table-cell">학교</th>
                       <th className="py-3 px-2 text-left text-xs font-black text-gray-400">클래스</th>
                       <th className="py-3 px-2 text-left text-xs font-black text-gray-400">
-                        {recipientType === 'student' ? '학생번호' : '보호자번호'}
+                        {recipientType === 'student' ? '학생번호' : recipientType === 'parent' ? '보호자번호' : '보호자+학생번호'}
                       </th>
                       <th className="py-3 px-2 text-left text-xs font-black text-gray-400 hidden sm:table-cell">상태</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredStudents.map(s => {
-                      const phone = recipientType === 'student' ? s.student_phone : s.parent_phone;
+                      const phone = recipientType === 'student' ? s.student_phone : recipientType === 'parent' ? s.parent_phone : (s.parent_phone || s.student_phone);
                       const isSelected = selectedIds.has(s.id);
                       const hasPhone = !!phone;
                       return (
@@ -479,7 +487,7 @@ export default function SMSPage() {
 
             {/* 수신번호 선택 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
-              <h3 className="text-sm font-black text-gray-600 mb-3">수신 번호 유형</h3>
+              <h3 className="text-sm font-black text-gray-600 mb-3">발송 대상</h3>
               <div className="flex gap-3">
                 <label className={`flex-1 flex items-center gap-2 p-3 rounded-2xl border-2 cursor-pointer transition-all ${recipientType === 'parent' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
                   <input
@@ -505,6 +513,19 @@ export default function SMSPage() {
                   <div>
                     <p className="text-xs font-black text-gray-700">학생 번호</p>
                     <p className="text-[10px] text-gray-400">학생에게 직접 발송</p>
+                  </div>
+                </label>
+                <label className={`flex-1 flex items-center gap-2 p-3 rounded-2xl border-2 cursor-pointer transition-all ${recipientType === 'both' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input
+                    type="radio"
+                    value="both"
+                    checked={recipientType === 'both'}
+                    onChange={() => setRecipientType('both')}
+                    className="accent-indigo-600"
+                  />
+                  <div>
+                    <p className="text-xs font-black text-gray-700">보호자 번호+학생 번호</p>
+                    <p className="text-[10px] text-gray-400">두 번호 모두 발송</p>
                   </div>
                 </label>
               </div>
@@ -780,13 +801,15 @@ export default function SMSPage() {
 
               {/* 수신자 요약 */}
               <div>
-                <p className="text-xs font-black text-gray-400 mb-2">수신자 ({validRecipients.length}명 · {recipientType === 'parent' ? '보호자' : '학생'} 번호)</p>
+                <p className="text-xs font-black text-gray-400 mb-2">수신자 ({validRecipients.length}명 · {recipientType === 'parent' ? '보호자' : recipientType === 'student' ? '학생' : '보호자+학생'} 번호)</p>
                 <div className="space-y-1 max-h-48 overflow-y-auto">
                   {validRecipients.map(s => (
                     <div key={s.id} className="flex items-center justify-between py-1.5 px-3 bg-indigo-50 rounded-xl">
                       <span className="text-sm font-black text-gray-700">{s.name}</span>
                       <span className="text-xs text-gray-500 font-bold">
-                        {recipientType === 'student' ? s.student_phone : s.parent_phone}
+                        {recipientType === 'student' ? s.student_phone :
+                         recipientType === 'parent'  ? s.parent_phone :
+                         [s.parent_phone, s.student_phone].filter(Boolean).join(' / ')}
                       </span>
                     </div>
                   ))}

@@ -880,9 +880,8 @@ export default function GradeInputPage() {
               <h3 className="text-sm font-black text-gray-600 mb-3">발송 대상</h3>
               <div className="space-y-2">
                 {([
-                  { value: 'parent', label: '학부모만', sub: '보호자 번호로 발송' },
-                  { value: 'student', label: '학생만', sub: '학생 번호로 발송' },
-                  { value: 'both', label: '학부모 + 학생 둘다', sub: '두 번호 모두 발송' },
+                  { value: 'parent', label: '보호자 번호', sub: '보호자 번호로 발송' },
+                  { value: 'student', label: '학생 번호', sub: '학생 번호로 발송' },
                 ] as const).map(opt => (
                   <label key={opt.value}
                     className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${sendRecipientType === opt.value ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100 hover:border-gray-200'}`}>
