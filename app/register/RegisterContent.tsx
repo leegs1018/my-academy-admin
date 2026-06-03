@@ -111,8 +111,8 @@ export default function RegisterContent() {
           <div className="inline-flex w-12 h-12 bg-slate-900 rounded-2xl items-center justify-center rotate-3 mb-4 shadow-lg shadow-slate-200">
             <span className="text-yellow-400 font-black text-2xl italic">C</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tighter">클래스허브 시작하기</h1>
-          <p className="text-slate-400 font-medium mt-2">원장님 전용 관리 솔루션 계정 생성</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tighter">CON EDU 시작하기</h1>
+          <p className="text-slate-400 font-medium mt-2">AI 영어 문제 생성 솔루션 계정 만들기</p>
         </div>
 
         <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-4">
