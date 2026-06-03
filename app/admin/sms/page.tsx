@@ -334,7 +334,7 @@ export default function SMSPage() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
           {/* 좌측: 수신자 선택 (3/5) */}
-          <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+          <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 250px)' }}>
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-black text-gray-700">수신자 선택</h2>
               <p className="text-xs text-gray-400 mt-0.5">총 {students.length}명 · 필터 결과 {filteredStudents.length}명 · 선택됨 {selectedIds.size}명</p>
