@@ -488,46 +488,22 @@ export default function SMSPage() {
             {/* 수신번호 선택 */}
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
               <h3 className="text-sm font-black text-gray-600 mb-3">발송 대상</h3>
-              <div className="flex gap-3">
-                <label className={`flex-1 flex items-center gap-2 p-3 rounded-2xl border-2 cursor-pointer transition-all ${recipientType === 'parent' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input
-                    type="radio"
-                    value="parent"
-                    checked={recipientType === 'parent'}
-                    onChange={() => setRecipientType('parent')}
-                    className="accent-indigo-600"
-                  />
-                  <div>
-                    <p className="text-xs font-black text-gray-700">보호자 번호</p>
-                    <p className="text-[10px] text-gray-400">학부모에게 발송</p>
-                  </div>
-                </label>
-                <label className={`flex-1 flex items-center gap-2 p-3 rounded-2xl border-2 cursor-pointer transition-all ${recipientType === 'student' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input
-                    type="radio"
-                    value="student"
-                    checked={recipientType === 'student'}
-                    onChange={() => setRecipientType('student')}
-                    className="accent-indigo-600"
-                  />
-                  <div>
-                    <p className="text-xs font-black text-gray-700">학생 번호</p>
-                    <p className="text-[10px] text-gray-400">학생에게 직접 발송</p>
-                  </div>
-                </label>
-                <label className={`flex-1 flex items-center gap-2 p-3 rounded-2xl border-2 cursor-pointer transition-all ${recipientType === 'both' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input
-                    type="radio"
-                    value="both"
-                    checked={recipientType === 'both'}
-                    onChange={() => setRecipientType('both')}
-                    className="accent-indigo-600"
-                  />
-                  <div>
-                    <p className="text-xs font-black text-gray-700">보호자 번호+학생 번호</p>
-                    <p className="text-[10px] text-gray-400">두 번호 모두 발송</p>
-                  </div>
-                </label>
+              <div className="space-y-2">
+                {([
+                  { value: 'parent',  label: '보호자 번호',         sub: '학부모에게 발송' },
+                  { value: 'student', label: '학생 번호',            sub: '학생에게 직접 발송' },
+                  { value: 'both',    label: '보호자 번호+학생 번호', sub: '두 번호 모두 발송' },
+                ] as const).map(opt => (
+                  <label key={opt.value}
+                    className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${recipientType === opt.value ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <input type="radio" value={opt.value} checked={recipientType === opt.value}
+                      onChange={() => setRecipientType(opt.value)} className="accent-indigo-600" />
+                    <div>
+                      <p className="text-xs font-black text-gray-700">{opt.label}</p>
+                      <p className="text-[10px] text-gray-400">{opt.sub}</p>
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
 
