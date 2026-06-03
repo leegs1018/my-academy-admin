@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     description: '영어 학원 원장님을 위한 AI 문제 자동 생성 솔루션.',
   },
   other: {
-    'naver-site-verification': 'bf9c306ad8ce9920ad4d151d86ff1f54918f9977',
+    'naver-site-verification': '327e345b04210ee776b92c4dedf512ffa1afb00b',
   },
 };
 
