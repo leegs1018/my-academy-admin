@@ -334,7 +334,7 @@ export default function SMSPage() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
           {/* 좌측: 수신자 선택 (3/5) */}
-          <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="text-lg font-black text-gray-700">수신자 선택</h2>
               <p className="text-xs text-gray-400 mt-0.5">총 {students.length}명 · 필터 결과 {filteredStudents.length}명 · 선택됨 {selectedIds.size}명</p>
@@ -410,7 +410,7 @@ export default function SMSPage() {
             </div>
 
             {/* 학생 목록 */}
-            <div className="overflow-y-auto max-h-[420px]">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               {filteredStudents.length === 0 ? (
                 <div className="py-16 text-center text-gray-400 font-bold">
                   <p className="text-3xl mb-2">🔍</p>
