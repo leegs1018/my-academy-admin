@@ -111,7 +111,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const isRegisterPage = pathname === '/register';
   const isKioskPage = pathname === '/kiosk';
   const isSuperAdminPage = pathname.startsWith('/superadmin');
-  const showLayout = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage && !isSuperAdminPage;
+  const isPublicPage = pathname === '/guide' || pathname === '/support' || pathname === '/privacy' || pathname === '/terms';
+  const showLayout = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage && !isSuperAdminPage && !isPublicPage;
 
   if (!showLayout) {
     return <>{children}</>;
