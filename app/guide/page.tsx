@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: '서비스 가이드',
+  description: 'CON EDU AI 영어 문제 생성 서비스 이용 가이드. 지문 분석부터 실전·모의고사 변형 문제 생성까지 단계별로 안내합니다.',
+};
 
 const sections = [
   {

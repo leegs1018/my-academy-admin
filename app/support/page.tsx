@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: '고객센터',
+  description: 'CON EDU 고객센터. 서비스 이용 문의 및 기술 지원을 받으세요.',
+};
 
 export default function SupportPage() {
   return (
