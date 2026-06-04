@@ -1155,7 +1155,7 @@ ${selectedRules}
 이번 문제의 정답(answer) 번호는 반드시 ${targetAnswer}번이어야 한다. 다른 번호는 정답이 될 수 없다.` : ''}`;
 }
 
-const MULTI_STEP_TYPES = new Set(['vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary', 'sentence_order']);
+const MULTI_STEP_TYPES = new Set(['grammar', 'vocab_paraphrase', 'phrase_meaning', 'vocab_blank', 'fill_blank', 'summary', 'sentence_order']);
 
 function buildAnalysisPrompt(text: string, questionType: string, targetAnswer: number | undefined): string {
   if (questionType === 'grammar') {
@@ -1479,8 +1479,8 @@ export async function POST(request: Request) {
             }
 
             if (analysis) {
-              const step2Instruction = questionType === 'sentence_order'
-                ? `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 자연스러운 논리 순서를 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, undefined)}`
+              const step2Instruction = (questionType === 'sentence_order' || questionType === 'grammar')
+                ? `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 오류 위치와 구조를 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, undefined)}`
                 : `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 구조와 정답(${targetAnswer}번)을 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, targetAnswer)}`;
               messages = [
                 { role: 'user', content: analysisPrompt },
