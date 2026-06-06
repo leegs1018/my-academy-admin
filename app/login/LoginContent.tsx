@@ -138,12 +138,9 @@ export default function LoginContent() {
         <div className="flex justify-between mt-10 text-sm font-bold text-slate-400 px-2">
           <Link href="/register" className="hover:text-slate-900 transition-colors">계정 만들기</Link>
           <span className="text-slate-200">|</span>
-          <button
-            onClick={() => alert('등록된 휴대폰 번호로 임시 비밀번호를 발송해 드립니다. (준비 중)')}
-            className="hover:text-slate-900 transition-colors"
-          >
-            비밀번호 찾기
-          </button>
+          <Link href="/find-account" className="hover:text-slate-900 transition-colors">아이디 찾기</Link>
+          <span className="text-slate-200">|</span>
+          <Link href="/find-account" className="hover:text-slate-900 transition-colors">비밀번호 찾기</Link>
         </div>
       </div>
     </div>
