@@ -15,12 +15,21 @@ export default function ResetPasswordPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // PKCE flow: code param in URL
     const urlParams = new URLSearchParams(window.location.search);
+
+    // URL에 에러 파라미터가 있는 경우
+    const errorCode = urlParams.get('error_code');
+    if (errorCode) {
+      setError('비밀번호 재설정 링크가 만료되었습니다. 다시 요청해주세요.');
+      return;
+    }
+
+    // PKCE flow: code param in URL
     const code = urlParams.get('code');
     if (code) {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         if (!error) setReady(true);
+        else setError('링크가 유효하지 않습니다. 다시 요청해주세요.');
       });
       return;
     }
@@ -83,12 +92,18 @@ export default function ResetPasswordPage() {
           </div>
         ) : !ready ? (
           <div className="text-center space-y-4">
-            <div className="text-5xl mb-2 animate-pulse">🔗</div>
-            <p className="font-black text-slate-900">링크 확인 중...</p>
-            <p className="text-sm font-medium text-slate-400 leading-relaxed">
-              이메일의 비밀번호 재설정 링크를 클릭하셨나요?<br />
-              링크가 만료되었을 수 있습니다.
-            </p>
+            {error ? (
+              <>
+                <div className="text-5xl mb-2">⚠️</div>
+                <p className="font-black text-slate-900">링크가 만료되었습니다</p>
+                <p className="text-sm font-medium text-slate-400 leading-relaxed">{error}</p>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl mb-2 animate-pulse">🔗</div>
+                <p className="font-black text-slate-900">링크 확인 중...</p>
+              </>
+            )}
             <Link href="/find-account" className="inline-block mt-4 text-sm font-black text-slate-500 hover:text-slate-900 underline underline-offset-4 transition-colors">
               다시 요청하기
             </Link>
