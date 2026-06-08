@@ -79,7 +79,7 @@ export default function ResetPasswordPage() {
       setError('비밀번호 변경 중 오류가 발생했습니다: ' + updateError.message);
     } else {
       setDone(true);
-      setTimeout(() => router.replace('/login'), 3000);
+      setTimeout(() => router.replace('/admin'), 2000);
     }
   };
 
@@ -99,7 +99,7 @@ export default function ResetPasswordPage() {
           <div className="text-center space-y-4">
             <div className="text-5xl mb-2">✅</div>
             <p className="font-black text-slate-900">비밀번호가 변경되었습니다</p>
-            <p className="text-sm font-medium text-slate-400">잠시 후 로그인 페이지로 이동합니다...</p>
+            <p className="text-sm font-medium text-slate-400">잠시 후 메인 화면으로 이동합니다...</p>
           </div>
         ) : !ready ? (
           <div className="text-center space-y-4">
