@@ -20,6 +20,7 @@ interface GeneratedMaterials {
   one_sentence_summaries: { english: string; korean: string }[];
   vocabulary_table: VocabRow[];
 }
+interface WorkbookResult { number: string; passageText: string; materials: GeneratedMaterials; }
 interface HistoryItem {
   id: string; created_at: string;
   year: number; grade: string; institution: string; question_number: number;
@@ -42,11 +43,11 @@ function triggerDownload(blob: Blob, filename: string) {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
-  const page1El = document.getElementById('mw-pdf-page-1');
-  const page2El = document.getElementById('mw-pdf-page-2');
+async function generatePdfBlob(hideAnswerArea = false, suffix = ''): Promise<Blob | null> {
+  const page1El = document.getElementById(`mw-pdf-page-1${suffix}`);
+  const page2El = document.getElementById(`mw-pdf-page-2${suffix}`);
   if (!page1El || !page2El) return null;
-  const noPrintEls = document.querySelectorAll('#mw-print-area .no-print');
+  const noPrintEls = document.querySelectorAll(`#mw-print-area${suffix} .no-print`);
   noPrintEls.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
   const answerAreaEls = hideAnswerArea ? document.querySelectorAll('.mw-answer-area') : null;
   answerAreaEls?.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
@@ -146,7 +147,6 @@ function SectionCard({ number, title, color, onCopy, copied, children, theme = '
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export default function MockExamWorkbookPage() {
-  // 탭
   const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
 
   // 캐스케이드 셀렉트
@@ -157,27 +157,37 @@ export default function MockExamWorkbookPage() {
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
-  const [selectedNumber, setSelectedNumber] = useState('');
-  const [passageText, setPassageText] = useState('');
-  const [passageLoading, setPassageLoading] = useState(false);
+
+  // 다중 지문 선택
+  const [selectedNumbers, setSelectedNumbers] = useState<string[]>([]);
+  const [passageMap, setPassageMap] = useState<Record<string, string>>({});
+  const [loadingNumbers, setLoadingNumbers] = useState<Set<string>>(new Set());
 
   // 난이도 + 생성
   const [difficulty, setDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
-  const [result, setResult] = useState<GeneratedMaterials | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showAnswerKey, setShowAnswerKey] = useState(false);
+
+  // 결과 (다중 워크북)
+  const [results, setResults] = useState<WorkbookResult[]>([]);
+  const [activeResultTab, setActiveResultTab] = useState(0);
+
+  // 뷰 상태 (탭별)
+  const [showAnswerKeyMap, setShowAnswerKeyMap] = useState<Record<number, boolean>>({});
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
+  const [editModeIdx, setEditModeIdx] = useState<number | null>(null);
+  const [editedResults, setEditedResults] = useState<Record<number, GeneratedMaterials>>({});
+  const [editSaveStatusMap, setEditSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
+
+  // PDF
   const [pdfTitle, setPdfTitle] = useState('');
   const [pdfLoading, setPdfLoading] = useState<false | '문제' | '답안'>(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
-  const [saveErrorMsg, setSaveErrorMsg] = useState('');
-  const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
   const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
-  const [editMode, setEditMode] = useState(false);
-  const [editedResult, setEditedResult] = useState<GeneratedMaterials | null>(null);
-  const [editSaveStatus, setEditSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+
+  // 저장
+  const [saveStatusMap, setSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
+  const [savedSet, setSavedSet] = useState<Set<number>>(new Set());
 
   // 이력
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
@@ -188,6 +198,7 @@ export default function MockExamWorkbookPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [session, setSession] = useState<{ access_token: string; user: { id: string } } | null>(null);
+  const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => { if (s) setSession(s as typeof session); });
@@ -210,14 +221,14 @@ export default function MockExamWorkbookPage() {
 
   useEffect(() => {
     if (!selectedYear) return;
-    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumber(''); setPassageText('');
+    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear)).order('grade', { ascending: true })
       .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, [selectedYear]);
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade) return;
-    setSelectedInstitution(''); setSelectedNumber(''); setPassageText('');
+    setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade)
       .then(({ data }) => {
         const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
@@ -232,25 +243,39 @@ export default function MockExamWorkbookPage() {
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
-    setSelectedNumber(''); setPassageText('');
+    setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('question_number')
       .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
       .order('question_number')
       .then(({ data }) => { setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
   }, [selectedYear, selectedGrade, selectedInstitution]);
 
+  // 탭 전환 시 자동 저장
   useEffect(() => {
-    if (!selectedNumber || !selectedYear || !selectedGrade || !selectedInstitution) { setPassageText(''); return; }
-    setPassageLoading(true);
-    supabase.from('mock_exam_passages').select('passage_text')
-      .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
-      .eq('question_number', parseInt(selectedNumber)).single()
-      .then(({ data }) => {
-        const text = (data?.passage_text ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-        setPassageText(text);
-        setPassageLoading(false);
-      });
-  }, [selectedNumber, selectedYear, selectedGrade, selectedInstitution]);
+    if (!results[activeResultTab] || savedSet.has(activeResultTab) || !session) return;
+    const timer = setTimeout(() => {
+      autoSave(activeResultTab);
+    }, 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeResultTab, results]);
+
+  // 다중 지문 토글
+  const toggleNumber = async (num: string) => {
+    if (selectedNumbers.includes(num)) {
+      setSelectedNumbers(prev => prev.filter(n => n !== num));
+      setPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    } else {
+      setSelectedNumbers(prev => [...prev, num]);
+      setLoadingNumbers(prev => new Set([...prev, num]));
+      const { data } = await supabase.from('mock_exam_passages').select('passage_text')
+        .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
+        .eq('question_number', parseInt(num)).single();
+      const text = (data?.passage_text ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+      setPassageMap(prev => ({ ...prev, [num]: text }));
+      setLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+    }
+  };
 
   // 이력 조회
   const fetchHistory = useCallback(async (date = searchDate, query = searchQuery) => {
@@ -271,93 +296,20 @@ export default function MockExamWorkbookPage() {
 
   useEffect(() => { if (activeTab === 'history' && session) fetchHistory(); }, [activeTab, session]);
 
-  // 자동 저장
-  const autoSave = useCallback(async (generated: GeneratedMaterials, diff: string, year: number, grade: string, institution: string, questionNumber: number) => {
-    if (!session) return;
-    setSaveStatus('saving');
+  // 자동 저장 (탭별)
+  const autoSave = useCallback(async (idx: number) => {
+    if (!session || savedSet.has(idx)) return;
+    const r = results[idx];
+    if (!r) return;
+    setSaveStatusMap(prev => ({ ...prev, [idx]: 'saving' }));
+    setSavedSet(prev => new Set([...prev, idx]));
     try {
-      const [pdfBlob, answerBlob] = await Promise.all([generatePdfBlob(true), buildAnswerPdfBlob(generated, pdfTitle.trim())]);
-      if (!pdfBlob) { setSaveStatus('error'); setSaveErrorMsg('PDF 요소를 찾을 수 없음'); return; }
-      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
-      const res = await fetch('/api/save-mock-workbook-history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ pdfBase64, answerPdfBase64, year, grade, institution, questionNumber, difficulty: diff }),
-      });
-      const json = await res.json() as { success?: boolean; error?: string };
-      setSaveStatus(res.ok && json.success ? 'done' : 'error');
-      if (!res.ok) setSaveErrorMsg(json.error || '저장 실패');
-    } catch (e) { setSaveStatus('error'); setSaveErrorMsg(e instanceof Error ? e.message : '오류'); }
-  }, [session, pdfTitle]);
-
-  // 생성
-  const handleGenerate = async () => {
-    if (!passageText.trim() || loading || !session) return;
-    setLoading(true); setError(null); setResult(null); setShowAnswerKey(false); setSaveStatus('idle');
-    setEditMode(false); setEditedResult(null); setEditSaveStatus('idle');
-    const msgs = ['AI가 지문을 읽고 있어요... 🤖', '문제를 생성하고 있어요... ✍️', '어휘 표를 만들고 있어요... 📚', '거의 완성됐어요! 잠시만요... ✨'];
-    let idx = 0; setLoadingMsg(msgs[0]);
-    const interval = setInterval(() => { idx = (idx + 1) % msgs.length; setLoadingMsg(msgs[idx]); }, 8000);
-    try {
-      const res = await fetch('/api/process-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: passageText, difficulty, academy_id: session.user.id }),
-      });
-      const rawText = await res.text();
-      const json = JSON.parse(rawText) as { data?: GeneratedMaterials; error?: string };
-      if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
-      const generated = json.data as GeneratedMaterials;
-      setResult(generated);
-      setTimeout(() => autoSave(generated, difficulty, parseInt(selectedYear), selectedGrade, selectedInstitution, parseInt(selectedNumber)), 800);
-    } catch (e) { setError(e instanceof Error ? e.message : '오류가 발생했습니다.'); }
-    finally { clearInterval(interval); setLoading(false); }
-  };
-
-  const copy = async (text: string, id: string) => {
-    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
-    setCopiedSection(id); setTimeout(() => setCopiedSection(null), 2000);
-  };
-
-  const handleDownloadProblem = async () => {
-    setPdfLoading('문제');
-    const wasEditing = editMode;
-    try {
-      if (wasEditing) { setEditMode(false); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
-      const blob = await generatePdfBlob(true);
-      if (wasEditing) setEditMode(true);
-      if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
-      triggerDownload(blob, `${pdfTitle.trim() || '모의고사워크북'}_문제.pdf`);
-    } catch (e) { if (wasEditing) setEditMode(true); alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
-    finally { setPdfLoading(false); }
-  };
-
-  const handleDownloadAnswer = async () => {
-    const d = editedResult ?? result;
-    if (!d) return;
-    setPdfLoading('답안');
-    try {
-      const blob = await buildAnswerPdfBlob(d, pdfTitle.trim());
-      triggerDownload(blob, `${pdfTitle.trim() || '모의고사워크북'}_답안해설.pdf`);
-    } catch (e) { alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
-    finally { setPdfLoading(false); }
-  };
-
-  const handleEditSave = async () => {
-    if (!editedResult || !session) return;
-    setEditSaveStatus('saving');
-    const wasEditing = editMode;
-    try {
-      if (wasEditing) { setEditMode(false); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
-      const [pdfBlob, answerBlob] = await Promise.all([generatePdfBlob(true), buildAnswerPdfBlob(editedResult, pdfTitle.trim())]);
-      if (wasEditing) setEditMode(true);
-      if (!pdfBlob) { setEditSaveStatus('error'); return; }
+      const suffix = `-${idx}`;
+      const [pdfBlob, answerBlob] = await Promise.all([
+        generatePdfBlob(true, suffix),
+        buildAnswerPdfBlob(r.materials, pdfTitle.trim()),
+      ]);
+      if (!pdfBlob) { setSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
       const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
@@ -371,12 +323,106 @@ export default function MockExamWorkbookPage() {
         body: JSON.stringify({
           pdfBase64, answerPdfBase64,
           year: parseInt(selectedYear), grade: selectedGrade, institution: selectedInstitution,
-          questionNumber: parseInt(selectedNumber), difficulty,
+          questionNumber: parseInt(r.number), difficulty,
+        }),
+      });
+      const json = await res.json() as { success?: boolean; error?: string };
+      setSaveStatusMap(prev => ({ ...prev, [idx]: res.ok && json.success ? 'done' : 'error' }));
+    } catch { setSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); }
+  }, [session, results, savedSet, pdfTitle, selectedYear, selectedGrade, selectedInstitution, difficulty]);
+
+  // 생성
+  const handleGenerate = async () => {
+    const sortedNums = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+    if (sortedNums.length === 0 || loading || !session) return;
+    setLoading(true); setError(null); setResults([]); setActiveResultTab(0);
+    setSaveStatusMap({}); setSavedSet(new Set()); setEditModeIdx(null); setEditedResults({});
+
+    try {
+      for (let i = 0; i < sortedNums.length; i++) {
+        const num = sortedNums[i];
+        const text = passageMap[num];
+        if (!text) continue;
+        setLoadingMsg(`${num}번 지문 워크북 생성 중... (${i + 1}/${sortedNums.length})`);
+        const res = await fetch('/api/process-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, difficulty, academy_id: session.user.id }),
+        });
+        const rawText = await res.text();
+        const json = JSON.parse(rawText) as { data?: GeneratedMaterials; error?: string };
+        if (!res.ok) throw new Error(json.error || `${num}번 생성 오류`);
+        setResults(prev => [...prev, { number: num, passageText: text, materials: json.data as GeneratedMaterials }]);
+        setActiveResultTab(i);
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : '오류가 발생했습니다.'); }
+    finally { setLoading(false); }
+  };
+
+  const copy = async (text: string, id: string) => {
+    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    setCopiedSection(id); setTimeout(() => setCopiedSection(null), 2000);
+  };
+
+  const handleDownloadProblem = async () => {
+    setPdfLoading('문제');
+    const isEditing = editModeIdx === activeResultTab;
+    try {
+      if (isEditing) { setEditModeIdx(null); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
+      const blob = await generatePdfBlob(true, `-${activeResultTab}`);
+      if (isEditing) setEditModeIdx(activeResultTab);
+      if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
+      const r = results[activeResultTab];
+      triggerDownload(blob, `${pdfTitle.trim() || `${r?.number}번_워크북`}_문제.pdf`);
+    } catch (e) {
+      if (isEditing) setEditModeIdx(activeResultTab);
+      alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
+    }
+    finally { setPdfLoading(false); }
+  };
+
+  const handleDownloadAnswer = async () => {
+    const r = results[activeResultTab];
+    if (!r) return;
+    const d = editedResults[activeResultTab] ?? r.materials;
+    setPdfLoading('답안');
+    try {
+      const blob = await buildAnswerPdfBlob(d, pdfTitle.trim() || `${r.number}번 워크북`);
+      triggerDownload(blob, `${pdfTitle.trim() || `${r.number}번_워크북`}_답안해설.pdf`);
+    } catch (e) { alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
+    finally { setPdfLoading(false); }
+  };
+
+  const handleEditSave = async (idx: number) => {
+    const edited = editedResults[idx];
+    const r = results[idx];
+    if (!edited || !r || !session) return;
+    setEditSaveStatusMap(prev => ({ ...prev, [idx]: 'saving' }));
+    const isEditing = editModeIdx === idx;
+    try {
+      if (isEditing) { setEditModeIdx(null); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
+      const [pdfBlob, answerBlob] = await Promise.all([generatePdfBlob(true, `-${idx}`), buildAnswerPdfBlob(edited, pdfTitle.trim())]);
+      if (isEditing) setEditModeIdx(idx);
+      if (!pdfBlob) { setEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
+      const res = await fetch('/api/save-mock-workbook-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          pdfBase64, answerPdfBase64,
+          year: parseInt(selectedYear), grade: selectedGrade, institution: selectedInstitution,
+          questionNumber: parseInt(r.number), difficulty,
         }),
       });
       const json = await res.json() as { success?: boolean };
-      setEditSaveStatus(res.ok && json.success ? 'done' : 'error');
-    } catch { if (wasEditing) setEditMode(true); setEditSaveStatus('error'); }
+      setEditSaveStatusMap(prev => ({ ...prev, [idx]: res.ok && json.success ? 'done' : 'error' }));
+    } catch { if (isEditing) setEditModeIdx(idx); setEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); }
   };
 
   const downloadFromHistory = async (path: string, filename: string) => {
@@ -406,7 +452,12 @@ export default function MockExamWorkbookPage() {
     } finally { setBulkDeleting(false); }
   };
 
-  const canGenerate = !!passageText.trim() && !loading && !!session;
+  const sortedSelectedNumbers = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+  const allPassagesReady = selectedNumbers.length > 0 && selectedNumbers.every(n => passageMap[n]) && loadingNumbers.size === 0;
+  const canGenerate = allPassagesReady && !loading && !!session;
+
+  const activeResult = results[activeResultTab];
+  const activeD = (editModeIdx === activeResultTab ? editedResults[activeResultTab] : null) ?? activeResult?.materials;
 
   return (
     <div className="pb-32">
@@ -415,7 +466,7 @@ export default function MockExamWorkbookPage() {
           <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
             <p className="font-black text-indigo-600 text-xl animate-pulse">{loadingMsg}</p>
-            <p className="text-slate-400 font-bold text-sm mt-3">30~60초 정도 소요될 수 있어요</p>
+            <p className="text-slate-400 font-bold text-sm mt-3">지문당 30~60초 소요됩니다</p>
           </div>
         </div>
       )}
@@ -441,19 +492,18 @@ export default function MockExamWorkbookPage() {
             <div className="mb-6">
               <label className="text-sm font-black text-slate-600 mb-2 block">제목 (PDF 파일명)</label>
               <input type="text" value={pdfTitle} onChange={e => setPdfTitle(e.target.value)}
-                placeholder="예: 2024 수능 18번 워크북"
+                placeholder="예: 2024 수능 워크북"
                 className="w-full px-5 py-3 border-2 border-slate-200 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300" />
             </div>
 
             {/* STEP 1 — 기출 지문 선택 */}
             <div className="mb-6">
               <p className="text-base font-black text-slate-700 mb-3">STEP 1 — 기출 지문 선택</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div className="grid grid-cols-3 gap-3 mb-4">
                 {[
                   { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
                   { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
                   { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
-                  { label: '문제번호', value: selectedNumber, onChange: setSelectedNumber, disabled: !selectedInstitution, options: questionNumbers.map(n => ({ value: String(n), label: `${n}번` })) },
                 ].map(({ label, value, onChange, disabled, options }) => (
                   <div key={label}>
                     <label className="block text-xs font-black text-slate-400 mb-1.5">{label}</label>
@@ -465,18 +515,52 @@ export default function MockExamWorkbookPage() {
                   </div>
                 ))}
               </div>
-              {passageLoading && <p className="text-sm text-indigo-400 font-bold animate-pulse">지문 불러오는 중...</p>}
-              {passageText && !passageLoading && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 font-medium leading-relaxed select-none" style={{ textAlign: 'justify', wordBreak: 'break-word' }}
-                  onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
-                  {passageText}
+
+              {/* 문제번호 다중 선택 */}
+              {questionNumbers.length > 0 && (
+                <div>
+                  <label className="block text-xs font-black text-slate-400 mb-2">문제번호 (여러 개 선택 가능)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {questionNumbers.map(n => {
+                      const num = String(n);
+                      const isSelected = selectedNumbers.includes(num);
+                      const isLoading = loadingNumbers.has(num);
+                      return (
+                        <button key={n} onClick={() => toggleNumber(num)} disabled={isLoading}
+                          className={`px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
+                            isSelected
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                          } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
+                          {isLoading ? '...' : `${n}번`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 선택된 지문 미리보기 */}
+              {sortedSelectedNumbers.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {sortedSelectedNumbers.map(num => (
+                    passageMap[num] && (
+                      <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <p className="text-xs font-black text-indigo-600 mb-1">{num}번 지문</p>
+                        <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {passageMap[num]}
+                        </p>
+                      </div>
+                    )
+                  ))}
                 </div>
               )}
             </div>
 
             {/* STEP 2 — 난이도 */}
             <div className="mb-6">
-              <p className="text-base font-black text-slate-700 mb-3">STEP 2 — 난이도 선택</p>
+              <p className="text-base font-black text-slate-700 mb-3">STEP 2 — 난이도 선택 (전체 적용)</p>
               <div className="flex gap-2">
                 {DIFF_OPTIONS.map(d => (
                   <button key={d.key} onClick={() => setDifficulty(d.key)}
@@ -491,7 +575,8 @@ export default function MockExamWorkbookPage() {
 
             {pdfAnalysisPrice !== null && pdfAnalysisPrice > 0 && (
               <p className="text-center text-sm font-bold text-slate-400 mb-3">
-                분석 1회당 <span className="text-yellow-500 font-black">{pdfAnalysisPrice} CON</span> 사용
+                지문 1개당 <span className="text-yellow-500 font-black">{pdfAnalysisPrice} CON</span> 사용
+                {selectedNumbers.length > 1 && <span className="text-slate-500"> × {selectedNumbers.length}개 = <span className="text-yellow-500 font-black">{pdfAnalysisPrice * selectedNumbers.length} CON</span></span>}
               </p>
             )}
 
@@ -503,312 +588,323 @@ export default function MockExamWorkbookPage() {
 
             <button onClick={handleGenerate} disabled={!canGenerate}
               className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-              AI로 문제 생성하기 🚀
+              {selectedNumbers.length > 1
+                ? `AI로 워크북 ${selectedNumbers.length}개 생성하기 🚀`
+                : 'AI로 워크북 생성하기 🚀'}
             </button>
           </div>
 
           {/* ── 결과 영역 ── */}
-          {result && (() => {
-            const d = editedResult ?? result;
-            return (
+          {results.length > 0 && (
             <>
-              <div id="mw-print-area" className="space-y-0">
-                {/* 1페이지: 원문 + 변형지문 + T/F 문제 */}
-                <div id="mw-pdf-page-1" className="space-y-3 mb-4">
-                  {pdfTitle.trim() && (
-                    <div className="mb-3 pb-2 border-b-2 border-slate-200">
-                      <h1 className="text-2xl font-black text-slate-900">{pdfTitle.trim()}</h1>
-                    </div>
-                  )}
-
-                  <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                    <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
-                      <span className="font-black text-2xl leading-none text-white/70">00</span>
-                      <h2 className="font-black text-lg leading-tight text-white">원문 지문</h2>
-                    </div>
-                    <div className="p-4">
-                      <p className="text-slate-700 font-bold leading-relaxed text-xl" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{passageText}</p>
-                    </div>
-                  </div>
-
-                  <SectionCard number="01" title="변형 지문" color="bg-teal-600" theme={printTheme}
-                    onCopy={() => copy(d.paraphrased_passage ?? '', 'paraphrase')} copied={copiedSection === 'paraphrase'}>
-                    {editMode ? (
-                      <textarea className="w-full p-3 border-2 border-teal-200 rounded-xl font-bold text-slate-700 text-base leading-relaxed resize-y focus:outline-none focus:border-teal-400 min-h-[120px]"
-                        value={editedResult?.paraphrased_passage ?? ''}
-                        onChange={e => setEditedResult(prev => prev ? { ...prev, paraphrased_passage: e.target.value } : prev)} />
-                    ) : (
-                      <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{d.paraphrased_passage}</p>
-                    )}
-                  </SectionCard>
-
-                  <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500" theme={printTheme}
-                    onCopy={() => copy(result.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
-                    <div className="space-y-1 mb-2">
-                      {d.tf_questions.map((q, qi) => (
-                        <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
-                          <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
-                          {editMode ? (
-                            <textarea className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
-                              value={q.statement}
-                              onChange={e => setEditedResult(prev => {
-                                if (!prev) return prev;
-                                const tf = [...prev.tf_questions];
-                                tf[qi] = { ...tf[qi], statement: e.target.value };
-                                return { ...prev, tf_questions: tf };
-                              })} />
-                          ) : (
-                            <p className="text-slate-700 font-bold leading-relaxed flex-1 text-2xl">{q.statement}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <div className={`mw-answer-area border-t pt-3 ${printTheme === 'color' ? 'border-violet-100' : 'border-slate-200'}`}>
-                      <button onClick={() => setShowAnswerKey(!showAnswerKey)}
-                        className={`no-print flex items-center gap-2 font-black text-sm ${printTheme === 'color' ? 'text-violet-600 hover:text-violet-800' : 'text-slate-600 hover:text-slate-800'}`}>
-                        <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
-                        해설지 {showAnswerKey ? '닫기' : '보기'}
-                      </button>
-                      {showAnswerKey && (
-                        <div className="mt-3">
-                          <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
-                            <p className={`font-black text-sm mb-1 ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</p>
-                            <p className="font-black text-slate-700 tracking-wide text-sm">{d.answer_key}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </SectionCard>
+              {/* 결과 탭 */}
+              {results.length > 1 && (
+                <div className="no-print flex gap-2 mb-4 flex-wrap">
+                  {results.map((r, i) => (
+                    <button key={i} onClick={() => setActiveResultTab(i)}
+                      className={`px-4 py-2 rounded-xl font-black text-sm transition-all border-2 ${
+                        activeResultTab === i
+                          ? 'bg-indigo-600 border-indigo-600 text-white'
+                          : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
+                      }`}>
+                      {r.number}번
+                      {saveStatusMap[i] === 'done' && <span className="ml-1 text-xs">✅</span>}
+                      {saveStatusMap[i] === 'saving' && <span className="ml-1 text-xs animate-pulse">💾</span>}
+                    </button>
+                  ))}
                 </div>
+              )}
 
-                {/* 2페이지: 한글요약 + 영어제목 + 1문장요약 + 어휘 */}
-                <div id="mw-pdf-page-2" className="space-y-3">
-                  <SectionCard number="03" title="한글 요약" color="bg-indigo-500" theme={printTheme}
-                    onCopy={() => copy(d.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')} copied={copiedSection === 'korean'}>
-                    <div>
-                      <span className={`inline-block mb-3 text-base font-black px-3 py-1 rounded-full ${printTheme === 'color' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
-                        {d.korean_summary.type === '일반' ? '일반 지문' : d.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
-                      </span>
-                      <table className="w-full border-collapse">
-                        <tbody>
-                          {d.korean_summary.rows.map((row, i) => (
-                            <tr key={i} className={printTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
-                              <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${printTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
-                              <td className={`p-2.5 border ${printTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
-                                {editMode ? (
-                                  <textarea className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
-                                    value={row.content}
-                                    onChange={e => setEditedResult(prev => {
-                                      if (!prev) return prev;
-                                      const rows = [...prev.korean_summary.rows];
-                                      rows[i] = { ...rows[i], content: e.target.value };
-                                      return { ...prev, korean_summary: { ...prev.korean_summary, rows } };
-                                    })} />
-                                ) : (
-                                  <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+              {activeResult && activeD && (
+                <div id={`mw-print-area-${activeResultTab}`} className="space-y-0">
+                  {/* 1페이지 */}
+                  <div id={`mw-pdf-page-1-${activeResultTab}`} className="space-y-3 mb-4">
+                    {pdfTitle.trim() && (
+                      <div className="mb-3 pb-2 border-b-2 border-slate-200">
+                        <h1 className="text-2xl font-black text-slate-900">{pdfTitle.trim()} — {activeResult.number}번</h1>
+                      </div>
+                    )}
+
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                      <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
+                        <span className="font-black text-2xl leading-none text-white/70">00</span>
+                        <h2 className="font-black text-lg leading-tight text-white">원문 지문</h2>
+                      </div>
+                      <div className="p-4">
+                        <p className="text-slate-700 font-bold leading-relaxed text-xl" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{activeResult.passageText}</p>
+                      </div>
                     </div>
-                  </SectionCard>
 
-                  <SectionCard number="04" title="영어 제목 3가지" color="bg-amber-500" theme={printTheme}
-                    onCopy={() => copy(d.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
-                    <div className="space-y-2">
-                      {d.english_titles.map((title, i) => {
-                        const { english, korean } = parseTitleKorean(title);
-                        return (
-                          <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
-                            <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
-                            {editMode ? (
-                              <input className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
-                                value={title}
-                                onChange={e => setEditedResult(prev => {
-                                  if (!prev) return prev;
-                                  const titles = [...prev.english_titles];
-                                  titles[i] = e.target.value;
-                                  return { ...prev, english_titles: titles };
+                    <SectionCard number="01" title="변형 지문" color="bg-teal-600" theme={printTheme}
+                      onCopy={() => copy(activeD.paraphrased_passage ?? '', 'paraphrase')} copied={copiedSection === 'paraphrase'}>
+                      {editModeIdx === activeResultTab ? (
+                        <textarea className="w-full p-3 border-2 border-teal-200 rounded-xl font-bold text-slate-700 text-base leading-relaxed resize-y focus:outline-none focus:border-teal-400 min-h-[120px]"
+                          value={editedResults[activeResultTab]?.paraphrased_passage ?? ''}
+                          onChange={e => setEditedResults(prev => ({ ...prev, [activeResultTab]: { ...prev[activeResultTab], paraphrased_passage: e.target.value } }))} />
+                      ) : (
+                        <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{activeD.paraphrased_passage}</p>
+                      )}
+                    </SectionCard>
+
+                    <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500" theme={printTheme}
+                      onCopy={() => copy(activeD.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
+                      <div className="space-y-1 mb-2">
+                        {activeD.tf_questions.map((q, qi) => (
+                          <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
+                            <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
+                            {editModeIdx === activeResultTab ? (
+                              <textarea className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
+                                value={q.statement}
+                                onChange={e => setEditedResults(prev => {
+                                  const cur = prev[activeResultTab] ?? activeResult.materials;
+                                  const tf = [...cur.tf_questions];
+                                  tf[qi] = { ...tf[qi], statement: e.target.value };
+                                  return { ...prev, [activeResultTab]: { ...cur, tf_questions: tf } };
                                 })} />
                             ) : (
-                              <div className="flex-1">
-                                <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
-                                {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
-                              </div>
+                              <p className="text-slate-700 font-bold leading-relaxed flex-1 text-2xl">{q.statement}</p>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </SectionCard>
-
-                  <SectionCard number="05" title="1문장 영어 요약 3가지" color="bg-rose-500" theme={printTheme}
-                    onCopy={() => copy(d.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
-                    <div className="space-y-2">
-                      {d.one_sentence_summaries.map((s, i) => (
-                        <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-200'}`}>
-                          <div className="flex items-start gap-2">
-                            <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
-                            {editMode ? (
-                              <div className="flex-1 flex flex-col gap-1">
-                                <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-rose-400"
-                                  value={s.english}
-                                  onChange={e => setEditedResult(prev => {
-                                    if (!prev) return prev;
-                                    const sums = [...prev.one_sentence_summaries];
-                                    sums[i] = { ...sums[i], english: e.target.value };
-                                    return { ...prev, one_sentence_summaries: sums };
-                                  })} />
-                                <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-500 text-sm focus:outline-none focus:border-rose-400"
-                                  value={s.korean}
-                                  onChange={e => setEditedResult(prev => {
-                                    if (!prev) return prev;
-                                    const sums = [...prev.one_sentence_summaries];
-                                    sums[i] = { ...sums[i], korean: e.target.value };
-                                    return { ...prev, one_sentence_summaries: sums };
-                                  })} />
-                              </div>
-                            ) : (
-                              <div className="flex-1">
-                                <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
-                                <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
-                              </div>
-                            )}
+                        ))}
+                      </div>
+                      <div className={`mw-answer-area border-t pt-3 ${printTheme === 'color' ? 'border-violet-100' : 'border-slate-200'}`}>
+                        <button onClick={() => setShowAnswerKeyMap(prev => ({ ...prev, [activeResultTab]: !prev[activeResultTab] }))}
+                          className={`no-print flex items-center gap-2 font-black text-sm ${printTheme === 'color' ? 'text-violet-600 hover:text-violet-800' : 'text-slate-600 hover:text-slate-800'}`}>
+                          <span className={`transition-transform ${showAnswerKeyMap[activeResultTab] ? 'rotate-90' : ''}`}>▶</span>
+                          해설지 {showAnswerKeyMap[activeResultTab] ? '닫기' : '보기'}
+                        </button>
+                        {showAnswerKeyMap[activeResultTab] && (
+                          <div className="mt-3">
+                            <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
+                              <p className={`font-black text-sm mb-1 ${printTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</p>
+                              <p className="font-black text-slate-700 tracking-wide text-sm">{activeD.answer_key}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </SectionCard>
+                        )}
+                      </div>
+                    </SectionCard>
+                  </div>
 
-                  <SectionCard number="06" title="관련 어휘 10개" color="bg-slate-700" theme={printTheme}
-                    onCopy={() => copy(result.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
-                    <table className="w-full text-lg border-collapse table-fixed">
-                      <colgroup>
-                        <col style={{ width: '22%' }} /><col style={{ width: '19%' }} /><col style={{ width: '19%' }} /><col style={{ width: '19%' }} /><col style={{ width: '21%' }} />
-                      </colgroup>
-                      <thead>
-                        <tr className="bg-slate-800 text-white">
-                          {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                            <th key={i} className={`px-2 py-2 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {d.vocabulary_table.map((row, i) => {
-                          const updateVocab = (patch: Partial<VocabRow>) => setEditedResult(prev => {
-                            if (!prev) return prev;
-                            const vocab = [...prev.vocabulary_table];
-                            vocab[i] = { ...vocab[i], ...patch };
-                            return { ...prev, vocabulary_table: vocab };
-                          });
-                          return (
-                          <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
-                            <td className="px-2 py-2 border-b border-slate-100">
-                              {editMode ? (
-                                <div className="flex flex-col gap-0.5">
-                                  <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
-                                  <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
-                                </div>
-                              ) : (
-                                <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-base ml-1">({row.meaning})</span></>
-                              )}
-                            </td>
-                            {([['syn1', 'syn1_m'], ['syn2', 'syn2_m'], ['syn3', 'syn3_m']] as const).map(([wk, mk], j) => (
-                              <td key={j} className="px-2 py-2 border-b border-slate-100">
-                                {editMode ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
-                                    <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
-                                  </div>
-                                ) : (
-                                  <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-base ml-1">({row[mk]})</span></>
-                                )}
-                              </td>
+                  {/* 2페이지 */}
+                  <div id={`mw-pdf-page-2-${activeResultTab}`} className="space-y-3">
+                    <SectionCard number="03" title="한글 요약" color="bg-indigo-500" theme={printTheme}
+                      onCopy={() => copy(activeD.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')} copied={copiedSection === 'korean'}>
+                      <div>
+                        <span className={`inline-block mb-3 text-base font-black px-3 py-1 rounded-full ${printTheme === 'color' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                          {activeD.korean_summary.type === '일반' ? '일반 지문' : activeD.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
+                        </span>
+                        <table className="w-full border-collapse">
+                          <tbody>
+                            {activeD.korean_summary.rows.map((row, i) => (
+                              <tr key={i} className={printTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
+                                <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${printTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
+                                <td className={`p-2.5 border ${printTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
+                                  {editModeIdx === activeResultTab ? (
+                                    <textarea className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
+                                      value={row.content}
+                                      onChange={e => setEditedResults(prev => {
+                                        const cur = prev[activeResultTab] ?? activeResult.materials;
+                                        const rows = [...cur.korean_summary.rows];
+                                        rows[i] = { ...rows[i], content: e.target.value };
+                                        return { ...prev, [activeResultTab]: { ...cur, korean_summary: { ...cur.korean_summary, rows } } };
+                                      })} />
+                                  ) : (
+                                    <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
+                                  )}
+                                </td>
+                              </tr>
                             ))}
-                            <td className="px-2 py-2 border-b border-slate-100">
-                              {editMode ? (
-                                <div className="flex flex-col gap-0.5">
-                                  <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
-                                  <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
-                                </div>
+                          </tbody>
+                        </table>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard number="04" title="영어 제목 3가지" color="bg-amber-500" theme={printTheme}
+                      onCopy={() => copy(activeD.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={copiedSection === 'titles'}>
+                      <div className="space-y-2">
+                        {activeD.english_titles.map((title, i) => {
+                          const { english, korean } = parseTitleKorean(title);
+                          return (
+                            <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
+                              <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
+                              {editModeIdx === activeResultTab ? (
+                                <input className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
+                                  value={title}
+                                  onChange={e => setEditedResults(prev => {
+                                    const cur = prev[activeResultTab] ?? activeResult.materials;
+                                    const titles = [...cur.english_titles];
+                                    titles[i] = e.target.value;
+                                    return { ...prev, [activeResultTab]: { ...cur, english_titles: titles } };
+                                  })} />
                               ) : (
-                                <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-base ml-1">({row.antonym_m})</span></>
+                                <div className="flex-1">
+                                  <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
+                                  {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
+                                </div>
                               )}
-                            </td>
-                          </tr>
+                            </div>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </SectionCard>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard number="05" title="1문장 영어 요약 3가지" color="bg-rose-500" theme={printTheme}
+                      onCopy={() => copy(activeD.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={copiedSection === 'one_sentence'}>
+                      <div className="space-y-2">
+                        {activeD.one_sentence_summaries.map((s, i) => (
+                          <div key={i} className={`px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-200'}`}>
+                            <div className="flex items-start gap-2">
+                              <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
+                              {editModeIdx === activeResultTab ? (
+                                <div className="flex-1 flex flex-col gap-1">
+                                  <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-rose-400"
+                                    value={s.english}
+                                    onChange={e => setEditedResults(prev => {
+                                      const cur = prev[activeResultTab] ?? activeResult.materials;
+                                      const sums = [...cur.one_sentence_summaries];
+                                      sums[i] = { ...sums[i], english: e.target.value };
+                                      return { ...prev, [activeResultTab]: { ...cur, one_sentence_summaries: sums } };
+                                    })} />
+                                  <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-500 text-sm focus:outline-none focus:border-rose-400"
+                                    value={s.korean}
+                                    onChange={e => setEditedResults(prev => {
+                                      const cur = prev[activeResultTab] ?? activeResult.materials;
+                                      const sums = [...cur.one_sentence_summaries];
+                                      sums[i] = { ...sums[i], korean: e.target.value };
+                                      return { ...prev, [activeResultTab]: { ...cur, one_sentence_summaries: sums } };
+                                    })} />
+                                </div>
+                              ) : (
+                                <div className="flex-1">
+                                  <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
+                                  <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard number="06" title="관련 어휘 10개" color="bg-slate-700" theme={printTheme}
+                      onCopy={() => copy(activeD.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={copiedSection === 'vocab'}>
+                      <table className="w-full text-lg border-collapse table-fixed">
+                        <colgroup>
+                          <col style={{ width: '22%' }} /><col style={{ width: '19%' }} /><col style={{ width: '19%' }} /><col style={{ width: '19%' }} /><col style={{ width: '21%' }} />
+                        </colgroup>
+                        <thead>
+                          <tr className="bg-slate-800 text-white">
+                            {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+                              <th key={i} className={`px-2 py-2 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeD.vocabulary_table.map((row, i) => {
+                            const updateVocab = (patch: Partial<VocabRow>) => setEditedResults(prev => {
+                              const cur = prev[activeResultTab] ?? activeResult.materials;
+                              const vocab = [...cur.vocabulary_table];
+                              vocab[i] = { ...vocab[i], ...patch };
+                              return { ...prev, [activeResultTab]: { ...cur, vocabulary_table: vocab } };
+                            });
+                            return (
+                              <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
+                                <td className="px-2 py-2 border-b border-slate-100">
+                                  {editModeIdx === activeResultTab ? (
+                                    <div className="flex flex-col gap-0.5">
+                                      <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
+                                      <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
+                                    </div>
+                                  ) : (
+                                    <><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-base ml-1">({row.meaning})</span></>
+                                  )}
+                                </td>
+                                {([['syn1', 'syn1_m'], ['syn2', 'syn2_m'], ['syn3', 'syn3_m']] as const).map(([wk, mk], j) => (
+                                  <td key={j} className="px-2 py-2 border-b border-slate-100">
+                                    {editModeIdx === activeResultTab ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
+                                        <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
+                                      </div>
+                                    ) : (
+                                      <><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-base ml-1">({row[mk]})</span></>
+                                    )}
+                                  </td>
+                                ))}
+                                <td className="px-2 py-2 border-b border-slate-100">
+                                  {editModeIdx === activeResultTab ? (
+                                    <div className="flex flex-col gap-0.5">
+                                      <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
+                                      <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
+                                    </div>
+                                  ) : (
+                                    <><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-base ml-1">({row.antonym_m})</span></>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </SectionCard>
+                  </div>
+                </div>
+              )}
+
+              {/* 다운로드 버튼 */}
+              <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
+                <div className="flex items-center gap-1 bg-white border border-slate-200 shadow-lg px-3 py-2 rounded-2xl">
+                  <span className="text-slate-400 text-xs font-bold mr-1">테마</span>
+                  <button onClick={() => setPrintTheme('color')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'color' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}>컬러</button>
+                  <button onClick={() => setPrintTheme('mono')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'mono' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'}`}>흑백</button>
+                </div>
+                {saveStatusMap[activeResultTab] === 'saving' && (
+                  <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
+                    <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />이력 저장 중...
+                  </div>
+                )}
+                {saveStatusMap[activeResultTab] === 'done' && (
+                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-emerald-600">✅ 이력에 저장됨</div>
+                )}
+                {editSaveStatusMap[activeResultTab] && editSaveStatusMap[activeResultTab] !== 'idle' && (
+                  <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-lg border
+                    ${editSaveStatusMap[activeResultTab] === 'saving' ? 'bg-white border-slate-200 text-slate-500' : editSaveStatusMap[activeResultTab] === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
+                    {editSaveStatusMap[activeResultTab] === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : editSaveStatusMap[activeResultTab] === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
+                  </div>
+                )}
+                <div className="flex gap-3 flex-wrap justify-end">
+                  <button
+                    onClick={() => {
+                      if (editModeIdx !== activeResultTab) {
+                        if (!editedResults[activeResultTab]) setEditedResults(prev => ({ ...prev, [activeResultTab]: JSON.parse(JSON.stringify(activeResult.materials)) }));
+                        setEditSaveStatusMap(prev => ({ ...prev, [activeResultTab]: 'idle' }));
+                        setEditModeIdx(activeResultTab);
+                      } else {
+                        setEditModeIdx(null);
+                      }
+                    }}
+                    className={`px-5 py-3 rounded-2xl font-black text-sm shadow-lg transition-all active:scale-95 ${editModeIdx === activeResultTab ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
+                    {editModeIdx === activeResultTab ? '✏️ 편집 종료' : '✏️ 편집'}
+                  </button>
+                  {editModeIdx === activeResultTab && (
+                    <button onClick={() => handleEditSave(activeResultTab)} disabled={editSaveStatusMap[activeResultTab] === 'saving'}
+                      className="px-5 py-3 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                      {editSaveStatusMap[activeResultTab] === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
+                    </button>
+                  )}
+                  <button onClick={handleDownloadProblem} disabled={!!pdfLoading}
+                    className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
+                    {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 PDF'}
+                  </button>
+                  <button onClick={handleDownloadAnswer} disabled={!!pdfLoading}
+                    className="bg-violet-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-violet-700 active:scale-95 transition-all disabled:opacity-50">
+                    {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안·해설 PDF'}
+                  </button>
                 </div>
               </div>
             </>
-            );
-          })()}
-
-          {/* 다운로드 버튼 + 저장 상태 */}
-          {result && (
-            <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
-              {/* 테마 토글 */}
-              <div className="flex items-center gap-1 bg-white border border-slate-200 shadow-lg px-3 py-2 rounded-2xl">
-                <span className="text-slate-400 text-xs font-bold mr-1">테마</span>
-                <button onClick={() => setPrintTheme('color')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'color' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
-                  컬러
-                </button>
-                <button onClick={() => setPrintTheme('mono')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'mono' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
-                  흑백
-                </button>
-              </div>
-              {saveStatus === 'saving' && (
-                <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
-                  <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />이력 자동 저장 중...
-                </div>
-              )}
-              {saveStatus === 'done' && (
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-emerald-600">✅ 이력에 저장됨</div>
-              )}
-              {saveStatus === 'error' && (
-                <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-rose-600 max-w-xs">⚠️ 이력 저장 실패: {saveErrorMsg}</div>
-              )}
-              {editMode && editSaveStatus !== 'idle' && (
-                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-lg border
-                  ${editSaveStatus === 'saving' ? 'bg-white border-slate-200 text-slate-500' : editSaveStatus === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
-                  {editSaveStatus === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : editSaveStatus === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
-                </div>
-              )}
-              <div className="flex gap-3 flex-wrap justify-end">
-                <button
-                  onClick={() => {
-                    if (!editMode) {
-                      if (!editedResult) setEditedResult(JSON.parse(JSON.stringify(result)));
-                      setEditSaveStatus('idle');
-                    }
-                    setEditMode(prev => !prev);
-                  }}
-                  className={`px-5 py-3 rounded-2xl font-black text-sm shadow-lg transition-all active:scale-95 ${editMode ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
-                  {editMode ? '✏️ 편집 종료' : '✏️ 편집'}
-                </button>
-                {editMode && (
-                  <button onClick={handleEditSave} disabled={editSaveStatus === 'saving'}
-                    className="px-5 py-3 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50">
-                    {editSaveStatus === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
-                  </button>
-                )}
-                <button onClick={handleDownloadProblem} disabled={!!pdfLoading}
-                  className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
-                  {pdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 PDF'}
-                </button>
-                <button onClick={handleDownloadAnswer} disabled={!!pdfLoading}
-                  className="bg-violet-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-violet-700 active:scale-95 transition-all disabled:opacity-50">
-                  {pdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안·해설 PDF'}
-                </button>
-              </div>
-            </div>
           )}
         </>
       )}
@@ -819,8 +915,6 @@ export default function MockExamWorkbookPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
             생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
           </div>
-
-          {/* 필터 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-slate-500">날짜</label>
@@ -841,9 +935,7 @@ export default function MockExamWorkbookPage() {
                 className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">초기화</button>
             )}
           </div>
-
           {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
-
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
               <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
@@ -856,7 +948,6 @@ export default function MockExamWorkbookPage() {
               </div>
             </div>
           )}
-
           {historyLoading ? (
             <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
           ) : historyList.length === 0 ? (
