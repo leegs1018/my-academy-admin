@@ -62,7 +62,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ai_only 사용자는 AI 도구 경로 외 /admin 접근 차단
-  const aiAllowed = ['/admin/pdf-editor', '/admin/ai-questions', '/admin/mock-exam-questions'];
+  const aiAllowed = ['/admin/pdf-editor', '/admin/mock-exam-workbook', '/admin/ai-questions', '/admin/mock-exam-questions'];
   if (user && pathname.startsWith('/admin') && role === 'ai_only' && !isSuperAdmin &&
       !aiAllowed.some(p => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL('/admin/pdf-editor', request.url))
