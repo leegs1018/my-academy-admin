@@ -24,6 +24,17 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    // token_hash flow: 이메일 스캐너 봇 문제 방지
+    const token_hash = urlParams.get('token_hash');
+    const type = urlParams.get('type');
+    if (token_hash && type === 'recovery') {
+      supabase.auth.verifyOtp({ token_hash, type: 'recovery' }).then(({ error }) => {
+        if (!error) setReady(true);
+        else setError('링크가 유효하지 않습니다. 다시 요청해주세요.');
+      });
+      return;
+    }
+
     // PKCE flow: code param in URL
     const code = urlParams.get('code');
     if (code) {
