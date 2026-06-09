@@ -250,9 +250,9 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       const aM = passage.match(/\(A\)\s*([\s\S]*?)(?=\(B\))/);
       const bM = passage.match(/\(B\)\s*([\s\S]*?)(?=\(C\))/);
       const cM = passage.match(/\(C\)\s*([\s\S]*?)$/);
-      if (givenM) html += `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#94a3b8;margin-bottom:2px;">[주어진 글]</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${esc(givenM[1].trim())}</div></div>`;
+      if (givenM) html += `<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;margin-bottom:5px;width:100%;box-sizing:border-box;"><div style="font-size:9px;font-weight:900;color:#94a3b8;margin-bottom:2px;">[주어진 글]</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${escP(givenM[1].trim())}</div></div>`;
       for (const [lbl, m] of [['A', aM], ['B', bM], ['C', cM]] as [string, RegExpMatchArray | null][]) {
-        if (m) html += `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;"><div style="font-size:9px;font-weight:900;color:#6366f1;margin-bottom:2px;">(${lbl})</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${esc(m[1].trim())}</div></div>`;
+        if (m) html += `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;width:100%;box-sizing:border-box;"><div style="font-size:9px;font-weight:900;color:#6366f1;margin-bottom:2px;">(${lbl})</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${escP(m[1].trim())}</div></div>`;
       }
     } else if (q.modified_passage) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
