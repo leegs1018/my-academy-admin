@@ -840,9 +840,9 @@ export default function PdfEditorPage() {
                 {/* 02 T/F 문제 */}
                 <SectionCard number="02" title="T/F 문제 10개"
                   color="bg-violet-500" theme={printTheme} onCopy={() => copy(d.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
-                  <div className="space-y-1 mb-2">
+                  <div className="space-y-0.5 mb-2">
                     {d.tf_questions.map((q) => (
-                      <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg transition-colors ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
+                      <div key={q.number} className={`flex items-start gap-2 px-2 py-0.5 rounded-lg transition-colors ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
                         <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
                         {editMode ? (
                           <textarea
@@ -856,7 +856,7 @@ export default function PdfEditorPage() {
                             })}
                           />
                         ) : (
-                          <p className="text-slate-700 font-bold leading-relaxed flex-1 text-2xl">{q.statement}</p>
+                          <p className="text-slate-700 font-bold leading-snug flex-1 text-2xl">{q.statement}</p>
                         )}
                       </div>
                     ))}

@@ -676,9 +676,9 @@ export default function MockExamWorkbookPage() {
 
                     <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500" theme={printTheme}
                       onCopy={() => copy(activeD.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={copiedSection === 'tf'}>
-                      <div className="space-y-1 mb-2">
+                      <div className="space-y-0.5 mb-2">
                         {activeD.tf_questions.map((q, qi) => (
-                          <div key={q.number} className={`flex items-start gap-2 px-2 py-1 rounded-lg ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
+                          <div key={q.number} className={`flex items-start gap-2 px-2 py-0.5 rounded-lg ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
                             <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
                             {editModeIdx === activeResultTab ? (
                               <textarea className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
@@ -690,7 +690,7 @@ export default function MockExamWorkbookPage() {
                                   return { ...prev, [activeResultTab]: { ...cur, tf_questions: tf } };
                                 })} />
                             ) : (
-                              <p className="text-slate-700 font-bold leading-relaxed flex-1 text-2xl">{q.statement}</p>
+                              <p className="text-slate-700 font-bold leading-snug flex-1 text-2xl">{q.statement}</p>
                             )}
                           </div>
                         ))}
