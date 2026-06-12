@@ -63,9 +63,7 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
     const { jsPDF } = await import('jspdf');
 
     const W = 210, M = 5, cW = W - 2 * M;
-
-    const p1Ratio = page1El.offsetHeight / page1El.offsetWidth;
-    const p2Ratio = page2El.offsetHeight / page2El.offsetWidth;
+    const maxRatio = (297 - 2 * M) / cW; // A4 콘텐츠 최대 비율 (287/200 = 1.435)
 
     const opts = { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
     const [url1, url2] = await Promise.all([
@@ -74,9 +72,38 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
     ]);
 
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    pdf.addImage(url1, 'JPEG', M, M, cW, cW * p1Ratio);
-    pdf.addPage();
-    pdf.addImage(url2, 'JPEG', M, M, cW, cW * p2Ratio);
+
+    // 이미지가 A4를 초과하면 Canvas로 슬라이싱해 여러 페이지에 나눠 삽입
+    const addPaged = async (url: string, newPage: boolean) => {
+      const img = await new Promise<HTMLImageElement>(r => {
+        const i = document.createElement('img') as HTMLImageElement; i.onload = () => r(i); i.src = url;
+      });
+      const iW = img.naturalWidth, iH = img.naturalHeight;
+      if (iH / iW <= maxRatio) {
+        if (newPage) pdf.addPage();
+        pdf.addImage(url, 'JPEG', M, M, cW, cW * (iH / iW));
+        return;
+      }
+      const sliceHpx = Math.floor(iW * maxRatio);
+      let y = 0, first = true;
+      while (y < iH) {
+        const h = Math.min(sliceHpx, iH - y);
+        const cv = document.createElement('canvas');
+        cv.width = iW; cv.height = h;
+        const ctx = cv.getContext('2d')!;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, iW, h);
+        ctx.drawImage(img, 0, -y);
+        const sliceUrl = cv.toDataURL('image/jpeg', 0.92);
+        if (newPage || !first) pdf.addPage();
+        first = false;
+        pdf.addImage(sliceUrl, 'JPEG', M, M, cW, cW * (h / iW));
+        y += sliceHpx;
+      }
+    };
+
+    await addPaged(url1, false);
+    await addPaged(url2, true);
 
     return pdf.output('blob');
   } finally {
