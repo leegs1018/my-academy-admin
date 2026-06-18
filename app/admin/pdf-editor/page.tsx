@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
@@ -75,8 +76,11 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
 
     // 이미지가 A4를 초과하면 Canvas로 슬라이싱해 여러 페이지에 나눠 삽입
     const addPaged = async (url: string, newPage: boolean) => {
-      const img = await new Promise<HTMLImageElement>(r => {
-        const i = document.createElement('img') as HTMLImageElement; i.onload = () => r(i); i.src = url;
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = document.createElement('img') as HTMLImageElement;
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('Image load failed in addPaged'));
+        i.src = url;
       });
       const iW = img.naturalWidth, iH = img.naturalHeight;
       if (iH / iW <= maxRatio) {
@@ -128,7 +132,7 @@ async function buildAnswerPdfBlob(result: GeneratedMaterials, title: string): Pr
   const { jsPDF } = await import('jspdf');
 
   const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:0;left:0;width:800px;background:white;padding:40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;z-index:-9999;';
+  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;background:white;padding:40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;';
 
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   let html = '';
@@ -595,8 +599,7 @@ export default function PdfEditorPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setEditSaveStatus('error'); return; }
       if (wasEditing) {
-        setEditMode(false);
-        await new Promise(r => requestAnimationFrame(r));
+        flushSync(() => setEditMode(false));
         await new Promise(r => requestAnimationFrame(r));
       }
       const [pdfBlob, answerBlob] = await Promise.all([
@@ -626,7 +629,8 @@ export default function PdfEditorPage() {
       });
       const json = await res.json() as { success?: boolean };
       setEditSaveStatus(res.ok && json.success ? 'done' : 'error');
-    } catch {
+    } catch (e) {
+      console.error('[handleEditSave]', e);
       if (wasEditing) setEditMode(true);
       setEditSaveStatus('error');
     }
