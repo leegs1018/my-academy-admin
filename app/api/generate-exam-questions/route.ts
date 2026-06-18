@@ -653,74 +653,41 @@ text 필드에 반드시 완전한 영어 구 또는 절을 작성할 것.
   summary: `
 --- summary (요약문 완성 유형) ---
 
-[핵심 규칙]
-- The summary sentence must paraphrase the passage instead of compressing sentences mechanically.
-- (A) and (B) must represent the conceptual backbone of the text.
-- The correct option should reconstruct the author's logic at a higher level of abstraction.
-- Wrong choices should contain:
-  · partial truth
-  · reversed causality
-  · exaggerated generalization
-  · irrelevant detail emphasis
+Step 1 분석 결과를 기반으로 실제 문제를 생성하라.
 
-- question_text 형식 (반드시 정확히 준수):
+[question_text 형식 — 반드시 정확히 준수]
 첫 번째 줄: "다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?"
 빈 줄 (\\n\\n 필수)
 두 번째 부분: 완전한 영어 요약문. (A)와 (B)를 "_________"로 표시.
+요약문은 반드시 question_text 안에 \\n\\n 뒤에 포함할 것. 별도 필드 사용 금지.
 
-- 요약문 길이 기준 (최우선 규칙):
-  · 영어 요약문은 반드시 200~230자(character) 이내로 작성할 것 — 초과 절대 금지.
-  · 단어 수 기준 30~38단어 수준.
-  · 핵심 논리 구조(전제 → 결론, 대조, 인과)를 담되 불필요한 수식어·부연 설명 금지.
-  · 종속절·분사구문·관계절 중 1개만 포함한 간결한 복문 형태.
-  · (A)와 (B)가 문장의 핵심 논리적 범주를 채우는 위치에 배치되어야 함.
-
-예시 (이 형식 그대로 사용):
+예시:
 "다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?\\n\\nAlthough humans often perceive themselves as purely rational beings, their decision-making is fundamentally shaped by (A) _________ foundations that precede reason, suggesting that (B) _________ processes are not the sole basis of judgment."
 
-- 요약문은 반드시 question_text 안에 \\n\\n 뒤에 포함할 것. 별도 필드 사용 금지.
+[요약문 조건]
+- 200~230자(character) 이내 — 초과 절대 금지
+- 약 30~38단어
+- 단순 문장 압축 금지. 핵심 주장 중심 추상화 유지.
+- 사례·실험·세부 근거 중심 요약 금지
+- 종속절·분사구문·관계절 중 1개만 포함한 간결한 복문 형태
+- (A)(B)가 문장의 핵심 논리적 범주를 채우는 위치에 배치
 
-- choices text 형식 (반드시 준수):
-text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄로 작성.
-예시: {"number": 1, "text": "(A) affective --- (B) analytical"}
-절대 (A)와 (B)를 별도 필드로 분리하지 말 것.
+[(A)(B) 생성 규칙]
+- (A)(B)는 반드시 최종 핵심 주장에서 직접 도출할 것
+- (A): 원인/조건/방법/특성 범주 중 하나
+- (B): 결과/효과/상태/관계 범주 중 하나
+- 원문 단어 직접 사용 금지. 단순 동의어 치환이 아닌 conceptual paraphrase 사용.
+- 억지 추상화보다 핵심 의미 보존을 우선한다.
+- (A)(B)가 같은 의미 범주에서 나오는 것을 절대 금지
 
-[출제 목표]
-- 글 전체 논리를 한 단계 추상화하여 요약하게 만들 것.
-- 단순 topic keyword 복원이 아니라 author's claim reconstruction을 요구할 것.
-
-[정답 설계]
-- 본문 핵심 단어 직접 반복 금지
-- conceptual paraphrase 사용
-- 요약문은 원문보다 더 추상적인 수준에서 재구성할 것
-- (A), (B)는 isolated vocabulary가 아니라 conceptual categories여야 함
-
-[오답 설계]
-- 하나만 맞음
-- 논리 관계 오류
-- 표면 키워드만 맞음
-- 방향성 반대
-- 세부 정보만 반영
-
-[Advanced Summary Design]
-- The summary must express the author's ultimate claim.
-- Avoid sentence-level paraphrase.
-- Require abstract conceptual reasoning.
-
-[KICE 실전 요약문 설계 원칙 — PDF 분석 기반]
-- (A)와 (B)는 반드시 서로 다른 의미 범주에서 출제할 것:
-  · (A) = 원인/조건/방법/특성 범주 (예: divergent, impartial, comprehensive, unfounded)
-  · (B) = 결과/효과/상태/관계 범주 (예: segregation, autonomy, adaptability, interconnection)
-  · (A)와 (B)가 같은 의미 범주에서 나오는 것을 절대 금지
-- 요약문 문장 구조 권장 패턴:
-  · "While/Although [대조절], [주어] [동사] a(n) (A) [명사/형용사], which [결과절] (B) [명사]."
-  · "By [방법구/분사구], [주어] can [결과동사] (A) [명사], enhancing [목적어]'s (B) [명사]."
-  · "[주어]'s [행위] is (A) [형용사] because [이유절], making [목적어] (B) [형용사/명사]."
-- 오답 5개 중 반드시 2개는 "한 쪽 빈칸만 맞고 다른 쪽은 틀린" 트랩으로 설계할 것
-  · 예) (A)는 맞지만 (B)가 논리 방향 반대인 선지 1개
-  · 예) (B)는 맞지만 (A)가 과잉 일반화인 선지 1개
-- 나머지 3개 오답: ① 둘 다 틀리지만 표면상 그럴듯 ② 논리 완전 반전 ③ 세부 정보 수준 어휘
-- (A)(B) 두 단어는 원문에 등장하지 않는 개념적 paraphrase여야 함 — 원문 단어 직접 사용 금지
+[선택지 생성]
+- 형식: text 필드에 "(A) 단어1 --- (B) 단어2" 형식으로 한 줄 작성
+- 예시: {"number": 1, "text": "(A) affective --- (B) analytical"}
+- 절대 (A)와 (B)를 별도 필드로 분리하지 말 것
+- 총 5개: 정답 1개 + 오답 4개
+- 반드시 포함: (A)만 맞는 트랩 1개 이상, (B)만 맞는 트랩 1개 이상
+- 추가 오답: 원인↔결과 반전, 표면상 그럴듯한 선택지, 세부 정보 수준 선택지
+- 오답도 지문과 관련성이 있어야 하며, 명백히 이상한 단어 조합은 사용하지 않는다
 `,
 
   flow: `
@@ -1327,28 +1294,42 @@ ${text}
 [지문]
 ${text}
 
-수행 순서:
-1. 지문 전체 논리 구조 분석:
-   - 필자의 핵심 주장을 1문장으로 추상화
-   - 전제·조건·결과·대조 관계를 명시
-2. 요약문 설계 (반드시 200~230자(character) 이내):
-   - 지문을 기계적으로 압축하지 말고 한 단계 높은 추상 수준에서 재구성
-   - 구조 권장: While/Although [대조절], [주어] [동사] (A) [명사], which [결과절] (B) [명사]
-   - (A)는 원인/조건/방법/특성 범주, (B)는 결과/효과/상태/관계 범주
-   - (A)(B) 두 단어는 원문에 등장하지 않는 conceptual paraphrase여야 함
-   - 요약문 전체 character 수를 반드시 세어 200~230자 이내인지 확인
-3. (A)(B) 정답 확정:
-   - (A)와 (B)가 지문의 conceptual backbone을 대표하는지 확인
-   - 서로 다른 의미 범주인지 확인
-4. 정답 선지: 정답은 ${targetAnswer}번
-   - "(A) 단어 --- (B) 단어" 형식
-5. 오답 4개 설계:
-   - (A)는 맞지만 (B)가 논리 방향 반대인 선지 1개
-   - (B)는 맞지만 (A)가 과잉 일반화인 선지 1개
-   - 둘 다 틀리지만 표면상 그럴듯한 선지 1개
-   - 논리 완전 반전 선지 1개
+1. 핵심 주장 도출
+핵심 주장 후보를 3개 생성한 후 다음 기준으로 평가하라.
+- 지문 전체 설명력: 지문의 내용 중 몇 %를 설명할 수 있는가?
+- 예시 제거 테스트: 사례, 실험, 통계, 비유, 역사적 일화를 제거해도 여전히 성립하는가?
+- 결론 연결성: 필자의 최종 결론 또는 핵심 메시지와 직접 연결되는가?
+가장 높은 평가를 받은 후보만 최종 핵심 주장으로 채택하라.
+핵심 주장은 지문 전체를 관통하는 일반 원리 또는 필자의 중심 주장이어야 하며, 사례·실험·근거 자체를 핵심 주장으로 삼지 않는다.
+다음 요소는 핵심 주장 후보에서 제외한다: 사례, 실험 및 연구 과정, 연구 결과 자체, 통계 수치, 역사적 사건, 특정 인물의 행동, 비유 및 일화.
+위 요소들은 주장(claim)을 뒷받침하는 근거(evidence)로만 취급한다.
 
-분석 텍스트만 출력. JSON 금지.`;
+2. 논리 구조 분석
+다음을 명확히 정리하라: 핵심 주장(Main Claim), 전제(Premise), 조건(Condition), 원인(Cause), 결과(Effect), 대조(Contrast), 예시(Evidence).
+
+3. 요약문 설계
+요약문은 단순 압축이 아닌 한 단계 높은 추상 수준으로 재구성한다.
+권장 구조: While/Although [대조절], [주어] [동사] (A) [명사], which [결과절] (B) [명사].
+(A)는 원인/조건/방법/특성 범주 중 하나, (B)는 결과/효과/상태/관계 범주 중 하나에서 선택한다.
+(A)와 (B)는 반드시 최종 핵심 주장에서 직접 도출되어야 한다.
+선정 우선순위: 1순위 핵심 주장 자체를 구성하는 개념 → 2순위 핵심 주장 속 원인-결과 관계 → 3순위 핵심 주장 속 조건-결과 관계.
+(A)(B)는 지문 전체의 70% 이상을 설명할 수 있어야 한다.
+다음 요소는 (A)(B) 후보에서 제외한다: 사례, 실험, 연구 결과, 세부 과정, 부가 설명, 구체적 예시.
+(A)(B)는 원문에 등장하지 않는 단어를 사용하되, 원문의 핵심 개념을 유지하는 conceptual paraphrase를 사용한다. 억지 고급어휘 사용보다 핵심 의미 보존을 우선한다.
+
+4. 요약문 품질 검증
+요약문 작성 전 다음을 점검하라.
+- 이 요약문만 읽어도 필자의 핵심 주장을 파악할 수 있는가?
+- 사례와 실험을 제거해도 요약문이 유지되는가?
+- (A)(B)가 중심 개념인가, 세부 정보인가?
+- (A)(B)가 지문의 핵심 논리를 대표하는가?
+하나라도 충족하지 못하면 핵심 주장 및 (A)(B)를 재선정하라.
+
+5. 선지 설계
+정답 선지 설계 원칙을 제시하라. 정답은 ${targetAnswer}번.
+오답은 다음 유형을 포함한다: (A)만 맞고 (B)는 틀린 경우, (B)만 맞고 (A)는 틀린 경우, 원인↔결과 반전, 표면적으로 그럴듯하지만 핵심 주장과 불일치, 세부 정보 수준으로 축소된 선택지.
+
+JSON 출력 금지. 분석 텍스트만 출력.`;
   }
 
   return '';
