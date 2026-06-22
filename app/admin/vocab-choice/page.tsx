@@ -547,6 +547,7 @@ export default function VocabChoicePage() {
                     onChange={e => setInputText(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
                   />
+                  <p className="text-xs text-slate-400 font-bold text-right mt-1">{inputText.trim().length}자</p>
                 </div>
               )}
 
@@ -602,13 +603,7 @@ export default function VocabChoicePage() {
                 </div>
               )}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-black text-slate-500">난이도</label>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-400 font-bold">1회 차감 </span>
-                    <span className="text-sm font-black text-indigo-600">{vocabChoicePrice} C</span>
-                  </div>
-                </div>
+                <label className="block text-xs font-black text-slate-500 mb-2">난이도</label>
                 <div className="flex gap-2">
                   {DIFF_CARDS.map(d => (
                     <button key={d.key} onClick={() => setInputDifficulty(d.key)}
@@ -673,21 +668,18 @@ export default function VocabChoicePage() {
               {/* Passage preview */}
               {loadingPassage && <div className="text-center py-4 text-slate-400 font-bold text-sm animate-pulse">지문 불러오는 중...</div>}
               {mockPassage && !loadingPassage && (
-                <div className="bg-gray-50 rounded-xl p-4 text-sm font-bold text-slate-700 leading-relaxed max-h-48 overflow-y-auto select-none"
-                  onContextMenu={e => e.preventDefault()}
-                  onDragStart={e => e.preventDefault()}>
-                  {mockPassage}
-                </div>
+                <>
+                  <div className="bg-gray-50 rounded-xl p-4 text-sm font-bold text-slate-700 leading-relaxed max-h-48 overflow-y-auto select-none"
+                    onContextMenu={e => e.preventDefault()}
+                    onDragStart={e => e.preventDefault()}>
+                    {mockPassage}
+                  </div>
+                  <p className="text-xs text-slate-400 font-bold text-right mt-1">{mockPassage.trim().length}자</p>
+                </>
               )}
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-black text-slate-500">난이도</label>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-400 font-bold">1회 차감 </span>
-                    <span className="text-sm font-black text-indigo-600">{vocabChoicePrice} C</span>
-                  </div>
-                </div>
+                <label className="block text-xs font-black text-slate-500 mb-2">난이도</label>
                 <div className="flex gap-2">
                   {DIFF_CARDS.map(d => (
                     <button key={d.key} onClick={() => setMockDifficulty(d.key)}
