@@ -193,7 +193,6 @@ export default function VocabChoicePage() {
   const [result, setResult] = useState<VocabChoiceResult | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [vocabChoicePrice, setVocabChoicePrice] = useState(20);
-  const [conBalance, setConBalance] = useState(0);
 
   // PDF state
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -215,11 +214,6 @@ export default function VocabChoicePage() {
     supabase.auth.getSession().then(({ data: { session: s } }) => { if (s) setSession(s as typeof session); });
   }, []);
 
-  useEffect(() => {
-    if (!session) return;
-    fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
-      .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
-  }, [session]);
 
   useEffect(() => {
     fetch('/api/credits/pricing').then(r => r.ok ? r.json() : null).then(data => {
@@ -311,10 +305,6 @@ export default function VocabChoicePage() {
 
     if (!text.trim()) { setGenerateError('지문을 입력해주세요.'); return; }
     if (!session) { setGenerateError('로그인이 필요합니다.'); return; }
-    if (conBalance < vocabChoicePrice) {
-      setGenerateError(`CON이 부족합니다. (필요: ${vocabChoicePrice}C, 보유: ${conBalance}C)`);
-      return;
-    }
 
     setGenerating(true);
     setGenerateError('');
@@ -332,9 +322,6 @@ export default function VocabChoicePage() {
       if (!res.ok || !json.success) throw new Error(json.error || '생성 실패');
       setResult(json.data!);
 
-      // Refresh balance
-      fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
-        .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
 
       // Auto-save after 1s
       setTimeout(() => autoSave(json.data!, text, title, difficulty), 1000);
@@ -482,10 +469,6 @@ export default function VocabChoicePage() {
           <div>
             <h1 className="text-3xl font-black text-slate-800">📌 어휘 선택 문제</h1>
             <p className="text-sm text-slate-500 mt-1">영어 지문으로 어휘 선택 문제를 자동 생성합니다</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-500 font-bold">보유 CON</p>
-            <p className="text-xl font-black text-yellow-600">{conBalance.toLocaleString()} C</p>
           </div>
         </div>
 
