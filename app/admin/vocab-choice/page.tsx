@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
+import Image from 'next/image';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -178,6 +179,15 @@ export default function VocabChoicePage() {
 
   const savedRef = useRef(false);
 
+  // Input mode (text vs image/OCR)
+  const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [ocrText, setOcrText] = useState('');
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrDone, setOcrDone] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => { if (s) setSession(s as typeof session); });
   }, []);
@@ -266,8 +276,46 @@ export default function VocabChoicePage() {
     if (activeTab === 'history' && session) fetchHistory();
   }, [activeTab, session, fetchHistory]);
 
+  const handleImageSelect = (file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      setGenerateError('JPG, PNG, GIF, WebP 형식만 지원합니다.'); return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setGenerateError('이미지 파일이 너무 큽니다. (최대 10MB)'); return;
+    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setOcrText(''); setOcrDone(false); setGenerateError('');
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageSelect(file);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imagePreview]);
+
+  const handleOCR = async () => {
+    if (!imageFile) return;
+    setOcrLoading(true); setGenerateError('');
+    try {
+      const fd = new FormData();
+      fd.append('image', imageFile);
+      const res = await fetch('/api/ocr', { method: 'POST', body: fd });
+      const json = await res.json() as { text?: string; error?: string };
+      if (!res.ok) throw new Error(json.error || 'OCR 오류');
+      setOcrText(json.text ?? ''); setOcrDone(true);
+    } catch (e: unknown) {
+      setGenerateError(e instanceof Error ? e.message : 'OCR 오류가 발생했습니다.');
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
   const handleGenerate = async () => {
-    const text = activeTab === 'input' ? inputText : mockPassage;
+    const text = activeTab === 'input' ? (inputMode === 'text' ? inputText : ocrText) : mockPassage;
     const title = activeTab === 'input' ? inputTitle : mockTitle;
     const difficulty = activeTab === 'input' ? inputDifficulty : mockDifficulty;
 
@@ -432,7 +480,8 @@ export default function VocabChoicePage() {
     });
   };
 
-  const currentText = activeTab === 'input' ? inputText : mockPassage;
+  const inputEffectiveText = inputMode === 'text' ? inputText : ocrText;
+  const currentText = activeTab === 'input' ? inputEffectiveText : mockPassage;
   const canGenerate = currentText.trim().length >= 50 && !generating;
 
   // ─── render ────────────────────────────────────────────────────────────────
@@ -476,16 +525,82 @@ export default function VocabChoicePage() {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-black text-slate-500 mb-1.5">영어 지문</label>
-                <textarea
-                  rows={10}
-                  placeholder="영어 지문을 붙여넣으세요..."
-                  value={inputText}
-                  onChange={e => setInputText(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
-                />
+              {/* 입력 모드 토글 */}
+              <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit">
+                {([['text', '✏️ 텍스트 직접 입력'], ['image', '📷 사진 등록']] as const).map(([mode, label]) => (
+                  <button key={mode} onClick={() => setInputMode(mode)}
+                    className={`px-5 py-2.5 rounded-xl font-black text-sm transition-all
+                      ${inputMode === mode ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                    {label}
+                  </button>
+                ))}
               </div>
+
+              {/* 텍스트 직접 입력 */}
+              {inputMode === 'text' && (
+                <div>
+                  <p className="text-xs font-bold text-slate-400 mb-2">영어 지문을 복사(Ctrl+C)한 뒤 아래에 붙여넣기(Ctrl+V) 해주세요</p>
+                  <textarea
+                    rows={10}
+                    placeholder="영어 지문을 붙여넣으세요..."
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
+                  />
+                </div>
+              )}
+
+              {/* 사진 등록 / OCR */}
+              {inputMode === 'image' && (
+                <div className="space-y-4">
+                  <label
+                    onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleDrop}
+                    className={`block w-full border-4 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all
+                      ${isDragging ? 'border-indigo-500 bg-indigo-50' : imageFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50'}`}
+                  >
+                    <div className="text-5xl mb-3">{imageFile ? '🖼️' : '📷'}</div>
+                    {imageFile ? (
+                      <><p className="font-black text-emerald-700 text-lg">{imageFile.name}</p><p className="text-xs text-slate-400 mt-1">다른 사진으로 변경하려면 클릭하세요</p></>
+                    ) : (
+                      <><p className="font-black text-slate-600 text-lg">사진을 클릭하거나 드래그하여 등록</p><p className="text-sm text-slate-400 font-bold mt-2">JPG · PNG · WebP · GIF · 최대 10MB</p></>
+                    )}
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleImageSelect(f); }} />
+                  </label>
+
+                  {imageFile && imagePreview && (
+                    <div className="flex flex-col md:flex-row gap-5">
+                      <div className="md:w-1/2 rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center min-h-[200px]">
+                        <Image src={imagePreview} alt="업로드된 이미지" width={600} height={400} className="max-h-80 object-contain w-full" unoptimized />
+                      </div>
+                      <div className="md:w-1/2 flex flex-col gap-3">
+                        {!ocrDone ? (
+                          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
+                            <p className="font-black text-indigo-500 text-center mb-4">사진에서 영어 텍스트를<br />AI가 자동으로 추출해드려요</p>
+                            <button onClick={handleOCR} disabled={ocrLoading}
+                              className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-indigo-700 active:scale-95 transition-all shadow-lg disabled:opacity-50">
+                              {ocrLoading ? '⏳ 추출 중...' : '🔍 텍스트 추출하기'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                              <p className="font-black text-emerald-600 text-sm">✅ 텍스트 추출 완료 — 수정 후 문제를 생성하세요</p>
+                              <button onClick={() => { setOcrDone(false); setOcrText(''); }}
+                                className="text-xs font-black text-slate-400 hover:text-rose-500 transition-colors">다시 추출</button>
+                            </div>
+                            <textarea value={ocrText} onChange={e => setOcrText(e.target.value)} rows={10}
+                              className="flex-1 w-full p-4 border-2 border-emerald-200 rounded-2xl font-mono text-sm text-slate-700 resize-y focus:outline-none focus:border-indigo-400 transition-colors bg-emerald-50/30" />
+                            <p className="text-xs text-slate-400 font-bold text-right">{ocrText.trim().length}자</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-black text-slate-500">난이도</label>
