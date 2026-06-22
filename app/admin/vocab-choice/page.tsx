@@ -152,14 +152,16 @@ export default function VocabChoicePage() {
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
-  const [selectedNumber, setSelectedNumber] = useState('');
-  const [mockPassage, setMockPassage] = useState('');
-  const [loadingPassage, setLoadingPassage] = useState(false);
+  const [selectedNumbers, setSelectedNumbers] = useState<string[]>([]);
+  const [passageMap, setPassageMap] = useState<Record<string, string>>({});
+  const [loadingNumbers, setLoadingNumbers] = useState<Set<string>>(new Set());
 
   // Shared generation state
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
   const [result, setResult] = useState<VocabChoiceResult | null>(null);
+  const [mockResults, setMockResults] = useState<Array<VocabChoiceResult & { num: string }>>([]);
+  const [activeMockTab, setActiveMockTab] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [vocabChoicePrice, setVocabChoicePrice] = useState(20);
 
@@ -208,14 +210,14 @@ export default function VocabChoicePage() {
 
   useEffect(() => {
     if (!selectedYear) return;
-    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumber(''); setMockPassage('');
+    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
     supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear)).order('grade', { ascending: true })
       .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, [selectedYear]);
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade) return;
-    setSelectedInstitution(''); setSelectedNumber(''); setMockPassage('');
+    setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).order('institution', { ascending: true })
       .then(({ data }) => {
         const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
@@ -230,21 +232,27 @@ export default function VocabChoicePage() {
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
-    setSelectedNumber(''); setMockPassage('');
+    setSelectedNumbers([]); setPassageMap({});
     supabase.from('mock_exam_passages').select('question_number')
       .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
       .order('question_number')
       .then(({ data }) => { setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
   }, [selectedYear, selectedGrade, selectedInstitution]);
 
-  useEffect(() => {
-    if (!selectedYear || !selectedGrade || !selectedInstitution || !selectedNumber) { setMockPassage(''); return; }
-    setLoadingPassage(true);
-    supabase.from('mock_exam_passages').select('passage_text')
-      .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
-      .eq('question_number', parseInt(selectedNumber)).single()
-      .then(({ data }) => { setMockPassage(data?.passage_text || ''); setLoadingPassage(false); });
-  }, [selectedYear, selectedGrade, selectedInstitution, selectedNumber]);
+  const toggleNumber = async (num: string) => {
+    if (selectedNumbers.includes(num)) {
+      setSelectedNumbers(prev => prev.filter(n => n !== num));
+      setPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    } else {
+      setSelectedNumbers(prev => [...prev, num]);
+      setLoadingNumbers(prev => new Set([...prev, num]));
+      const { data } = await supabase.from('mock_exam_passages').select('passage_text')
+        .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
+        .eq('question_number', parseInt(num)).single();
+      setPassageMap(prev => ({ ...prev, [num]: data?.passage_text ?? '' }));
+      setLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+    }
+  };
 
   const fetchHistory = useCallback(async (date = searchDate, query = searchQuery) => {
     if (!session) return;
@@ -315,36 +323,55 @@ export default function VocabChoicePage() {
   };
 
   const handleGenerate = async () => {
-    const text = activeTab === 'input' ? (inputMode === 'text' ? inputText : ocrText) : mockPassage;
-    const title = activeTab === 'input' ? inputTitle : mockTitle;
-    const difficulty = activeTab === 'input' ? inputDifficulty : mockDifficulty;
-
-    if (!text.trim()) { setGenerateError('지문을 입력해주세요.'); return; }
     if (!session) { setGenerateError('로그인이 필요합니다.'); return; }
-
-    setGenerating(true);
     setGenerateError('');
-    setResult(null);
-    setShowAnswer(false);
-    savedRef.current = false;
 
-    try {
-      const res = await fetch('/api/generate-vocab-choice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, difficulty, academy_id: session.user.id }),
-      });
-      const json = await res.json() as { success?: boolean; data?: VocabChoiceResult; error?: string };
-      if (!res.ok || !json.success) throw new Error(json.error || '생성 실패');
-      setResult(json.data!);
-
-
-      // Auto-save after 1s (DOM 렌더 완료 대기)
-      setTimeout(() => autoSave(text, title, difficulty), 1500);
-    } catch (e) {
-      setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
-    } finally {
-      setGenerating(false);
+    if (activeTab === 'input') {
+      const text = inputMode === 'text' ? inputText : ocrText;
+      if (!text.trim()) { setGenerateError('지문을 입력해주세요.'); return; }
+      setGenerating(true); setResult(null); setShowAnswer(false); savedRef.current = false;
+      try {
+        const res = await fetch('/api/generate-vocab-choice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, difficulty: inputDifficulty, academy_id: session.user.id }),
+        });
+        const json = await res.json() as { success?: boolean; data?: VocabChoiceResult; error?: string };
+        if (!res.ok || !json.success) throw new Error(json.error || '생성 실패');
+        setResult(json.data!);
+        setTimeout(() => autoSave(text, inputTitle, inputDifficulty), 1500);
+      } catch (e) {
+        setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      } finally {
+        setGenerating(false);
+      }
+    } else {
+      const sortedNums = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+      if (sortedNums.length === 0) { setGenerateError('문제번호를 선택해주세요.'); return; }
+      setGenerating(true); setMockResults([]); setActiveMockTab(0); setShowAnswer(false);
+      const newResults: Array<VocabChoiceResult & { num: string }> = [];
+      try {
+        for (const num of sortedNums) {
+          const text = passageMap[num];
+          const res = await fetch('/api/generate-vocab-choice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id }),
+          });
+          const json = await res.json() as { success?: boolean; data?: VocabChoiceResult; error?: string };
+          if (!res.ok || !json.success) throw new Error(`${num}번: ${json.error || '생성 실패'}`);
+          newResults.push({ ...json.data!, num });
+          setMockResults([...newResults]);
+        }
+        const capturedNums = [...sortedNums];
+        setTimeout(() => {
+          newResults.forEach((_, idx) => autoSaveMock(idx, newResults, capturedNums));
+        }, 1500);
+      } catch (e) {
+        setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      } finally {
+        setGenerating(false);
+      }
     }
   };
 
@@ -357,17 +384,13 @@ export default function VocabChoicePage() {
         capturePdfFromElement('vocab-pdf-problem'),
         capturePdfFromElement('vocab-pdf-answer'),
       ]);
-
       const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
         reader.readAsDataURL(b);
       });
-
       const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(problemBlob), toBase64(answerBlob)]);
-
-      const isInput = activeTab === 'input';
       await fetch('/api/save-vocab-choice-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -376,11 +399,8 @@ export default function VocabChoicePage() {
           title: title || null,
           passageExcerpt: passageFull.slice(0, 100),
           passageFull,
-          sourceType: isInput ? 'input' : 'mock',
-          year: isInput ? null : (selectedYear ? parseInt(selectedYear) : null),
-          grade: isInput ? null : (selectedGrade || null),
-          institution: isInput ? null : (selectedInstitution || null),
-          questionNumber: isInput ? null : (selectedNumber ? parseInt(selectedNumber) : null),
+          sourceType: 'input',
+          year: null, grade: null, institution: null, questionNumber: null,
           difficulty,
         }),
       });
@@ -391,18 +411,68 @@ export default function VocabChoicePage() {
     }
   };
 
+  const autoSaveMock = async (
+    idx: number,
+    resultsArr: Array<VocabChoiceResult & { num: string }>,
+    nums: string[],
+  ) => {
+    if (!session) return;
+    const r = resultsArr[idx];
+    if (!r) return;
+    setSavingHistory(true);
+    try {
+      const [problemBlob, answerBlob] = await Promise.all([
+        capturePdfFromElement(`vocab-pdf-problem-mock-${idx}`),
+        capturePdfFromElement(`vocab-pdf-answer-mock-${idx}`),
+      ]);
+      const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(b);
+      });
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(problemBlob), toBase64(answerBlob)]);
+      const passage = passageMap[nums[idx]] ?? '';
+      await fetch('/api/save-vocab-choice-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          pdfBase64, answerPdfBase64,
+          title: mockTitle || null,
+          passageExcerpt: passage.slice(0, 100),
+          passageFull: passage,
+          sourceType: 'mock',
+          year: selectedYear ? parseInt(selectedYear) : null,
+          grade: selectedGrade || null,
+          institution: selectedInstitution || null,
+          questionNumber: parseInt(r.num),
+          difficulty: mockDifficulty,
+        }),
+      });
+    } catch (e) {
+      console.error(`[vocab-choice] autoSaveMock[${idx}] failed:`, e);
+    } finally {
+      setSavingHistory(false);
+    }
+  };
+
   const handleDownloadPdf = async (withAnswer: boolean) => {
-    if (!result) return;
-    const title = activeTab === 'input' ? inputTitle : mockTitle;
+    const isInput = activeTab === 'input';
+    const activeResult = isInput ? result : mockResults[activeMockTab];
+    if (!activeResult) return;
+    const title = isInput ? inputTitle : mockTitle;
     if (withAnswer) setDownloadingAnswerPdf(true);
     else setDownloadingPdf(true);
     try {
-      const elementId = withAnswer ? 'vocab-pdf-answer' : 'vocab-pdf-problem';
+      const elementId = isInput
+        ? (withAnswer ? 'vocab-pdf-answer' : 'vocab-pdf-problem')
+        : (withAnswer ? `vocab-pdf-answer-mock-${activeMockTab}` : `vocab-pdf-problem-mock-${activeMockTab}`);
       const blob = await capturePdfFromElement(elementId);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${title || '어휘선택문제'}${withAnswer ? '_정답' : '_문제'}.pdf`;
+      const numSuffix = isInput ? '' : `_${mockResults[activeMockTab]?.num}번`;
+      a.download = `${title || '어휘선택문제'}${numSuffix}${withAnswer ? '_정답' : '_문제'}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -457,8 +527,8 @@ export default function VocabChoicePage() {
 
   // ─── render helpers ────────────────────────────────────────────────────────
 
-  const renderVocabPassage = (passage: string) => {
-    const chunks = parseVocabPassage(passage, result?.answer_key || '');
+  const renderVocabPassage = (passage: string, answerKey: string) => {
+    const chunks = parseVocabPassage(passage, answerKey);
     return chunks.map((c, i) => {
       if (c.type === 'text') return <span key={i}>{c.text}</span>;
       const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
@@ -481,8 +551,9 @@ export default function VocabChoicePage() {
   };
 
   const inputEffectiveText = inputMode === 'text' ? inputText : ocrText;
-  const currentText = activeTab === 'input' ? inputEffectiveText : mockPassage;
-  const canGenerate = currentText.trim().length >= 50 && !generating;
+  const allPassagesReady = selectedNumbers.length > 0 && selectedNumbers.every(n => passageMap[n]) && loadingNumbers.size === 0;
+  const canGenerate = (activeTab === 'input' ? inputEffectiveText.trim().length >= 50 : allPassagesReady) && !generating;
+  const sortedSelectedNumbers = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
 
   // ─── render ────────────────────────────────────────────────────────────────
 
@@ -642,13 +713,12 @@ export default function VocabChoicePage() {
                 />
               </div>
 
-              {/* Cascade selectors */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Cascade selectors (년도/학년/시험명) */}
+              <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
                   { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
                   { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
-                  { label: '문제번호', value: selectedNumber, onChange: setSelectedNumber, disabled: !selectedInstitution, options: questionNumbers.map(n => ({ value: String(n), label: `${n}번` })) },
                 ].map(({ label, value, onChange, disabled, options }) => (
                   <div key={label}>
                     <label className="block text-xs font-black text-slate-500 mb-1">{label}</label>
@@ -665,17 +735,50 @@ export default function VocabChoicePage() {
                 ))}
               </div>
 
-              {/* Passage preview */}
-              {loadingPassage && <div className="text-center py-4 text-slate-400 font-bold text-sm animate-pulse">지문 불러오는 중...</div>}
-              {mockPassage && !loadingPassage && (
-                <>
-                  <div className="bg-gray-50 rounded-xl p-4 text-sm font-bold text-slate-700 leading-relaxed max-h-48 overflow-y-auto select-none"
-                    onContextMenu={e => e.preventDefault()}
-                    onDragStart={e => e.preventDefault()}>
-                    {mockPassage}
+              {/* 문제번호 다중 선택 토글 버튼 */}
+              {questionNumbers.length > 0 && (
+                <div>
+                  <label className="block text-xs font-black text-slate-500 mb-2">문제번호 (여러 개 선택 가능)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {questionNumbers.map(n => {
+                      const num = String(n);
+                      const isSelected = selectedNumbers.includes(num);
+                      const isLoading = loadingNumbers.has(num);
+                      return (
+                        <button key={n} onClick={() => toggleNumber(num)} disabled={isLoading}
+                          className={`px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
+                            isSelected
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                          } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
+                          {isLoading ? '...' : `${n}번`}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p className="text-xs text-slate-400 font-bold text-right mt-1">{mockPassage.trim().length}자</p>
-                </>
+                </div>
+              )}
+
+              {/* 선택된 지문 미리보기 */}
+              {sortedSelectedNumbers.length > 0 && (
+                <div className="space-y-2">
+                  {sortedSelectedNumbers.map(num => (
+                    passageMap[num] && (
+                      <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-black text-indigo-600">{num}번 지문</p>
+                          <p className="text-xs text-slate-400 font-bold">{passageMap[num].trim().length}자</p>
+                        </div>
+                        <p className="text-sm text-slate-600 font-medium leading-relaxed select-none"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}
+                          onContextMenu={e => e.preventDefault()}
+                          onDragStart={e => e.preventDefault()}>
+                          {passageMap[num]}
+                        </p>
+                      </div>
+                    )
+                  ))}
+                </div>
               )}
 
               <div>
@@ -693,12 +796,24 @@ export default function VocabChoicePage() {
               </div>
             </div>
 
+            {selectedNumbers.length > 0 && (
+              <p className="text-center text-sm font-bold text-slate-400">
+                지문 1개당 <span className="text-yellow-500 font-black">{vocabChoicePrice} C</span> 사용
+                {selectedNumbers.length > 1 && (
+                  <span className="text-slate-500"> × {selectedNumbers.length}개 = <span className="text-yellow-500 font-black">{vocabChoicePrice * selectedNumbers.length} C</span></span>
+                )}
+              </p>
+            )}
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
               className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-indigo-200"
             >
-              {generating ? '⏳ AI가 문제를 생성하고 있습니다...' : `✨ AI로 문제 생성하기 (${vocabChoicePrice}C)`}
+              {generating
+                ? `⏳ AI가 문제를 생성하고 있습니다... (${mockResults.length}/${selectedNumbers.length})`
+                : selectedNumbers.length > 1
+                  ? `✨ AI로 문제 ${selectedNumbers.length}개 생성하기 (${vocabChoicePrice * selectedNumbers.length}C)`
+                  : `✨ AI로 문제 생성하기 (${vocabChoicePrice}C)`}
             </button>
           </div>
         )}
@@ -710,62 +825,107 @@ export default function VocabChoicePage() {
           </div>
         )}
 
-        {/* ── Result ── */}
-        {result && activeTab !== 'history' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* Result header */}
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <span className="font-black text-slate-800">생성 완료</span>
-                {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAnswer(!showAnswer)}
-                  className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                >
-                  {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
-                </button>
-                <button
-                  onClick={() => handleDownloadPdf(false)}
-                  disabled={downloadingPdf}
-                  className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-50"
-                >
-                  {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
-                </button>
-                <button
-                  onClick={() => handleDownloadPdf(true)}
-                  disabled={downloadingAnswerPdf}
-                  className="px-4 py-2 text-xs font-black bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all disabled:opacity-50"
-                >
-                  {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
-                </button>
-              </div>
-            </div>
-
-            {/* Passage with vocab choices */}
-            <div className="px-5 py-5">
-              <p className="text-sm font-bold leading-8 text-slate-800">
-                {renderVocabPassage(result.vocab_choice_passage)}
-              </p>
-            </div>
-
-            {/* Answer key */}
-            {showAnswer && (
-              <div className="px-5 pb-5">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                  <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
-                  <p className="text-sm font-bold text-slate-700 leading-relaxed">{result.answer_key}</p>
+        {/* ── Result (입력 탭) ── */}
+        {result && activeTab === 'input' && (() => {
+          const activeResult = result;
+          return (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-black text-slate-800">생성 완료</span>
+                  {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowAnswer(!showAnswer)}
+                    className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
+                  </button>
+                  <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
+                    className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-50">
+                    {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
+                  </button>
+                  <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
+                    className="px-4 py-2 text-xs font-black bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all disabled:opacity-50">
+                    {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
+              <div className="px-5 py-5">
+                <p className="text-sm font-bold leading-8 text-slate-800">
+                  {renderVocabPassage(activeResult.vocab_choice_passage, activeResult.answer_key)}
+                </p>
+              </div>
+              {showAnswer && (
+                <div className="px-5 pb-5">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                    <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
+                    <p className="text-sm font-bold text-slate-700 leading-relaxed">{activeResult.answer_key}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
-        {/* ── PDF 렌더 영역 (position:fixed, z-index:-9999 로 화면 뒤에 숨김, html-to-image 캡처용) ── */}
-        {result && (() => {
-          const pdfTitle = (activeTab === 'input' ? inputTitle : mockTitle) || '어휘 선택 문제';
-          const chunks = parseVocabPassage(result.vocab_choice_passage, result.answer_key);
+        {/* ── Result (모의고사 탭 - 다중) ── */}
+        {mockResults.length > 0 && activeTab === 'mock' && (() => {
+          const activeResult = mockResults[activeMockTab];
+          return (
+            <div className="space-y-3">
+              {/* 탭 (결과 2개 이상일 때) */}
+              {mockResults.length > 1 && (
+                <div className="flex gap-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-1.5">
+                  {mockResults.map((r, idx) => (
+                    <button key={idx} onClick={() => setActiveMockTab(idx)}
+                      className={`flex-1 py-2 text-sm font-black rounded-xl transition-all ${activeMockTab === idx ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
+                      {r.num}번
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-black text-slate-800">
+                      {mockResults.length > 1 ? `${activeResult.num}번 문제 생성 완료` : '생성 완료'}
+                    </span>
+                    {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowAnswer(!showAnswer)}
+                      className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                      {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
+                    </button>
+                    <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
+                      className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-50">
+                      {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
+                    </button>
+                    <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
+                      className="px-4 py-2 text-xs font-black bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all disabled:opacity-50">
+                      {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
+                    </button>
+                  </div>
+                </div>
+                <div className="px-5 py-5">
+                  <p className="text-sm font-bold leading-8 text-slate-800">
+                    {renderVocabPassage(activeResult.vocab_choice_passage, activeResult.answer_key)}
+                  </p>
+                </div>
+                {showAnswer && (
+                  <div className="px-5 pb-5">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                      <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
+                      <p className="text-sm font-bold text-slate-700 leading-relaxed">{activeResult.answer_key}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── PDF 렌더 영역 (position:fixed, z-index:-9999, html-to-image 캡처용) ── */}
+        {(() => {
           const pdfStyle: React.CSSProperties = {
             position: 'fixed', top: 0, left: 0, width: '800px',
             background: 'white', padding: '40px 48px', boxSizing: 'border-box',
@@ -774,43 +934,58 @@ export default function VocabChoicePage() {
           const h2Style: React.CSSProperties = { fontSize: 14, fontWeight: 900, margin: '0 0 16px', borderBottom: '2px solid #333', paddingBottom: 8 };
           const pStyle: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'break-word' };
           const choiceBase: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 4px' };
+
+          const renderPdfChunks = (r: VocabChoiceResult, problemId: string, answerId: string, titleStr: string) => {
+            const chunks = parseVocabPassage(r.vocab_choice_passage, r.answer_key);
+            return (
+              <>
+                <div id={problemId} style={pdfStyle}>
+                  <h2 style={h2Style}>{titleStr}</h2>
+                  <p style={pStyle}>
+                    {chunks.map((c, i) => {
+                      if (c.type === 'text') return <span key={i}>{c.text}</span>;
+                      const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
+                      return <span key={i} style={choiceBase}>{c.num}[{opts.join(' / ')}]</span>;
+                    })}
+                  </p>
+                </div>
+                <div id={answerId} style={pdfStyle}>
+                  <h2 style={h2Style}>{titleStr}</h2>
+                  <p style={pStyle}>
+                    {chunks.map((c, i) => {
+                      if (c.type === 'text') return <span key={i}>{c.text}</span>;
+                      const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
+                      return (
+                        <span key={i} style={choiceBase}>
+                          {c.num}[{opts.map((opt, j) => (
+                            <span key={j}>
+                              {j > 0 && ' / '}
+                              {j === c.correctIdx
+                                ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
+                                : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>
+                              }
+                            </span>
+                          ))}]
+                        </span>
+                      );
+                    })}
+                  </p>
+                  <div style={{ marginTop: 20, padding: '12px 16px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
+                    <strong>정답:</strong> {r.answer_key}
+                  </div>
+                </div>
+              </>
+            );
+          };
+
           return (
             <>
-              <div id="vocab-pdf-problem" style={pdfStyle}>
-                <h2 style={h2Style}>{pdfTitle}</h2>
-                <p style={pStyle}>
-                  {chunks.map((c, i) => {
-                    if (c.type === 'text') return <span key={i}>{c.text}</span>;
-                    const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
-                    return <span key={i} style={choiceBase}>{c.num}[{opts.join(' / ')}]</span>;
-                  })}
-                </p>
-              </div>
-              <div id="vocab-pdf-answer" style={pdfStyle}>
-                <h2 style={h2Style}>{pdfTitle}</h2>
-                <p style={pStyle}>
-                  {chunks.map((c, i) => {
-                    if (c.type === 'text') return <span key={i}>{c.text}</span>;
-                    const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
-                    return (
-                      <span key={i} style={choiceBase}>
-                        {c.num}[{opts.map((opt, j) => (
-                          <span key={j}>
-                            {j > 0 && ' / '}
-                            {j === c.correctIdx
-                              ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
-                              : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>
-                            }
-                          </span>
-                        ))}]
-                      </span>
-                    );
-                  })}
-                </p>
-                <div style={{ marginTop: 20, padding: '12px 16px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
-                  <strong>정답:</strong> {result.answer_key}
-                </div>
-              </div>
+              {/* 입력 탭 PDF */}
+              {result && renderPdfChunks(result, 'vocab-pdf-problem', 'vocab-pdf-answer', inputTitle || '어휘 선택 문제')}
+              {/* 모의고사 탭 PDF (전체 결과) */}
+              {mockResults.map((r, idx) =>
+                renderPdfChunks(r, `vocab-pdf-problem-mock-${idx}`, `vocab-pdf-answer-mock-${idx}`, `${mockTitle || '어휘 선택 문제'} (${r.num}번)`)
+              )}
             </>
           );
         })()}
