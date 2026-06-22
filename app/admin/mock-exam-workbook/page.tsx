@@ -335,7 +335,7 @@ export default function MockExamWorkbookPage() {
       const suffix = `-${idx}`;
       const [pdfBlob, answerBlob] = await Promise.all([
         generatePdfBlob(true, suffix),
-        buildAnswerPdfBlob(r.materials, pdfTitle.trim()),
+        buildAnswerPdfBlob(editedResults[idx] ?? r.materials, pdfTitle.trim()),
       ]);
       if (!pdfBlob) { setSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
       const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -485,7 +485,7 @@ export default function MockExamWorkbookPage() {
   const canGenerate = allPassagesReady && !loading && !!session;
 
   const activeResult = results[activeResultTab];
-  const activeD = (editModeIdx === activeResultTab ? editedResults[activeResultTab] : null) ?? activeResult?.materials;
+  const activeD = editedResults[activeResultTab] ?? activeResult?.materials;
 
   return (
     <div className="pb-32">

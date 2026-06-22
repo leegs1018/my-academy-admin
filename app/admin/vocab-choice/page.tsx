@@ -76,93 +76,52 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
   return chunks;
 }
 
-async function buildVocabPdfBlob(
-  passage: string,
-  answerKey: string,
-  title: string,
-  showAnswer: boolean
-): Promise<Blob> {
+async function capturePdfFromElement(elementId: string): Promise<Blob> {
+  const el = document.getElementById(elementId);
+  if (!el) throw new Error(`PDF 요소를 찾을 수 없습니다 (${elementId})`);
   const { toJpeg } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
+  const W = 210, M = 10, cW = W - 2 * M, maxH = 277;
 
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:0;left:0;width:800px;background:white;padding:40px 48px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;z-index:-9999;pointer-events:none;';
+  const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
+  const img = document.createElement('img') as HTMLImageElement;
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = url;
+  });
 
-  // Build HTML for the passage
-  const chunks = parseVocabPassage(passage, answerKey);
-  let html = `<h2 style="font-size:14px;font-weight:900;margin:0 0 16px;border-bottom:2px solid #333;padding-bottom:8px;">${title || '어휘 선택 문제'}</h2>`;
-  html += '<p style="font-size:13px;line-height:2;word-break:break-word;">';
-  for (const c of chunks) {
-    if (c.type === 'text') {
-      html += (c.text || '').replace(/\n/g, '<br>');
-    } else {
-      const display = showAnswer
-        ? `<span style="font-weight:900;text-decoration:underline;">${c.answerIsA ? c.a : c.b}</span> / <span style="color:#999;">${c.answerIsA ? c.b : c.a}</span>`
-        : `${c.a} / ${c.b}`;
-      html += `<span style="background:#FFF9C4;border-radius:3px;padding:1px 4px;">${c.num}[${display}]</span>`;
+  const contentH = cW * (img.naturalHeight / img.naturalWidth);
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+  if (contentH <= maxH) {
+    pdf.addImage(url, 'JPEG', M, M, cW, contentH);
+  } else {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+
+    const pagePixelH = Math.floor(img.naturalHeight * (maxH / contentH));
+    let sliceY = 0;
+    let firstPage = true;
+    while (sliceY < img.naturalHeight) {
+      const sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = img.naturalWidth;
+      sliceCanvas.height = sliceH;
+      const sliceCtx = sliceCanvas.getContext('2d')!;
+      sliceCtx.drawImage(canvas, 0, sliceY, img.naturalWidth, sliceH, 0, 0, img.naturalWidth, sliceH);
+      const sliceUrl = sliceCanvas.toDataURL('image/jpeg', 0.92);
+      const sliceContentH = cW * (sliceH / img.naturalWidth);
+      if (!firstPage) pdf.addPage();
+      pdf.addImage(sliceUrl, 'JPEG', M, M, cW, sliceContentH);
+      sliceY += sliceH;
+      firstPage = false;
     }
   }
-  html += '</p>';
-
-  if (showAnswer) {
-    html += `<div style="margin-top:20px;padding:12px 16px;background:#f8f8f8;border-radius:6px;font-size:12px;line-height:1.8;"><strong>정답:</strong> ${answerKey}</div>`;
-  }
-
-  el.innerHTML = html;
-  document.body.appendChild(el);
-
-  // rAF 대기: 브라우저가 레이아웃을 완전히 계산한 후 캡처
-  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-
-  try {
-    const W = 210, M = 10, cW = W - 2 * M;
-    const maxH = 277;
-
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
-    const img = document.createElement('img') as HTMLImageElement;
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Image load failed'));
-      img.src = url;
-    });
-
-    const elH = el.offsetHeight;
-    const elW = el.offsetWidth;
-    const contentH = cW * (elH / elW);
-    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-
-    if (contentH <= maxH) {
-      pdf.addImage(url, 'JPEG', M, M, cW, contentH);
-    } else {
-      // Slice into pages
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-
-      const pagePixelH = Math.floor(img.naturalHeight * (maxH / contentH));
-      let sliceY = 0;
-      let firstPage = true;
-      while (sliceY < img.naturalHeight) {
-        const sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
-        const sliceCanvas = document.createElement('canvas');
-        sliceCanvas.width = img.naturalWidth;
-        sliceCanvas.height = sliceH;
-        const sliceCtx = sliceCanvas.getContext('2d')!;
-        sliceCtx.drawImage(canvas, 0, sliceY, img.naturalWidth, sliceH, 0, 0, img.naturalWidth, sliceH);
-        const sliceUrl = sliceCanvas.toDataURL('image/jpeg', 0.92);
-        const sliceContentH = cW * (sliceH / img.naturalWidth);
-        if (!firstPage) pdf.addPage();
-        pdf.addImage(sliceUrl, 'JPEG', M, M, cW, sliceContentH);
-        sliceY += sliceH;
-        firstPage = false;
-      }
-    }
-    return pdf.output('blob');
-  } finally {
-    document.body.removeChild(el);
-  }
+  return pdf.output('blob');
 }
 
 // ─── main component ───────────────────────────────────────────────────────────
@@ -326,8 +285,8 @@ export default function VocabChoicePage() {
       setResult(json.data!);
 
 
-      // Auto-save after 1s
-      setTimeout(() => autoSave(json.data!, text, title, difficulty), 1000);
+      // Auto-save after 1s (DOM 렌더 완료 대기)
+      setTimeout(() => autoSave(text, title, difficulty), 1500);
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
@@ -335,13 +294,15 @@ export default function VocabChoicePage() {
     }
   };
 
-  const autoSave = async (data: VocabChoiceResult, passageFull: string, title: string, difficulty: string) => {
+  const autoSave = async (passageFull: string, title: string, difficulty: string) => {
     if (savedRef.current || !session) return;
     savedRef.current = true;
     setSavingHistory(true);
     try {
-      const problemBlob = await buildVocabPdfBlob(data.vocab_choice_passage, data.answer_key, title, false);
-      const answerBlob = await buildVocabPdfBlob(data.vocab_choice_passage, data.answer_key, title, true);
+      const [problemBlob, answerBlob] = await Promise.all([
+        capturePdfFromElement('vocab-pdf-problem'),
+        capturePdfFromElement('vocab-pdf-answer'),
+      ]);
 
       const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -382,7 +343,8 @@ export default function VocabChoicePage() {
     if (withAnswer) setDownloadingAnswerPdf(true);
     else setDownloadingPdf(true);
     try {
-      const blob = await buildVocabPdfBlob(result.vocab_choice_passage, result.answer_key, title, withAnswer);
+      const elementId = withAnswer ? 'vocab-pdf-answer' : 'vocab-pdf-problem';
+      const blob = await capturePdfFromElement(elementId);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -677,6 +639,53 @@ export default function VocabChoicePage() {
             )}
           </div>
         )}
+
+        {/* ── PDF 렌더 영역 (position:fixed, z-index:-9999 로 화면 뒤에 숨김, html-to-image 캡처용) ── */}
+        {result && (() => {
+          const pdfTitle = (activeTab === 'input' ? inputTitle : mockTitle) || '어휘 선택 문제';
+          const chunks = parseVocabPassage(result.vocab_choice_passage, result.answer_key);
+          const pdfStyle: React.CSSProperties = {
+            position: 'fixed', top: 0, left: 0, width: '800px',
+            background: 'white', padding: '40px 48px', boxSizing: 'border-box',
+            fontFamily: 'Arial, Helvetica, sans-serif', zIndex: -9999, pointerEvents: 'none',
+          };
+          const h2Style: React.CSSProperties = { fontSize: 14, fontWeight: 900, margin: '0 0 16px', borderBottom: '2px solid #333', paddingBottom: 8 };
+          const pStyle: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'break-word' };
+          const choiceBase: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 4px' };
+          return (
+            <>
+              <div id="vocab-pdf-problem" style={pdfStyle}>
+                <h2 style={h2Style}>{pdfTitle}</h2>
+                <p style={pStyle}>
+                  {chunks.map((c, i) => {
+                    if (c.type === 'text') return <span key={i}>{c.text}</span>;
+                    return <span key={i} style={choiceBase}>{c.num}[{c.a} / {c.b}]</span>;
+                  })}
+                </p>
+              </div>
+              <div id="vocab-pdf-answer" style={pdfStyle}>
+                <h2 style={h2Style}>{pdfTitle}</h2>
+                <p style={pStyle}>
+                  {chunks.map((c, i) => {
+                    if (c.type === 'text') return <span key={i}>{c.text}</span>;
+                    const correct = c.answerIsA ? c.a! : c.b!;
+                    const wrong = c.answerIsA ? c.b! : c.a!;
+                    return (
+                      <span key={i} style={choiceBase}>
+                        {c.num}[<span style={{ fontWeight: 900, textDecoration: 'underline' }}>{correct}</span>
+                        {' / '}
+                        <span style={{ color: '#999', textDecoration: 'line-through' }}>{wrong}</span>]
+                      </span>
+                    );
+                  })}
+                </p>
+                <div style={{ marginTop: 20, padding: '12px 16px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
+                  <strong>정답:</strong> {result.answer_key}
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         {/* ── 생성 이력 탭 ── */}
         {activeTab === 'history' && (
