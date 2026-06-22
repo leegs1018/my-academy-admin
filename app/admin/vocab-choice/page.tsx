@@ -1,0 +1,802 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import type { Session } from '@supabase/supabase-js';
+
+// ─── types ────────────────────────────────────────────────────────────────────
+
+interface VocabChoiceResult {
+  vocab_choice_passage: string;
+  answer_key: string;
+}
+
+interface HistoryItem {
+  id: string;
+  title: string | null;
+  passage_excerpt: string;
+  passage_full: string;
+  source_type: string;
+  year: number | null;
+  grade: string | null;
+  institution: string | null;
+  question_number: number | null;
+  difficulty: string;
+  pdf_path: string | null;
+  answer_pdf_path: string | null;
+  created_at: string;
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+const DIFF_LABELS: Record<string, string> = { b1: 'B1', b2: 'B2', c1: 'C1', c2: 'C2' };
+const DIFF_COLORS: Record<string, string> = {
+  b1: 'bg-emerald-100 text-emerald-700',
+  b2: 'bg-sky-100 text-sky-700',
+  c1: 'bg-violet-100 text-violet-700',
+  c2: 'bg-rose-100 text-rose-700',
+};
+
+interface VocabChunk {
+  type: 'text' | 'choice';
+  text?: string;
+  num?: number;
+  a?: string;
+  b?: string;
+  answerIsA?: boolean;
+}
+
+function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
+  // Build answer map: "1. word  2. word ..." → { 1: "word", 2: "word" }
+  const answerMap: Record<number, string> = {};
+  const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
+  const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
+
+  // Parse passage: split by N[a / b] pattern
+  const chunks: VocabChunk[] = [];
+  const choiceRegex = /(\d+)\[([^\]]+?)\s*\/\s*([^\]]+?)\]/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = choiceRegex.exec(passage)) !== null) {
+    if (match.index > lastIndex) {
+      chunks.push({ type: 'text', text: passage.slice(lastIndex, match.index) });
+    }
+    const num = parseInt(match[1]);
+    const a = match[2].trim();
+    const b = match[3].trim();
+    const ans = answerMap[num] || '';
+    chunks.push({ type: 'choice', num, a, b, answerIsA: a.toLowerCase() === ans.toLowerCase() });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < passage.length) {
+    chunks.push({ type: 'text', text: passage.slice(lastIndex) });
+  }
+  return chunks;
+}
+
+async function buildVocabPdfBlob(
+  passage: string,
+  answerKey: string,
+  title: string,
+  showAnswer: boolean
+): Promise<Blob> {
+  const { toJpeg } = await import('html-to-image');
+  const { jsPDF } = await import('jspdf');
+
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;background:white;padding:40px 48px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;';
+
+  // Build HTML for the passage
+  const chunks = parseVocabPassage(passage, answerKey);
+  let html = `<h2 style="font-size:14px;font-weight:900;margin:0 0 16px;border-bottom:2px solid #333;padding-bottom:8px;">${title || '어휘 선택 문제'}</h2>`;
+  html += '<p style="font-size:13px;line-height:2;word-break:break-word;">';
+  for (const c of chunks) {
+    if (c.type === 'text') {
+      html += (c.text || '').replace(/\n/g, '<br>');
+    } else {
+      const display = showAnswer
+        ? `<span style="font-weight:900;text-decoration:underline;">${c.answerIsA ? c.a : c.b}</span> / <span style="color:#999;">${c.answerIsA ? c.b : c.a}</span>`
+        : `${c.a} / ${c.b}`;
+      html += `<span style="background:#FFF9C4;border-radius:3px;padding:1px 4px;">${c.num}[${display}]</span>`;
+    }
+  }
+  html += '</p>';
+
+  if (showAnswer) {
+    html += `<div style="margin-top:20px;padding:12px 16px;background:#f8f8f8;border-radius:6px;font-size:12px;line-height:1.8;"><strong>정답:</strong> ${answerKey}</div>`;
+  }
+
+  el.innerHTML = html;
+  document.body.appendChild(el);
+
+  try {
+    const W = 210, M = 10, cW = W - 2 * M;
+    const maxH = 277;
+
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
+    const img = document.createElement('img') as HTMLImageElement;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Image load failed'));
+      img.src = url;
+    });
+
+    const elH = el.offsetHeight;
+    const elW = el.offsetWidth;
+    const contentH = cW * (elH / elW);
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+    if (contentH <= maxH) {
+      pdf.addImage(url, 'JPEG', M, M, cW, contentH);
+    } else {
+      // Slice into pages
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+
+      const pagePixelH = Math.floor(img.naturalHeight * (maxH / contentH));
+      let sliceY = 0;
+      let firstPage = true;
+      while (sliceY < img.naturalHeight) {
+        const sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = img.naturalWidth;
+        sliceCanvas.height = sliceH;
+        const sliceCtx = sliceCanvas.getContext('2d')!;
+        sliceCtx.drawImage(canvas, 0, sliceY, img.naturalWidth, sliceH, 0, 0, img.naturalWidth, sliceH);
+        const sliceUrl = sliceCanvas.toDataURL('image/jpeg', 0.92);
+        const sliceContentH = cW * (sliceH / img.naturalWidth);
+        if (!firstPage) pdf.addPage();
+        pdf.addImage(sliceUrl, 'JPEG', M, M, cW, sliceContentH);
+        sliceY += sliceH;
+        firstPage = false;
+      }
+    }
+    return pdf.output('blob');
+  } finally {
+    document.body.removeChild(el);
+  }
+}
+
+// ─── main component ───────────────────────────────────────────────────────────
+
+export default function VocabChoicePage() {
+  const [activeTab, setActiveTab] = useState<'input' | 'mock' | 'history'>('input');
+  const [session, setSession] = useState<Session | null>(null);
+
+  // Input tab
+  const [inputText, setInputText] = useState('');
+  const [inputTitle, setInputTitle] = useState('');
+  const [inputDifficulty, setInputDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
+
+  // Mock tab
+  const [mockTitle, setMockTitle] = useState('');
+  const [mockDifficulty, setMockDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
+  const [years, setYears] = useState<number[]>([]);
+  const [grades, setGrades] = useState<string[]>([]);
+  const [institutions, setInstitutions] = useState<string[]>([]);
+  const [questionNumbers, setQuestionNumbers] = useState<number[]>([]);
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedInstitution, setSelectedInstitution] = useState('');
+  const [selectedNumber, setSelectedNumber] = useState('');
+  const [mockPassage, setMockPassage] = useState('');
+  const [loadingPassage, setLoadingPassage] = useState(false);
+
+  // Shared generation state
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+  const [result, setResult] = useState<VocabChoiceResult | null>(null);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [vocabChoicePrice, setVocabChoicePrice] = useState(20);
+  const [conBalance, setConBalance] = useState(0);
+
+  // PDF state
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingAnswerPdf, setDownloadingAnswerPdf] = useState(false);
+  const [savingHistory, setSavingHistory] = useState(false);
+
+  // History tab
+  const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [searchDate, setSearchDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const savedRef = useRef(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => { if (s) setSession(s as typeof session); });
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
+      .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
+  }, [session]);
+
+  useEffect(() => {
+    fetch('/api/credits/pricing').then(r => r.ok ? r.json() : null).then(data => {
+      const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'vocab_choice');
+      if (item) setVocabChoicePrice(item.cost_per_use);
+    }).catch(() => {});
+  }, []);
+
+  // Mock cascade selectors
+  useEffect(() => {
+    supabase.from('mock_exam_passages').select('year').order('year', { ascending: false })
+      .then(({ data }) => { setYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedYear) return;
+    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumber(''); setMockPassage('');
+    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear)).order('grade', { ascending: true })
+      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
+  }, [selectedYear]);
+
+  useEffect(() => {
+    if (!selectedYear || !selectedGrade) return;
+    setSelectedInstitution(''); setSelectedNumber(''); setMockPassage('');
+    supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).order('institution', { ascending: true })
+      .then(({ data }) => {
+        const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
+        unique.sort((a, b) => {
+          const ma = parseInt(a.match(/^(\d+)/)?.[1] ?? '99');
+          const mb = parseInt(b.match(/^(\d+)/)?.[1] ?? '99');
+          return ma - mb;
+        });
+        setInstitutions(unique);
+      });
+  }, [selectedYear, selectedGrade]);
+
+  useEffect(() => {
+    if (!selectedYear || !selectedGrade || !selectedInstitution) return;
+    setSelectedNumber(''); setMockPassage('');
+    supabase.from('mock_exam_passages').select('question_number')
+      .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
+      .order('question_number')
+      .then(({ data }) => { setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
+  }, [selectedYear, selectedGrade, selectedInstitution]);
+
+  useEffect(() => {
+    if (!selectedYear || !selectedGrade || !selectedInstitution || !selectedNumber) { setMockPassage(''); return; }
+    setLoadingPassage(true);
+    supabase.from('mock_exam_passages').select('passage_text')
+      .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
+      .eq('question_number', parseInt(selectedNumber)).single()
+      .then(({ data }) => { setMockPassage(data?.passage_text || ''); setLoadingPassage(false); });
+  }, [selectedYear, selectedGrade, selectedInstitution, selectedNumber]);
+
+  const fetchHistory = useCallback(async (date = searchDate, query = searchQuery) => {
+    if (!session) return;
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      let q = supabase
+        .from('vocab_choice_history')
+        .select('*')
+        .eq('academy_id', session.user.id)
+        .order('created_at', { ascending: false });
+      if (date) {
+        q = q.gte('created_at', date).lt('created_at', new Date(new Date(date).getTime() + 86400000).toISOString());
+      }
+      if (query) {
+        q = q.ilike('passage_full', `%${query}%`);
+      }
+      const { data, error } = await q.limit(100);
+      if (error) { setHistoryError(error.message); return; }
+      setHistoryList((data || []) as HistoryItem[]);
+    } catch (e) {
+      setHistoryError(e instanceof Error ? e.message : '오류');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [session, searchDate, searchQuery]);
+
+  useEffect(() => {
+    if (activeTab === 'history' && session) fetchHistory();
+  }, [activeTab, session, fetchHistory]);
+
+  const handleGenerate = async () => {
+    const text = activeTab === 'input' ? inputText : mockPassage;
+    const title = activeTab === 'input' ? inputTitle : mockTitle;
+    const difficulty = activeTab === 'input' ? inputDifficulty : mockDifficulty;
+
+    if (!text.trim()) { setGenerateError('지문을 입력해주세요.'); return; }
+    if (!session) { setGenerateError('로그인이 필요합니다.'); return; }
+    if (conBalance < vocabChoicePrice) {
+      setGenerateError(`CON이 부족합니다. (필요: ${vocabChoicePrice}C, 보유: ${conBalance}C)`);
+      return;
+    }
+
+    setGenerating(true);
+    setGenerateError('');
+    setResult(null);
+    setShowAnswer(false);
+    savedRef.current = false;
+
+    try {
+      const res = await fetch('/api/generate-vocab-choice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, difficulty, academy_id: session.user.id }),
+      });
+      const json = await res.json() as { success?: boolean; data?: VocabChoiceResult; error?: string };
+      if (!res.ok || !json.success) throw new Error(json.error || '생성 실패');
+      setResult(json.data!);
+
+      // Refresh balance
+      fetch('/api/credits/transactions', { headers: { Authorization: `Bearer ${session.access_token}` } })
+        .then(r => r.json()).then((j: { balance?: number }) => { if (j.balance !== undefined) setConBalance(j.balance); });
+
+      // Auto-save after 1s
+      setTimeout(() => autoSave(json.data!, text, title, difficulty), 1000);
+    } catch (e) {
+      setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const autoSave = async (data: VocabChoiceResult, passageFull: string, title: string, difficulty: string) => {
+    if (savedRef.current || !session) return;
+    savedRef.current = true;
+    setSavingHistory(true);
+    try {
+      const problemBlob = await buildVocabPdfBlob(data.vocab_choice_passage, data.answer_key, title, false);
+      const answerBlob = await buildVocabPdfBlob(data.vocab_choice_passage, data.answer_key, title, true);
+
+      const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(b);
+      });
+
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(problemBlob), toBase64(answerBlob)]);
+
+      const isInput = activeTab === 'input';
+      await fetch('/api/save-vocab-choice-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          pdfBase64, answerPdfBase64,
+          title: title || null,
+          passageExcerpt: passageFull.slice(0, 100),
+          passageFull,
+          sourceType: isInput ? 'input' : 'mock',
+          year: isInput ? null : (selectedYear ? parseInt(selectedYear) : null),
+          grade: isInput ? null : (selectedGrade || null),
+          institution: isInput ? null : (selectedInstitution || null),
+          questionNumber: isInput ? null : (selectedNumber ? parseInt(selectedNumber) : null),
+          difficulty,
+        }),
+      });
+    } catch (e) {
+      console.error('[vocab-choice] auto-save failed:', e);
+    } finally {
+      setSavingHistory(false);
+    }
+  };
+
+  const handleDownloadPdf = async (withAnswer: boolean) => {
+    if (!result) return;
+    const title = activeTab === 'input' ? inputTitle : mockTitle;
+    if (withAnswer) setDownloadingAnswerPdf(true);
+    else setDownloadingPdf(true);
+    try {
+      const blob = await buildVocabPdfBlob(result.vocab_choice_passage, result.answer_key, title, withAnswer);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title || '어휘선택문제'}${withAnswer ? '_정답' : '_문제'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'PDF 생성 실패');
+    } finally {
+      if (withAnswer) setDownloadingAnswerPdf(false);
+      else setDownloadingPdf(false);
+    }
+  };
+
+  const downloadFromHistory = async (pdfPath: string, filename: string) => {
+    if (!session) return;
+    const res = await fetch('/api/get-signed-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ path: pdfPath, bucket: 'pdf-history' }),
+    });
+    const data = await res.json() as { signedUrl?: string };
+    if (!data.signedUrl) { alert('다운로드 링크 생성 실패'); return; }
+    const link = document.createElement('a');
+    link.href = data.signedUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const deleteSelected = async () => {
+    if (!session || selectedIds.size === 0) return;
+    if (!confirm(`${selectedIds.size}개 항목을 삭제하시겠습니까?`)) return;
+    setBulkDeleting(true);
+    try {
+      await fetch('/api/delete-vocab-choice-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      setSelectedIds(new Set());
+      fetchHistory();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelectAll = () => setSelectedIds(prev => prev.size === historyList.length ? new Set() : new Set(historyList.map(h => h.id)));
+
+  // ─── render helpers ────────────────────────────────────────────────────────
+
+  const renderVocabPassage = (passage: string) => {
+    const chunks = parseVocabPassage(passage, result?.answer_key || '');
+    return chunks.map((c, i) => {
+      if (c.type === 'text') return <span key={i}>{c.text}</span>;
+      const correctWord = c.answerIsA ? c.a! : c.b!;
+      const wrongWord = c.answerIsA ? c.b! : c.a!;
+      return (
+        <span key={i} className="inline-flex items-baseline gap-0.5">
+          <span className="text-xs font-black text-slate-400 mr-0.5">{c.num}</span>
+          <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'bg-yellow-100 text-yellow-800 font-black' : 'bg-slate-100 text-slate-700'}`}>
+            {showAnswer ? correctWord : c.a}
+          </span>
+          <span className="text-slate-400 text-xs">/</span>
+          <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'bg-red-50 text-red-400 line-through' : 'bg-slate-100 text-slate-700'}`}>
+            {showAnswer ? wrongWord : c.b}
+          </span>
+        </span>
+      );
+    });
+  };
+
+  const currentText = activeTab === 'input' ? inputText : mockPassage;
+  const canGenerate = currentText.trim().length >= 50 && !generating;
+
+  // ─── render ────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-16">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-black text-slate-800">📌 어휘 선택 문제</h1>
+            <p className="text-sm text-slate-500 mt-1">영어 지문으로 어휘 선택 문제를 자동 생성합니다</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-500 font-bold">보유 CON</p>
+            <p className="text-xl font-black text-yellow-600">{conBalance.toLocaleString()} C</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-1.5">
+          {([
+            { key: 'input', label: '✏️ 직접 입력' },
+            { key: 'mock', label: '📚 모의고사 지문' },
+            { key: 'history', label: '📋 생성 이력' },
+          ] as const).map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${activeTab === t.key ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── 직접 입력 탭 ── */}
+        {activeTab === 'input' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-500 mb-1.5">제목 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="예: 2024 수능 18번"
+                  value={inputTitle}
+                  onChange={e => setInputTitle(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-slate-500 mb-1.5">영어 지문</label>
+                <textarea
+                  rows={10}
+                  placeholder="영어 지문을 붙여넣으세요..."
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 mb-1.5">난이도</label>
+                  <div className="flex gap-2">
+                    {(['b1', 'b2', 'c1', 'c2'] as const).map(d => (
+                      <button key={d} onClick={() => setInputDifficulty(d)}
+                        className={`px-4 py-2 text-sm font-black rounded-xl transition-all ${inputDifficulty === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate-500 hover:bg-gray-200'}`}>
+                        {DIFF_LABELS[d]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-xs text-slate-400 font-bold">1회 차감</p>
+                  <p className="text-base font-black text-indigo-600">{vocabChoicePrice} C</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-indigo-200"
+            >
+              {generating ? '⏳ AI가 문제를 생성하고 있습니다...' : `✨ AI로 문제 생성하기 (${vocabChoicePrice}C)`}
+            </button>
+          </div>
+        )}
+
+        {/* ── 모의고사 지문 탭 ── */}
+        {activeTab === 'mock' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-500 mb-1.5">제목 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="예: 2024년 고1 3월 18번"
+                  value={mockTitle}
+                  onChange={e => setMockTitle(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
+
+              {/* Cascade selectors */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
+                  { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
+                  { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
+                  { label: '문제번호', value: selectedNumber, onChange: setSelectedNumber, disabled: !selectedInstitution, options: questionNumbers.map(n => ({ value: String(n), label: `${n}번` })) },
+                ].map(({ label, value, onChange, disabled, options }) => (
+                  <div key={label}>
+                    <label className="block text-xs font-black text-slate-500 mb-1">{label}</label>
+                    <select
+                      value={value}
+                      onChange={e => onChange(e.target.value)}
+                      disabled={disabled}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white disabled:bg-gray-50 disabled:text-slate-300"
+                    >
+                      <option value="">선택</option>
+                      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              {/* Passage preview */}
+              {loadingPassage && <div className="text-center py-4 text-slate-400 font-bold text-sm animate-pulse">지문 불러오는 중...</div>}
+              {mockPassage && !loadingPassage && (
+                <div className="bg-gray-50 rounded-xl p-4 text-sm font-bold text-slate-700 leading-relaxed max-h-48 overflow-y-auto select-none"
+                  onContextMenu={e => e.preventDefault()}
+                  onDragStart={e => e.preventDefault()}>
+                  {mockPassage}
+                </div>
+              )}
+
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 mb-1.5">난이도</label>
+                  <div className="flex gap-2">
+                    {(['b1', 'b2', 'c1', 'c2'] as const).map(d => (
+                      <button key={d} onClick={() => setMockDifficulty(d)}
+                        className={`px-4 py-2 text-sm font-black rounded-xl transition-all ${mockDifficulty === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate-500 hover:bg-gray-200'}`}>
+                        {DIFF_LABELS[d]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-xs text-slate-400 font-bold">1회 차감</p>
+                  <p className="text-base font-black text-indigo-600">{vocabChoicePrice} C</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-indigo-200"
+            >
+              {generating ? '⏳ AI가 문제를 생성하고 있습니다...' : `✨ AI로 문제 생성하기 (${vocabChoicePrice}C)`}
+            </button>
+          </div>
+        )}
+
+        {/* Error message */}
+        {generateError && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4">
+            <p className="text-rose-600 font-black text-sm">⚠️ {generateError}</p>
+          </div>
+        )}
+
+        {/* ── Result ── */}
+        {result && activeTab !== 'history' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Result header */}
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <span className="font-black text-slate-800">생성 완료</span>
+                {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAnswer(!showAnswer)}
+                  className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
+                </button>
+                <button
+                  onClick={() => handleDownloadPdf(false)}
+                  disabled={downloadingPdf}
+                  className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-50"
+                >
+                  {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
+                </button>
+                <button
+                  onClick={() => handleDownloadPdf(true)}
+                  disabled={downloadingAnswerPdf}
+                  className="px-4 py-2 text-xs font-black bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all disabled:opacity-50"
+                >
+                  {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
+                </button>
+              </div>
+            </div>
+
+            {/* Passage with vocab choices */}
+            <div className="px-5 py-5">
+              <p className="text-sm font-bold leading-8 text-slate-800">
+                {renderVocabPassage(result.vocab_choice_passage)}
+              </p>
+            </div>
+
+            {/* Answer key */}
+            {showAnswer && (
+              <div className="px-5 pb-5">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                  <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
+                  <p className="text-sm font-bold text-slate-700 leading-relaxed">{result.answer_key}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 생성 이력 탭 ── */}
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
+              생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-black text-slate-500">날짜</label>
+                <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)}
+                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="text-xs font-black text-slate-500">키워드 검색</label>
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && fetchHistory()}
+                  placeholder="지문 내 단어를 입력하세요..."
+                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <button onClick={() => fetchHistory()} disabled={historyLoading}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50">
+                🔍 검색
+              </button>
+              {(searchDate || searchQuery) && (
+                <button onClick={() => { setSearchDate(''); setSearchQuery(''); fetchHistory('', ''); }}
+                  className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">
+                  초기화
+                </button>
+              )}
+            </div>
+
+            {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
+
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
+                <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
+                <div className="flex gap-2 ml-auto">
+                  <button onClick={deleteSelected} disabled={bulkDeleting}
+                    className="px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 disabled:opacity-50 transition-all">
+                    {bulkDeleting ? '삭제 중...' : '삭제'}
+                  </button>
+                  <button onClick={() => setSelectedIds(new Set())} className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-black text-sm hover:bg-slate-200 transition-all">취소</button>
+                </div>
+              </div>
+            )}
+
+            {historyLoading ? (
+              <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
+            ) : historyList.length === 0 ? (
+              <div className="bg-white rounded-[2rem] p-16 text-center shadow-lg border border-slate-100">
+                <p className="text-5xl mb-4">📭</p>
+                <p className="font-black text-slate-500 text-lg">생성된 이력이 없습니다</p>
+                <p className="text-slate-400 font-bold text-sm mt-2">문제를 생성하면 자동으로 이곳에 기록돼요</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
+                <div className="grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
+                  <input type="checkbox"
+                    checked={selectedIds.size === historyList.length && historyList.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
+                  {['날짜', '제목', '지문 요약', '난이도', '문제', '정답'].map((h, i) => (
+                    <span key={i} className={i >= 4 ? 'text-center' : ''}>{h}</span>
+                  ))}
+                </div>
+                {historyList.map((item, i) => (
+                  <div key={item.id}
+                    className={`grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
+                      ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                    <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)}
+                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
+                    <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
+                      {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-sm font-bold text-slate-700 truncate" title={item.title || ''}>
+                      {item.title || <span className="text-slate-300">-</span>}
+                    </span>
+                    <span className="text-xs text-slate-500 font-bold truncate">{item.passage_excerpt}</span>
+                    <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {item.difficulty?.toUpperCase() || '-'}
+                    </span>
+                    <div className="flex justify-center">
+                      {item.pdf_path ? (
+                        <button onClick={() => downloadFromHistory(item.pdf_path!, `${item.title || '어휘선택문제'}_문제.pdf`)}
+                          className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">
+                          ⬇️ 문제
+                        </button>
+                      ) : <span className="text-xs text-slate-300 font-bold text-center w-full">저장중</span>}
+                    </div>
+                    <div className="flex justify-center">
+                      {item.answer_pdf_path ? (
+                        <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '어휘선택문제'}_정답.pdf`)}
+                          className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">
+                          ⬇️ 정답
+                        </button>
+                      ) : <span className="text-xs text-slate-300 font-bold text-center w-full">-</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -236,7 +236,7 @@ export default function MockExamWorkbookPage() {
     fetch('/api/credits/pricing')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
+        const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'mock_workbook') ?? (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
         if (item) setPdfAnalysisPrice(item.cost_per_use);
       }).catch(() => {});
   }, []);
@@ -375,7 +375,7 @@ export default function MockExamWorkbookPage() {
         const res = await fetch('/api/process-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, difficulty, academy_id: session.user.id }),
+          body: JSON.stringify({ text, difficulty, academy_id: session.user.id, feature_key: 'mock_workbook' }),
         });
         const rawText = await res.text();
         const json = JSON.parse(rawText) as { data?: GeneratedMaterials; error?: string };
@@ -575,8 +575,10 @@ export default function MockExamWorkbookPage() {
                     passageMap[num] && (
                       <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                         <p className="text-xs font-black text-indigo-600 mb-1">{num}번 지문</p>
-                        <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2"
-                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2 select-none"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          onContextMenu={e => e.preventDefault()}
+                          onDragStart={e => e.preventDefault()}>
                           {passageMap[num]}
                         </p>
                       </div>
@@ -659,7 +661,8 @@ export default function MockExamWorkbookPage() {
                         <h2 className="font-black text-lg leading-tight text-white">원문 지문</h2>
                       </div>
                       <div className="p-4">
-                        <p className="text-slate-700 font-bold leading-relaxed text-xl" style={{ textAlign: 'justify', wordBreak: 'break-word' }}>{activeResult.passageText}</p>
+                        <p className="text-slate-700 font-bold leading-relaxed text-xl select-none" style={{ textAlign: 'justify', wordBreak: 'break-word' }}
+                          onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>{activeResult.passageText}</p>
                       </div>
                     </div>
 

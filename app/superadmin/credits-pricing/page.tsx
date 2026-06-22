@@ -13,24 +13,12 @@ interface PricingItem {
 }
 
 const SECTION_ORDER: { key: string; label: string; color: string; keys: string[] }[] = [
-  {
-    key: 'exam',
-    label: '실전변형 문제',
-    color: 'text-blue-400',
-    keys: ['ai_question_per_type'],
-  },
-  {
-    key: 'pdf',
-    label: '지문분석 툴 / 워크북',
-    color: 'text-teal-400',
-    keys: ['pdf_analysis'],
-  },
-  {
-    key: 'sms',
-    label: 'SMS 문자 발송',
-    color: 'text-violet-400',
-    keys: ['sms', 'lms'],
-  },
+  { key: 'exam',     label: '실전 변형 문제',       color: 'text-blue-400',    keys: ['ai_question_per_type'] },
+  { key: 'pdf',      label: '지문분석 툴/워크북',   color: 'text-teal-400',    keys: ['pdf_analysis'] },
+  { key: 'mock_wb',  label: '모의고사 툴/워크북',   color: 'text-emerald-400', keys: ['mock_workbook'] },
+  { key: 'mock_q',   label: '모의고사 변형 문제',   color: 'text-indigo-400',  keys: ['mock_exam_question_per_type'] },
+  { key: 'vocab',    label: '어휘 선택 문제',       color: 'text-rose-400',    keys: ['vocab_choice'] },
+  { key: 'sms',      label: 'SMS 문자 발송',        color: 'text-violet-400',  keys: ['sms', 'lms'] },
 ];
 
 export default function ConPricingPage() {

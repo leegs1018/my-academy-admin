@@ -79,7 +79,9 @@ export default function ResetPasswordPage() {
       setError('비밀번호 변경 중 오류가 발생했습니다: ' + updateError.message);
     } else {
       setDone(true);
-      setTimeout(() => router.replace('/admin'), 2000);
+      const { data: { session } } = await supabase.auth.getSession();
+      const dest = session?.user?.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL ? '/superadmin' : '/admin';
+      setTimeout(() => router.replace(dest), 2000);
     }
   };
 

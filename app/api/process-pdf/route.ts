@@ -135,7 +135,9 @@ function extractJson(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { text, difficulty, academy_id } = await request.json() as { text: string; difficulty: string; academy_id?: string };
+    const { text, difficulty, academy_id, feature_key: featureKeyParam } = await request.json() as { text: string; difficulty: string; academy_id?: string; feature_key?: string };
+    const featureKey = featureKeyParam || 'pdf_analysis';
+    const featureDesc = featureKey === 'mock_workbook' ? '모의고사 툴/워크북 생성' : '지문분석 툴/워크북 생성';
 
     if (!text || text.trim().length < 50) {
       return NextResponse.json(
@@ -146,7 +148,7 @@ export async function POST(request: Request) {
 
     // CON 잔액 확인 및 차감
     if (academy_id) {
-      const price = await getFeaturePrice('pdf_analysis');
+      const price = await getFeaturePrice(featureKey);
       if (price > 0) {
         const balance = await getConBalance(academy_id);
         if (balance < price) {
@@ -156,8 +158,8 @@ export async function POST(request: Request) {
         const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
           p_academy_id: academy_id,
           p_amount: price,
-          p_feature_key: 'pdf_analysis',
-          p_description: `지문분석 툴/워크북 생성`,
+          p_feature_key: featureKey,
+          p_description: featureDesc,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {

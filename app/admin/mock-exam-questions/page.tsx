@@ -498,7 +498,8 @@ export default function MockExamQuestionsPage() {
 
   useEffect(() => {
     fetch('/api/credits/pricing').then(r => r.ok ? r.json() : null).then(data => {
-      const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question_per_type');
+      const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'mock_exam_question_per_type')
+        ?? (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question_per_type');
       if (item) setAiPrice(item.cost_per_use);
     }).catch(() => {});
   }, []);
@@ -589,7 +590,7 @@ export default function MockExamQuestionsPage() {
         const res = await fetch('/api/generate-exam-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })) }),
+          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })), feature_key: 'mock_exam_question_per_type' }),
         });
         const json = await res.json() as { questions?: ExamQuestion[]; error?: string };
         if (!res.ok) throw new Error(json.error || '생성 실패');

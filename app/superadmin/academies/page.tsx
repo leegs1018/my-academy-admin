@@ -239,6 +239,15 @@ export default function AcademiesPage() {
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="block text-xs font-black text-slate-400 mb-2">충전량 (CON)</label>
+                <div className="flex gap-1.5 mb-2">
+                  {[1000, 3000, 5000, 10000].map(n => (
+                    <button key={n}
+                      onClick={() => setChargeModal(prev => prev ? { ...prev, amount: String(n) } : null)}
+                      className="flex-1 py-1.5 text-xs font-black bg-slate-700 hover:bg-yellow-500 hover:text-slate-900 text-slate-300 rounded-lg transition-all">
+                      {n.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="number"
                   min="1"
@@ -247,7 +256,7 @@ export default function AcademiesPage() {
                   onChange={e => setChargeModal(prev => prev ? { ...prev, amount: e.target.value } : null)}
                   className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-black focus:border-yellow-500 focus:outline-none text-sm"
                 />
-                <p className="text-xs text-slate-500 mt-1.5 font-bold">100 CON = 10,000원</p>
+                <p className="text-xs text-slate-500 mt-1.5 font-bold">1,000 CON = 10,000원</p>
               </div>
               <div>
                 <label className="block text-xs font-black text-slate-400 mb-2">메모 (선택)</label>

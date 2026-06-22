@@ -1371,9 +1371,12 @@ export async function POST(request: Request) {
       questionTypes?: string[];
       difficulty?: 'b1' | 'b2' | 'c1' | 'c2';
       academy_id?: string;
+      feature_key?: string;
     };
 
     const { text, academy_id } = body;
+    const examFeatureKey = body.feature_key || 'ai_question_per_type';
+    const examFeatureDesc = examFeatureKey === 'mock_exam_question_per_type' ? '모의고사변형 문제 생성' : '실전변형 문제 생성';
 
     // 신규 typeConfigs 방식 또는 구버전 questionTypes+difficulty 방식 모두 지원
     let enabledConfigs: TypeConfigInput[];
@@ -1397,7 +1400,7 @@ export async function POST(request: Request) {
 
     // CON 차감 — 문제 개수 기준 (count 합산)
     if (academy_id) {
-      const pricePerType = await getFeaturePrice('ai_question_per_type');
+      const pricePerType = await getFeaturePrice(examFeatureKey);
       const totalQuestions = enabledConfigs.reduce((s, c) => s + Math.max(1, Math.min(3, c.count)), 0);
       const totalCost = pricePerType * totalQuestions;
       if (totalCost > 0) {
@@ -1414,8 +1417,8 @@ export async function POST(request: Request) {
         const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
           p_academy_id: academy_id,
           p_amount: totalCost,
-          p_feature_key: 'ai_question_per_type',
-          p_description: `실전변형 문제 생성 (${totalQuestions}문제 × ${pricePerType}C)`,
+          p_feature_key: examFeatureKey,
+          p_description: `${examFeatureDesc} (${totalQuestions}문제 × ${pricePerType}C)`,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {
