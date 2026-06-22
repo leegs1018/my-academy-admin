@@ -752,6 +752,12 @@ Step 1 분석 결과를 기반으로 실제 문제를 생성하라.
 - The sentence should appear superficially coherent on first reading.
 - The irrelevant sentence must belong to the same academic topic field as the surrounding sentences.
 - The sentence should disrupt logical progression rather than introduce an obviously unrelated topic.
+
+${difficulty === 'b1' || difficulty === 'b2' ? `[B1/B2 변형 제한 — 최우선 적용]
+- 정답 문장(흐름과 관계 없는 1개 문장)만 새로 작성하여 삽입한다.
+- 나머지 4개 문장(①~⑤ 중 정답 제외)은 원문 지문의 문장을 최대한 그대로 가져온다. 과도한 rewriting 절대 금지.
+- intro 문장도 원문 앞 문장을 거의 그대로 사용한다.
+- 즉, 지문 전체를 변형하지 말고 오직 정답이 되는 삽입 문장 1개만 새로 설계한다.` : ''}
 `,
 
   phrase_meaning: `
