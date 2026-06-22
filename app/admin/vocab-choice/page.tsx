@@ -86,7 +86,7 @@ async function buildVocabPdfBlob(
   const { jsPDF } = await import('jspdf');
 
   const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;background:white;padding:40px 48px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;';
+  el.style.cssText = 'position:fixed;top:0;left:0;width:800px;background:white;padding:40px 48px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;z-index:-9999;pointer-events:none;';
 
   // Build HTML for the passage
   const chunks = parseVocabPassage(passage, answerKey);
@@ -110,6 +110,9 @@ async function buildVocabPdfBlob(
 
   el.innerHTML = html;
   document.body.appendChild(el);
+
+  // rAF 대기: 브라우저가 레이아웃을 완전히 계산한 후 캡처
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
   try {
     const W = 210, M = 10, cW = W - 2 * M;
