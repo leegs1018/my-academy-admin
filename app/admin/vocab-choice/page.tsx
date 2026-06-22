@@ -29,7 +29,6 @@ interface HistoryItem {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-const DIFF_LABELS: Record<string, string> = { b1: 'B1', b2: 'B2', c1: 'C1', c2: 'C2' };
 const DIFF_COLORS: Record<string, string> = {
   b1: 'bg-emerald-100 text-emerald-700',
   b2: 'bg-sky-100 text-sky-700',
@@ -37,25 +36,31 @@ const DIFF_COLORS: Record<string, string> = {
   c2: 'bg-rose-100 text-rose-700',
 };
 
+const DIFF_CARDS = [
+  { key: 'b1' as const, level: 'B1', label: '중등/고등 하', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+  { key: 'b2' as const, level: 'B2', label: '고등 중',      icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+  { key: 'c1' as const, level: 'C1', label: '고등 상',      icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+  { key: 'c2' as const, level: 'C2', label: '고등 최상',    icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+];
+
 interface VocabChunk {
   type: 'text' | 'choice';
   text?: string;
   num?: number;
   a?: string;
   b?: string;
-  answerIsA?: boolean;
+  c?: string;
+  correctIdx?: number;
 }
 
 function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
-  // Build answer map: "1. word  2. word ..." → { 1: "word", 2: "word" }
   const answerMap: Record<number, string> = {};
   const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
   const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
   nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
 
-  // Parse passage: split by N[a / b] pattern
   const chunks: VocabChunk[] = [];
-  const choiceRegex = /(\d+)\[([^\]]+?)\s*\/\s*([^\]]+?)\]/g;
+  const choiceRegex = /(\d+)\[([^\]]+)\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -64,10 +69,11 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
       chunks.push({ type: 'text', text: passage.slice(lastIndex, match.index) });
     }
     const num = parseInt(match[1]);
-    const a = match[2].trim();
-    const b = match[3].trim();
+    const opts = match[2].split(/\s*\/\s*/).map(o => o.trim());
     const ans = answerMap[num] || '';
-    chunks.push({ type: 'choice', num, a, b, answerIsA: a.toLowerCase() === ans.toLowerCase() });
+    const correctIdx = opts.findIndex(o => o.toLowerCase() === ans.toLowerCase());
+    const [a, b, c] = opts;
+    chunks.push({ type: 'choice', num, a, b, c, correctIdx: correctIdx >= 0 ? correctIdx : undefined });
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < passage.length) {
@@ -370,12 +376,15 @@ export default function VocabChoicePage() {
     });
     const data = await res.json() as { signedUrl?: string };
     if (!data.signedUrl) { alert('다운로드 링크 생성 실패'); return; }
+    const blob = await fetch(data.signedUrl).then(r => r.blob());
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = data.signedUrl;
+    link.href = url;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const deleteSelected = async () => {
@@ -404,18 +413,20 @@ export default function VocabChoicePage() {
     const chunks = parseVocabPassage(passage, result?.answer_key || '');
     return chunks.map((c, i) => {
       if (c.type === 'text') return <span key={i}>{c.text}</span>;
-      const correctWord = c.answerIsA ? c.a! : c.b!;
-      const wrongWord = c.answerIsA ? c.b! : c.a!;
+      const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
       return (
         <span key={i} className="inline-flex items-baseline gap-0.5">
           <span className="text-xs font-black text-slate-400 mr-0.5">{c.num}</span>
-          <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'bg-yellow-100 text-yellow-800 font-black' : 'bg-slate-100 text-slate-700'}`}>
-            {showAnswer ? correctWord : c.a}
-          </span>
-          <span className="text-slate-400 text-xs">/</span>
-          <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'bg-red-50 text-red-400 line-through' : 'bg-slate-100 text-slate-700'}`}>
-            {showAnswer ? wrongWord : c.b}
-          </span>
+          {opts.map((opt, j) => (
+            <span key={j} className="inline-flex items-baseline gap-0.5">
+              {j > 0 && <span className="text-slate-400 text-xs">/</span>}
+              <span className={`px-1 py-0.5 rounded text-xs font-bold ${
+                showAnswer
+                  ? j === c.correctIdx ? 'bg-yellow-100 text-yellow-800 font-black' : 'bg-red-50 text-red-400 line-through'
+                  : 'bg-slate-100 text-slate-700'
+              }`}>{opt}</span>
+            </span>
+          ))}
         </span>
       );
     });
@@ -475,21 +486,23 @@ export default function VocabChoicePage() {
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
                 />
               </div>
-              <div className="flex items-center gap-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-500 mb-1.5">난이도</label>
-                  <div className="flex gap-2">
-                    {(['b1', 'b2', 'c1', 'c2'] as const).map(d => (
-                      <button key={d} onClick={() => setInputDifficulty(d)}
-                        className={`px-4 py-2 text-sm font-black rounded-xl transition-all ${inputDifficulty === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate-500 hover:bg-gray-200'}`}>
-                        {DIFF_LABELS[d]}
-                      </button>
-                    ))}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-black text-slate-500">난이도</label>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-400 font-bold">1회 차감 </span>
+                    <span className="text-sm font-black text-indigo-600">{vocabChoicePrice} C</span>
                   </div>
                 </div>
-                <div className="ml-auto text-right">
-                  <p className="text-xs text-slate-400 font-bold">1회 차감</p>
-                  <p className="text-base font-black text-indigo-600">{vocabChoicePrice} C</p>
+                <div className="flex gap-2">
+                  {DIFF_CARDS.map(d => (
+                    <button key={d.key} onClick={() => setInputDifficulty(d.key)}
+                      className={`flex-1 py-4 rounded-xl font-black border-2 text-center transition-all ${inputDifficulty === d.key ? d.active : 'border-gray-200 bg-white text-slate-500 hover:bg-gray-50'}`}>
+                      <div className="text-2xl mb-1">{d.icon}</div>
+                      <div className="text-xs font-bold opacity-70 mb-0.5">{d.level}</div>
+                      <div className="text-sm">{d.label}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -552,21 +565,23 @@ export default function VocabChoicePage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-500 mb-1.5">난이도</label>
-                  <div className="flex gap-2">
-                    {(['b1', 'b2', 'c1', 'c2'] as const).map(d => (
-                      <button key={d} onClick={() => setMockDifficulty(d)}
-                        className={`px-4 py-2 text-sm font-black rounded-xl transition-all ${mockDifficulty === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-slate-500 hover:bg-gray-200'}`}>
-                        {DIFF_LABELS[d]}
-                      </button>
-                    ))}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-black text-slate-500">난이도</label>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-400 font-bold">1회 차감 </span>
+                    <span className="text-sm font-black text-indigo-600">{vocabChoicePrice} C</span>
                   </div>
                 </div>
-                <div className="ml-auto text-right">
-                  <p className="text-xs text-slate-400 font-bold">1회 차감</p>
-                  <p className="text-base font-black text-indigo-600">{vocabChoicePrice} C</p>
+                <div className="flex gap-2">
+                  {DIFF_CARDS.map(d => (
+                    <button key={d.key} onClick={() => setMockDifficulty(d.key)}
+                      className={`flex-1 py-4 rounded-xl font-black border-2 text-center transition-all ${mockDifficulty === d.key ? d.active : 'border-gray-200 bg-white text-slate-500 hover:bg-gray-50'}`}>
+                      <div className="text-2xl mb-1">{d.icon}</div>
+                      <div className="text-xs font-bold opacity-70 mb-0.5">{d.level}</div>
+                      <div className="text-sm">{d.label}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -659,7 +674,8 @@ export default function VocabChoicePage() {
                 <p style={pStyle}>
                   {chunks.map((c, i) => {
                     if (c.type === 'text') return <span key={i}>{c.text}</span>;
-                    return <span key={i} style={choiceBase}>{c.num}[{c.a} / {c.b}]</span>;
+                    const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
+                    return <span key={i} style={choiceBase}>{c.num}[{opts.join(' / ')}]</span>;
                   })}
                 </p>
               </div>
@@ -668,13 +684,18 @@ export default function VocabChoicePage() {
                 <p style={pStyle}>
                   {chunks.map((c, i) => {
                     if (c.type === 'text') return <span key={i}>{c.text}</span>;
-                    const correct = c.answerIsA ? c.a! : c.b!;
-                    const wrong = c.answerIsA ? c.b! : c.a!;
+                    const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
                     return (
                       <span key={i} style={choiceBase}>
-                        {c.num}[<span style={{ fontWeight: 900, textDecoration: 'underline' }}>{correct}</span>
-                        {' / '}
-                        <span style={{ color: '#999', textDecoration: 'line-through' }}>{wrong}</span>]
+                        {c.num}[{opts.map((opt, j) => (
+                          <span key={j}>
+                            {j > 0 && ' / '}
+                            {j === c.correctIdx
+                              ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
+                              : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>
+                            }
+                          </span>
+                        ))}]
                       </span>
                     );
                   })}
