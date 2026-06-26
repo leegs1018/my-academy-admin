@@ -2505,13 +2505,6 @@ export default function AiQuestionsPage() {
                           ))}
                         </div>
                       )}
-                      {q.type === 'grammar' && q.choices?.length > 0 && (
-                        <div className="flex flex-wrap gap-3 mt-4">
-                          {q.choices.map((c, ci) => (
-                            <span key={ci}>{renderGrammarChoice(c.text, ci + 1 === q.answer, ci + 1)}</span>
-                          ))}
-                        </div>
-                      )}
                       <div className="mt-4">
                         <button onClick={() => { setMockRevealedAnswers(prev => { const next = new Set(prev); if (next.has(idx)) next.delete(idx); else next.add(idx); return next; }); }}
                           className="text-xs font-black text-indigo-600 hover:text-indigo-800 transition-all border border-indigo-200 px-3 py-1.5 rounded-lg hover:bg-indigo-50">
