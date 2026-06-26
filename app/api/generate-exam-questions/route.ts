@@ -1732,6 +1732,54 @@ export async function POST(request: Request) {
           }
         }
 
+        // sentence_order 정답 위치 균일 분산 (① 쏠림 방지)
+        // AI는 원본 순서대로 (A)(B)(C)를 작성해 거의 항상 answer=1이 됨.
+        // 검증 통과 후 세 단락을 추출 → 논리 순서 보존하면서 레이블을 무작위 재배치.
+        if (questionType === 'sentence_order' && q?.modified_passage) {
+          // answer 번호 → 논리 순서상 [1st, 2nd, 3rd] 레이블
+          const ANSWER_ORDERS: Record<number, [string, string, string]> = {
+            1: ['A','B','C'], 2: ['A','C','B'], 3: ['B','A','C'], 4: ['B','C','A'], 5: ['C','A','B'],
+          };
+          const getSeg = (label: string): string => {
+            const tag = `(${label})`;
+            const p = q!.modified_passage!;
+            const start = p.indexOf(tag);
+            if (start === -1) return '';
+            const rest = p.slice(start + tag.length);
+            const nextIdx = rest.search(/\([ABC]\)/);
+            return (nextIdx === -1 ? rest : rest.slice(0, nextIdx)).trim();
+          };
+          const introMatch = q!.modified_passage!.match(/\[주어진 글\]\s*([\s\S]*?)(?=\(A\))/);
+          const intro = introMatch ? introMatch[1].trim() : '';
+          const sA = getSeg('A'), sB = getSeg('B'), sC = getSeg('C');
+          if (sA && sB && sC && intro) {
+            const segByLabel: Record<string, string> = { A: sA, B: sB, C: sC };
+            const currentOrder = ANSWER_ORDERS[(q!.answer - 1) % 5] ?? ANSWER_ORDERS[0];
+            // 현재 답 기준으로 논리 순서 추출
+            const logicalSegs = currentOrder.map(l => segByLabel[l]);
+            // 1~5 중 무작위 새 답 선택
+            const newAnswer = Math.floor(Math.random() * 5) + 1;
+            const newOrder = ANSWER_ORDERS[newAnswer - 1];
+            // 새 레이블에 논리 순서 배분
+            const segForNew: Record<string, string> = {};
+            newOrder.forEach((label, i) => { segForNew[label] = logicalSegs[i]; });
+            // modified_passage 재조립
+            q!.modified_passage = `[주어진 글]\n${intro}\n\n(A)\n${segForNew['A']}\n\n(B)\n${segForNew['B']}\n\n(C)\n${segForNew['C']}`;
+            // explanation 내 레이블 치환 (A→B 등 두 단계로 이중치환 방지)
+            const labelMap: Record<string, string> = {};
+            currentOrder.forEach((oldL, i) => { labelMap[oldL] = newOrder[i]; });
+            let exp = q!.explanation ?? '';
+            exp = exp.replace(/\(A\)/g, '(__A__)').replace(/\(B\)/g, '(__B__)').replace(/\(C\)/g, '(__C__)');
+            exp = exp
+              .replace(/__A__/g, labelMap['A'])
+              .replace(/__B__/g, labelMap['B'])
+              .replace(/__C__/g, labelMap['C']);
+            exp = exp.replace(/\((__[ABC]__)\)/g, '($1)'); // 잔여 플레이스홀더 정리
+            q!.explanation = exp;
+            q!.answer = newAnswer;
+          }
+        }
+
         return q;
       }
       console.error(`[${questionType}] 모든 시도 소진 — null 반환 (MAX_RETRIES=${MAX_RETRIES})`);
