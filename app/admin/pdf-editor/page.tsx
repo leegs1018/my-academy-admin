@@ -47,6 +47,18 @@ interface PdfHistoryItem {
   answer_pdf_path?: string;
 }
 
+interface MockWorkbookHistoryItem {
+  id: string; created_at: string;
+  year: number; grade: string; institution: string; question_number: number;
+  difficulty: string; pdf_path: string; answer_pdf_path?: string;
+}
+
+type UnifiedHistoryItem =
+  | (PdfHistoryItem & { _source: 'input' })
+  | (MockWorkbookHistoryItem & { _source: 'mock' });
+
+interface WorkbookResult { number: string; passageText: string; materials: GeneratedMaterials; }
+
 
 // ── 클라이언트 사이드 PDF 생성 (Puppeteer 불필요) ──
 async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
@@ -109,6 +121,52 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
     await addPaged(url1, false);
     await addPaged(url2, true);
 
+    return pdf.output('blob');
+  } finally {
+    noPrintEls.forEach(el => (el as HTMLElement).style.removeProperty('display'));
+    answerAreaEls?.forEach(el => (el as HTMLElement).style.removeProperty('display'));
+  }
+}
+
+async function generateMockPdfBlob(hideAnswerArea = false, suffix = ''): Promise<Blob | null> {
+  const page1El = document.getElementById(`mw-pdf-page-1${suffix}`);
+  const page2El = document.getElementById(`mw-pdf-page-2${suffix}`);
+  if (!page1El || !page2El) return null;
+  const noPrintEls = document.querySelectorAll(`#mw-print-area${suffix} .no-print`);
+  noPrintEls.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
+  const answerAreaEls = hideAnswerArea ? document.querySelectorAll('.mw-answer-area') : null;
+  answerAreaEls?.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
+  try {
+    const { toJpeg } = await import('html-to-image');
+    const { jsPDF } = await import('jspdf');
+    const W = 210, M = 5, cW = W - 2 * M;
+    const maxRatio = (297 - 2 * M) / cW;
+    const opts = { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
+    const [url1, url2] = await Promise.all([toJpeg(page1El, opts), toJpeg(page2El, opts)]);
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const addPaged = async (url: string, newPage: boolean) => {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = document.createElement('img') as HTMLImageElement;
+        i.onload = () => resolve(i); i.onerror = () => reject(new Error('img load fail')); i.src = url;
+      });
+      const iW = img.naturalWidth, iH = img.naturalHeight;
+      if (iH / iW <= maxRatio) {
+        if (newPage) pdf.addPage();
+        pdf.addImage(url, 'JPEG', M, M, cW, cW * (iH / iW)); return;
+      }
+      const sliceHpx = Math.floor(iW * maxRatio);
+      let y = 0, first = true;
+      while (y < iH) {
+        const h = Math.min(sliceHpx, iH - y);
+        const cv = document.createElement('canvas'); cv.width = iW; cv.height = h;
+        const ctx = cv.getContext('2d')!;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, iW, h); ctx.drawImage(img, 0, -y);
+        if (newPage || !first) pdf.addPage(); first = false;
+        pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', M, M, cW, cW * (h / iW));
+        y += sliceHpx;
+      }
+    };
+    await addPaged(url1, false); await addPaged(url2, true);
     return pdf.output('blob');
   } finally {
     noPrintEls.forEach(el => (el as HTMLElement).style.removeProperty('display'));
@@ -207,7 +265,7 @@ const DIFF_COLORS: Record<string, string> = {
 };
 
 export default function PdfEditorPage() {
-  const [activeTab, setActiveTab] = useState<'generate' | 'history'>('generate');
+  const [activeMainTab, setActiveMainTab] = useState<'input' | 'mock' | 'history'>('input');
   const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
 
   const [manualText, setManualText] = useState('');
@@ -240,7 +298,37 @@ export default function PdfEditorPage() {
 
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
 
-  const [historyList, setHistoryList] = useState<PdfHistoryItem[]>([]);
+  // ── Mock 탭 state ──
+  const [mockYears, setMockYears] = useState<number[]>([]);
+  const [mockGrades, setMockGrades] = useState<string[]>([]);
+  const [mockInstitutions, setMockInstitutions] = useState<string[]>([]);
+  const [mockQuestionNumbers, setMockQuestionNumbers] = useState<number[]>([]);
+  const [mockSelectedYear, setMockSelectedYear] = useState('');
+  const [mockSelectedGrade, setMockSelectedGrade] = useState('');
+  const [mockSelectedInstitution, setMockSelectedInstitution] = useState('');
+  const [mockSelectedNumbers, setMockSelectedNumbers] = useState<string[]>([]);
+  const [mockPassageMap, setMockPassageMap] = useState<Record<string, string>>({});
+  const [mockLoadingNumbers, setMockLoadingNumbers] = useState<Set<string>>(new Set());
+  const [mockDifficulty, setMockDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
+  const [mockLoading, setMockLoading] = useState(false);
+  const [mockLoadingMsg, setMockLoadingMsg] = useState('');
+  const [mockError, setMockError] = useState<string | null>(null);
+  const [mockResults, setMockResults] = useState<WorkbookResult[]>([]);
+  const [activeMockResultTab, setActiveMockResultTab] = useState(0);
+  const [mockShowAnswerKeyMap, setMockShowAnswerKeyMap] = useState<Record<number, boolean>>({});
+  const [mockCopiedSection, setMockCopiedSection] = useState<string | null>(null);
+  const [mockEditModeIdx, setMockEditModeIdx] = useState<number | null>(null);
+  const [mockEditedResults, setMockEditedResults] = useState<Record<number, GeneratedMaterials>>({});
+  const [mockEditSaveStatusMap, setMockEditSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
+  const [mockPdfTitle, setMockPdfTitle] = useState('');
+  const [mockPdfLoading, setMockPdfLoading] = useState<false | '문제' | '답안'>(false);
+  const [mockPrintTheme, setMockPrintTheme] = useState<'color' | 'mono'>('mono');
+  const [mockSaveStatusMap, setMockSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
+  const [mockSavedSet, setMockSavedSet] = useState<Set<number>>(new Set());
+  const [mockWorkbookPrice, setMockWorkbookPrice] = useState<number | null>(null);
+  const [session, setSession] = useState<{ access_token: string; user: { id: string } } | null>(null);
+
+  const [historyList, setHistoryList] = useState<UnifiedHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -252,16 +340,68 @@ export default function PdfEditorPage() {
   const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
   const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
 
-  // ── 지문분석 CON 단가 로드 ──
+  // ── 세션 로드 ──
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s) setSession(s as typeof session);
+    });
+  }, []);
+
+  // ── CON 단가 로드 ──
   useEffect(() => {
     fetch('/api/credits/pricing')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
-        if (item) setPdfAnalysisPrice(item.cost_per_use);
+        const pricing = data?.pricing ?? [];
+        const inputItem = pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
+        if (inputItem) setPdfAnalysisPrice(inputItem.cost_per_use);
+        const mockItem = pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'mock_workbook')
+          ?? pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
+        if (mockItem) setMockWorkbookPrice(mockItem.cost_per_use);
       })
       .catch(() => {});
   }, []);
+
+  // ── Mock 캐스케이드 fetch ──
+  useEffect(() => {
+    supabase.from('mock_exam_passages').select('year').order('year', { ascending: false })
+      .then(({ data }) => setMockYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]));
+  }, []);
+
+  useEffect(() => {
+    if (!mockSelectedYear) return;
+    setMockSelectedGrade(''); setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(mockSelectedYear)).order('grade', { ascending: true })
+      .then(({ data }) => setMockGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]));
+  }, [mockSelectedYear]);
+
+  useEffect(() => {
+    if (!mockSelectedYear || !mockSelectedGrade) return;
+    setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade)
+      .then(({ data }) => {
+        const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
+        unique.sort((a, b) => (parseInt(a.match(/^(\d+)/)?.[1] ?? '99') - parseInt(b.match(/^(\d+)/)?.[1] ?? '99')));
+        setMockInstitutions(unique);
+      });
+  }, [mockSelectedYear, mockSelectedGrade]);
+
+  useEffect(() => {
+    if (!mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
+    setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    supabase.from('mock_exam_passages').select('question_number')
+      .eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution)
+      .order('question_number')
+      .then(({ data }) => setMockQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)));
+  }, [mockSelectedYear, mockSelectedGrade, mockSelectedInstitution]);
+
+  // ── Mock 탭 자동저장 트리거 ──
+  useEffect(() => {
+    if (!mockResults[activeMockResultTab] || mockSavedSet.has(activeMockResultTab) || !session) return;
+    const timer = setTimeout(() => autoSaveMock(activeMockResultTab), 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMockResultTab, mockResults]);
 
   // ── 로고 로드 ──
   useEffect(() => {
@@ -289,7 +429,7 @@ export default function PdfEditorPage() {
     loadLogo();
   }, []);
 
-  // ── 이력 조회 ──
+  // ── 이력 조회 (직접입력 + 모의고사 통합) ──
   const fetchHistory = useCallback(async (query = searchQuery, date = searchDate) => {
     setHistoryLoading(true);
     setHistoryError(null);
@@ -298,18 +438,24 @@ export default function PdfEditorPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setHistoryError('로그인 정보를 확인할 수 없습니다.'); return; }
 
-      let q = supabase
-        .from('pdf_history')
-        .select('*')
-        .eq('academy_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (date) q = q.gte('created_at', date).lte('created_at', date + 'T23:59:59');
-      if (query) q = q.ilike('passage_full', `%${query}%`);
-
-      const { data, error: fetchErr } = await q;
-      if (fetchErr) { setHistoryError(`조회 오류: ${fetchErr.message}`); return; }
-      setHistoryList(data ?? []);
+      let qInput = supabase.from('pdf_history').select('*').eq('academy_id', user.id).order('created_at', { ascending: false });
+      let qMock = supabase.from('mock_workbook_history').select('*').eq('academy_id', user.id).order('created_at', { ascending: false });
+      if (date) {
+        qInput = qInput.gte('created_at', date).lte('created_at', date + 'T23:59:59');
+        qMock = qMock.gte('created_at', date).lte('created_at', date + 'T23:59:59');
+      }
+      if (query) {
+        qInput = qInput.ilike('passage_full', `%${query}%`);
+        qMock = qMock.ilike('institution', `%${query}%`);
+      }
+      const [{ data: inputData, error: e1 }, { data: mockData, error: e2 }] = await Promise.all([qInput, qMock]);
+      if (e1) { setHistoryError(`조회 오류: ${e1.message}`); return; }
+      if (e2) { setHistoryError(`조회 오류: ${e2.message}`); return; }
+      const combined: UnifiedHistoryItem[] = [
+        ...(inputData ?? []).map((r: PdfHistoryItem) => ({ ...r, _source: 'input' as const })),
+        ...(mockData ?? []).map((r: MockWorkbookHistoryItem) => ({ ...r, _source: 'mock' as const })),
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setHistoryList(combined);
     } catch (e) {
       setHistoryError(e instanceof Error ? e.message : '알 수 없는 오류');
     } finally {
@@ -318,8 +464,8 @@ export default function PdfEditorPage() {
   }, [searchQuery, searchDate]);
 
   useEffect(() => {
-    if (activeTab === 'history') fetchHistory();
-  }, [activeTab]);
+    if (activeMainTab === 'history') fetchHistory();
+  }, [activeMainTab]);
 
   // ── 자동 저장 (클라이언트 PDF → 서버 저장) ──
   const autoSavePdf = useCallback(async (generated: GeneratedMaterials, text: string, diff: string, titleSnapshot: string) => {
@@ -395,7 +541,7 @@ export default function PdfEditorPage() {
     setBulkDownloading(true);
     const items = historyList.filter(i => selectedIds.has(i.id));
     for (const item of items) {
-      const base = item.title || '영어문제';
+      const base = item._source === 'input' ? (item.title || '영어문제') : `${item.year}_${item.institution}_${item.question_number}번`;
       if (item.pdf_path) {
         await downloadFromHistory(item.pdf_path, `${base}_문제.pdf`);
         await new Promise(r => setTimeout(r, 600));
@@ -408,26 +554,25 @@ export default function PdfEditorPage() {
     setBulkDownloading(false);
   };
 
-  // ── 선택 항목 삭제 ──
+  // ── 선택 항목 삭제 (소스별 분기) ──
   const deleteSelected = async () => {
     if (selectedIds.size === 0) return;
     setBulkDeleting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setBulkDeleting(false); alert('로그인이 필요합니다.'); return; }
-      const res = await fetch('/api/delete-pdf-history', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ ids: [...selectedIds] }),
-      });
-      const json = await res.json() as { success?: boolean; error?: string };
-      if (!res.ok || !json.success) {
-        alert(`삭제 실패: ${json.error || '알 수 없는 오류'}`);
-        return;
-      }
+      const { data: { session: sess } } = await supabase.auth.getSession();
+      if (!sess) { setBulkDeleting(false); alert('로그인이 필요합니다.'); return; }
+      const inputIds = historyList.filter(i => selectedIds.has(i.id) && i._source === 'input').map(i => i.id);
+      const mockIds = historyList.filter(i => selectedIds.has(i.id) && i._source === 'mock').map(i => i.id);
+      const calls: Promise<Response>[] = [];
+      if (inputIds.length) calls.push(fetch('/api/delete-pdf-history', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.access_token}` },
+        body: JSON.stringify({ ids: inputIds }),
+      }));
+      if (mockIds.length) calls.push(fetch('/api/delete-mock-workbook-history', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.access_token}` },
+        body: JSON.stringify({ ids: mockIds }),
+      }));
+      await Promise.all(calls);
       const deleted = new Set(selectedIds);
       setHistoryList(prev => prev.filter(i => !deleted.has(i.id)));
       setSelectedIds(new Set());
@@ -450,6 +595,144 @@ export default function PdfEditorPage() {
     if (selectedIds.size === historyList.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(historyList.map(i => i.id)));
   };
+
+  // ── Mock 탭 함수 ──
+  const toggleMockNumber = async (num: string) => {
+    if (mockSelectedNumbers.includes(num)) {
+      setMockSelectedNumbers(prev => prev.filter(n => n !== num));
+      setMockPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    } else {
+      setMockSelectedNumbers(prev => [...prev, num]);
+      setMockLoadingNumbers(prev => new Set([...prev, num]));
+      const { data } = await supabase.from('mock_exam_passages').select('passage_text')
+        .eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade)
+        .eq('institution', mockSelectedInstitution).eq('question_number', parseInt(num)).single();
+      const text = (data?.passage_text ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+      setMockPassageMap(prev => ({ ...prev, [num]: text }));
+      setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+    }
+  };
+
+  const autoSaveMock = useCallback(async (idx: number) => {
+    if (!session || mockSavedSet.has(idx)) return;
+    const r = mockResults[idx];
+    if (!r) return;
+    setMockSaveStatusMap(prev => ({ ...prev, [idx]: 'saving' }));
+    setMockSavedSet(prev => new Set([...prev, idx]));
+    try {
+      const suffix = `-${idx}`;
+      const [pdfBlob, answerBlob] = await Promise.all([
+        generateMockPdfBlob(true, suffix),
+        buildAnswerPdfBlob(mockEditedResults[idx] ?? r.materials, mockPdfTitle.trim()),
+      ]);
+      if (!pdfBlob) { setMockSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
+      const res = await fetch('/api/save-mock-workbook-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          pdfBase64, answerPdfBase64,
+          year: parseInt(mockSelectedYear), grade: mockSelectedGrade, institution: mockSelectedInstitution,
+          questionNumber: parseInt(r.number), difficulty: mockDifficulty,
+        }),
+      });
+      const json = await res.json() as { success?: boolean; error?: string };
+      setMockSaveStatusMap(prev => ({ ...prev, [idx]: res.ok && json.success ? 'done' : 'error' }));
+    } catch { setMockSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); }
+  }, [session, mockResults, mockSavedSet, mockPdfTitle, mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, mockDifficulty, mockEditedResults]);
+
+  const handleMockGenerate = async () => {
+    const sortedNums = [...mockSelectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+    if (sortedNums.length === 0 || mockLoading || !session) return;
+    setMockLoading(true); setMockError(null); setMockResults([]); setActiveMockResultTab(0);
+    setMockSaveStatusMap({}); setMockSavedSet(new Set()); setMockEditModeIdx(null); setMockEditedResults({});
+    try {
+      for (let i = 0; i < sortedNums.length; i++) {
+        const num = sortedNums[i];
+        const text = mockPassageMap[num];
+        if (!text) continue;
+        setMockLoadingMsg(`${num}번 지문 워크북 생성 중... (${i + 1}/${sortedNums.length})`);
+        const res = await fetch('/api/process-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook' }),
+        });
+        const json = JSON.parse(await res.text()) as { data?: GeneratedMaterials; error?: string };
+        if (!res.ok) throw new Error(json.error || `${num}번 생성 오류`);
+        setMockResults(prev => [...prev, { number: num, passageText: text, materials: json.data as GeneratedMaterials }]);
+        setActiveMockResultTab(i);
+      }
+    } catch (e) { setMockError(e instanceof Error ? e.message : '오류가 발생했습니다.'); }
+    finally { setMockLoading(false); }
+  };
+
+  const handleMockDownloadProblem = async () => {
+    setMockPdfLoading('문제');
+    const isEditing = mockEditModeIdx === activeMockResultTab;
+    try {
+      if (isEditing) { setMockEditModeIdx(null); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
+      const blob = await generateMockPdfBlob(true, `-${activeMockResultTab}`);
+      if (isEditing) setMockEditModeIdx(activeMockResultTab);
+      if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
+      const r = mockResults[activeMockResultTab];
+      triggerDownload(blob, `${mockPdfTitle.trim() || `${r?.number}번_워크북`}_문제.pdf`);
+    } catch (e) {
+      if (isEditing) setMockEditModeIdx(activeMockResultTab);
+      alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
+    } finally { setMockPdfLoading(false); }
+  };
+
+  const handleMockDownloadAnswer = async () => {
+    const r = mockResults[activeMockResultTab];
+    if (!r) return;
+    const d = mockEditedResults[activeMockResultTab] ?? r.materials;
+    setMockPdfLoading('답안');
+    try {
+      const blob = await buildAnswerPdfBlob(d, mockPdfTitle.trim() || `${r.number}번 워크북`);
+      triggerDownload(blob, `${mockPdfTitle.trim() || `${r.number}번_워크북`}_답안해설.pdf`);
+    } catch (e) { alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
+    finally { setMockPdfLoading(false); }
+  };
+
+  const handleMockEditSave = async (idx: number) => {
+    const edited = mockEditedResults[idx];
+    const r = mockResults[idx];
+    if (!edited || !r || !session) return;
+    setMockEditSaveStatusMap(prev => ({ ...prev, [idx]: 'saving' }));
+    const isEditing = mockEditModeIdx === idx;
+    try {
+      if (isEditing) { setMockEditModeIdx(null); await new Promise(r => requestAnimationFrame(r)); await new Promise(r => requestAnimationFrame(r)); }
+      const [pdfBlob, answerBlob] = await Promise.all([generateMockPdfBlob(true, `-${idx}`), buildAnswerPdfBlob(edited, mockPdfTitle.trim())]);
+      if (isEditing) setMockEditModeIdx(idx);
+      if (!pdfBlob) { setMockEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
+      const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onloadend = () => resolve((reader.result as string).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob);
+      });
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
+      const res = await fetch('/api/save-mock-workbook-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ pdfBase64, answerPdfBase64, year: parseInt(mockSelectedYear), grade: mockSelectedGrade, institution: mockSelectedInstitution, questionNumber: parseInt(r.number), difficulty: mockDifficulty }),
+      });
+      const json = await res.json() as { success?: boolean };
+      setMockEditSaveStatusMap(prev => ({ ...prev, [idx]: res.ok && json.success ? 'done' : 'error' }));
+    } catch { if (isEditing) setMockEditModeIdx(idx); setMockEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); }
+  };
+
+  const mockCopy = async (text: string, id: string) => {
+    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    setMockCopiedSection(id); setTimeout(() => setMockCopiedSection(null), 2000);
+  };
+
+  const mockSortedSelectedNumbers = [...mockSelectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+  const mockAllPassagesReady = mockSelectedNumbers.length > 0 && mockSelectedNumbers.every(n => mockPassageMap[n]) && mockLoadingNumbers.size === 0;
+  const canMockGenerate = mockAllPassagesReady && !mockLoading && !!session;
 
   // ── 이미지 선택 ──
   const handleImageSelect = (file: File) => {
@@ -657,17 +940,17 @@ export default function PdfEditorPage() {
       </div>
 
       <div className="no-print flex gap-2 mb-6 border-b-2 border-slate-100">
-        {(['generate', 'history'] as const).map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
+        {([['input', '✏️ 직접 입력'], ['mock', '📖 모의고사 지문'], ['history', '📋 생성 이력']] as const).map(([tab, label]) => (
+          <button key={tab} onClick={() => setActiveMainTab(tab)}
             className={`px-6 py-3 font-black text-base rounded-t-xl transition-all
-              ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
-            {tab === 'generate' ? '✏️ 문제 생성' : '📋 생성 이력'}
+              ${activeMainTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
+            {label}
           </button>
         ))}
       </div>
 
-      {/* ══ 문제 생성 탭 ══ */}
-      {activeTab === 'generate' && (
+      {/* ══ 직접 입력 탭 ══ */}
+      {activeMainTab === 'input' && (
         <>
           <div className="no-print bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 mb-8">
             <div className="mb-6">
@@ -1179,14 +1462,401 @@ export default function PdfEditorPage() {
         </>
       )}
 
-      {/* ══ 생성 이력 탭 ══ */}
-      {activeTab === 'history' && (
-        <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
-            생성 이력은 생성일로부터 30일 후 자동 삭제됩니다.
+      {/* ══ 모의고사 지문 탭 ══ */}
+      {activeMainTab === 'mock' && (
+        <>
+          {mockLoading && (
+            <div className="no-print fixed inset-0 bg-indigo-900/60 backdrop-blur-md z-[200] flex items-center justify-center">
+              <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4">
+                <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+                <p className="font-black text-indigo-600 text-xl animate-pulse">{mockLoadingMsg}</p>
+                <p className="text-slate-400 font-bold text-sm mt-3">지문당 30~60초 소요됩니다</p>
+              </div>
+            </div>
+          )}
+          <div className="no-print bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 mb-8">
+            <div className="mb-6">
+              <label className="text-sm font-black text-slate-600 mb-2 block">제목 (PDF 파일명)</label>
+              <input type="text" value={mockPdfTitle} onChange={e => setMockPdfTitle(e.target.value)}
+                placeholder="예: 2024 수능 워크북"
+                className="w-full px-5 py-3 border-2 border-slate-200 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300" />
+            </div>
+            <div className="mb-6">
+              <p className="text-base font-black text-slate-700 mb-3">STEP 1 — 기출 지문 선택</p>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[
+                  { label: '년도', value: mockSelectedYear, onChange: setMockSelectedYear, disabled: false, options: mockYears.map(y => ({ value: String(y), label: `${y}년` })) },
+                  { label: '학년', value: mockSelectedGrade, onChange: setMockSelectedGrade, disabled: !mockSelectedYear, options: mockGrades.map(g => ({ value: g, label: g })) },
+                  { label: '시험명/기관', value: mockSelectedInstitution, onChange: setMockSelectedInstitution, disabled: !mockSelectedGrade, options: mockInstitutions.map(inst => ({ value: inst, label: inst })) },
+                ].map(({ label, value, onChange, disabled, options }) => (
+                  <div key={label}>
+                    <label className="block text-xs font-black text-slate-400 mb-1.5">{label}</label>
+                    <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:opacity-50">
+                      <option value="">선택</option>
+                      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              {mockQuestionNumbers.length > 0 && (
+                <div>
+                  <label className="block text-xs font-black text-slate-400 mb-2">문제번호 (여러 개 선택 가능)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {mockQuestionNumbers.map(n => {
+                      const num = String(n);
+                      const isSelected = mockSelectedNumbers.includes(num);
+                      const isLoading = mockLoadingNumbers.has(num);
+                      return (
+                        <button key={n} onClick={() => toggleMockNumber(num)} disabled={isLoading}
+                          className={`px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
+                            isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                          } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
+                          {isLoading ? '...' : `${n}번`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {mockSortedSelectedNumbers.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {mockSortedSelectedNumbers.map(num => mockPassageMap[num] && (
+                    <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                      <p className="text-xs font-black text-indigo-600 mb-1">{num}번 지문</p>
+                      <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2 select-none"
+                        style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                        onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
+                        {mockPassageMap[num]}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mb-6">
+              <p className="text-base font-black text-slate-700 mb-3">STEP 2 — 난이도 선택 (전체 적용)</p>
+              <div className="flex gap-2">
+                {([
+                  { key: 'b1', level: 'B1', label: '중등/고등 하', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+                  { key: 'b2', level: 'B2', label: '고등 중',      icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+                  { key: 'c1', level: 'C1', label: '고등 상',      icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                  { key: 'c2', level: 'C2', label: '고등 최상',    icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+                ] as const).map(d => (
+                  <button key={d.key} onClick={() => setMockDifficulty(d.key)}
+                    className={`flex-1 py-4 rounded-xl font-black transition-all border-2 ${mockDifficulty === d.key ? d.active : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
+                    <div className="text-2xl mb-1">{d.icon}</div>
+                    <div className="text-xs font-bold opacity-70 mb-0.5">{d.level}</div>
+                    <div className="text-sm">{d.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mockWorkbookPrice !== null && mockWorkbookPrice > 0 && (
+              <p className="text-center text-sm font-bold text-slate-400 mb-3">
+                지문 1개당 <span className="text-yellow-500 font-black">{mockWorkbookPrice} CON</span> 사용
+                {mockSelectedNumbers.length > 1 && <span className="text-slate-500"> × {mockSelectedNumbers.length}개 = <span className="text-yellow-500 font-black">{mockWorkbookPrice * mockSelectedNumbers.length} CON</span></span>}
+              </p>
+            )}
+            {mockError && <div className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {mockError}</p></div>}
+            <button onClick={handleMockGenerate} disabled={!canMockGenerate}
+              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              {mockSelectedNumbers.length > 1 ? `AI로 워크북 ${mockSelectedNumbers.length}개 생성하기 🚀` : 'AI로 워크북 생성하기 🚀'}
+            </button>
           </div>
 
-          {/* 필터 */}
+          {mockResults.length > 0 && (() => {
+            const activeResult = mockResults[activeMockResultTab];
+            const activeD = mockEditedResults[activeMockResultTab] ?? activeResult?.materials;
+            return (
+              <>
+                {mockResults.length > 1 && (
+                  <div className="no-print flex gap-2 mb-4 flex-wrap">
+                    {mockResults.map((r, i) => (
+                      <button key={i} onClick={() => setActiveMockResultTab(i)}
+                        className={`px-4 py-2 rounded-xl font-black text-sm transition-all border-2 ${
+                          activeMockResultTab === i ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
+                        }`}>
+                        {r.number}번
+                        {mockSaveStatusMap[i] === 'done' && <span className="ml-1 text-xs">✅</span>}
+                        {mockSaveStatusMap[i] === 'saving' && <span className="ml-1 text-xs animate-pulse">💾</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {activeResult && activeD && (
+                  <div id={`mw-print-area-${activeMockResultTab}`} className="space-y-0">
+                    <div id={`mw-pdf-page-1-${activeMockResultTab}`} className="space-y-3 mb-4">
+                      {mockPdfTitle.trim() && (
+                        <div className="mb-3 pb-2 border-b-2 border-slate-200">
+                          <h1 className="text-2xl font-black text-slate-900">{mockPdfTitle.trim()} — {activeResult.number}번</h1>
+                        </div>
+                      )}
+                      <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                        <div className="bg-slate-700 px-5 py-2.5 flex items-center gap-3">
+                          <span className="font-black text-2xl leading-none text-white/70">00</span>
+                          <h2 className="font-black text-lg leading-tight text-white">원문 지문</h2>
+                        </div>
+                        <div className="p-4">
+                          <p className="text-slate-700 font-bold leading-relaxed text-xl select-none" style={{ wordBreak: 'break-word' }}
+                            onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>{activeResult.passageText}</p>
+                        </div>
+                      </div>
+                      <SectionCard number="01" title="변형 지문" color="bg-teal-600" theme={mockPrintTheme}
+                        onCopy={() => mockCopy(activeD.paraphrased_passage ?? '', 'paraphrase')} copied={mockCopiedSection === 'paraphrase'}>
+                        {mockEditModeIdx === activeMockResultTab ? (
+                          <textarea className="w-full p-3 border-2 border-teal-200 rounded-xl font-bold text-slate-700 text-base leading-relaxed resize-y focus:outline-none focus:border-teal-400 min-h-[120px]"
+                            value={mockEditedResults[activeMockResultTab]?.paraphrased_passage ?? ''}
+                            onChange={e => setMockEditedResults(prev => ({ ...prev, [activeMockResultTab]: { ...prev[activeMockResultTab], paraphrased_passage: e.target.value } }))} />
+                        ) : (
+                          <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{activeD.paraphrased_passage}</p>
+                        )}
+                      </SectionCard>
+                      <SectionCard number="02" title="T/F 문제 10개" color="bg-violet-500" theme={mockPrintTheme}
+                        onCopy={() => mockCopy(activeD.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n'), 'tf')} copied={mockCopiedSection === 'tf'}>
+                        <div className="space-y-0.5 mb-2">
+                          {activeD.tf_questions.map((q, qi) => (
+                            <div key={q.number} className={`flex items-start gap-2 px-2 py-0.5 rounded-lg ${mockPrintTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
+                              <span className={`font-black w-7 shrink-0 text-lg ${mockPrintTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
+                              {mockEditModeIdx === activeMockResultTab ? (
+                                <textarea className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
+                                  value={q.statement}
+                                  onChange={e => setMockEditedResults(prev => {
+                                    const cur = prev[activeMockResultTab] ?? activeResult.materials;
+                                    const tf = [...cur.tf_questions]; tf[qi] = { ...tf[qi], statement: e.target.value };
+                                    return { ...prev, [activeMockResultTab]: { ...cur, tf_questions: tf } };
+                                  })} />
+                              ) : (
+                                <p className="text-slate-700 font-bold leading-snug flex-1 text-2xl">{q.statement}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <div className={`mw-answer-area border-t pt-3 ${mockPrintTheme === 'color' ? 'border-violet-100' : 'border-slate-200'}`}>
+                          <button onClick={() => setMockShowAnswerKeyMap(prev => ({ ...prev, [activeMockResultTab]: !prev[activeMockResultTab] }))}
+                            className={`no-print flex items-center gap-2 font-black text-sm ${mockPrintTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>
+                            <span className={`transition-transform ${mockShowAnswerKeyMap[activeMockResultTab] ? 'rotate-90' : ''}`}>▶</span>
+                            해설지 {mockShowAnswerKeyMap[activeMockResultTab] ? '닫기' : '보기'}
+                          </button>
+                          {mockShowAnswerKeyMap[activeMockResultTab] && (
+                            <div className="mt-3">
+                              <div className={`p-3 rounded-2xl border ${mockPrintTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
+                                <p className={`font-black text-sm mb-1 ${mockPrintTheme === 'color' ? 'text-violet-700' : 'text-slate-700'}`}>정답</p>
+                                <p className="font-black text-slate-700 tracking-wide text-sm">{activeD.answer_key}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </SectionCard>
+                    </div>
+                    <div id={`mw-pdf-page-2-${activeMockResultTab}`} className="space-y-3">
+                      <SectionCard number="03" title="한글 요약" color="bg-indigo-500" theme={mockPrintTheme}
+                        onCopy={() => mockCopy(activeD.korean_summary.rows.map(r => `[${r.label}] ${r.content}`).join('\n'), 'korean')} copied={mockCopiedSection === 'korean'}>
+                        <div>
+                          <span className={`inline-block mb-3 text-base font-black px-3 py-1 rounded-full ${mockPrintTheme === 'color' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}`}>
+                            {activeD.korean_summary.type === '일반' ? '일반 지문' : activeD.korean_summary.type === '논쟁' ? '논쟁 지문' : '문제 지문'}
+                          </span>
+                          <table className="w-full border-collapse">
+                            <tbody>
+                              {activeD.korean_summary.rows.map((row, i) => (
+                                <tr key={i} className={mockPrintTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
+                                  <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${mockPrintTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
+                                  <td className={`p-2.5 border ${mockPrintTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
+                                    {mockEditModeIdx === activeMockResultTab ? (
+                                      <textarea className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
+                                        value={row.content}
+                                        onChange={e => setMockEditedResults(prev => {
+                                          const cur = prev[activeMockResultTab] ?? activeResult.materials;
+                                          const rows = [...cur.korean_summary.rows]; rows[i] = { ...rows[i], content: e.target.value };
+                                          return { ...prev, [activeMockResultTab]: { ...cur, korean_summary: { ...cur.korean_summary, rows } } };
+                                        })} />
+                                    ) : (
+                                      <span className="text-slate-700 font-bold text-lg leading-relaxed">{row.content}</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </SectionCard>
+                      <SectionCard number="04" title="영어 제목 3가지" color="bg-amber-500" theme={mockPrintTheme}
+                        onCopy={() => mockCopy(activeD.english_titles.map((t, i) => `${i + 1}. ${t}`).join('\n'), 'titles')} copied={mockCopiedSection === 'titles'}>
+                        <div className="space-y-2">
+                          {activeD.english_titles.map((title, i) => {
+                            const { english, korean } = parseTitleKorean(title);
+                            return (
+                              <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${mockPrintTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
+                                <span className={`font-black w-8 shrink-0 text-lg ${mockPrintTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
+                                {mockEditModeIdx === activeMockResultTab ? (
+                                  <input className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
+                                    value={title}
+                                    onChange={e => setMockEditedResults(prev => {
+                                      const cur = prev[activeMockResultTab] ?? activeResult.materials;
+                                      const titles = [...cur.english_titles]; titles[i] = e.target.value;
+                                      return { ...prev, [activeMockResultTab]: { ...cur, english_titles: titles } };
+                                    })} />
+                                ) : (
+                                  <div className="flex-1">
+                                    <p className="text-slate-700 font-bold leading-relaxed text-lg">{english}</p>
+                                    {korean && <p className="text-slate-500 font-bold text-base mt-1">({korean})</p>}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </SectionCard>
+                      <SectionCard number="05" title="1문장 영어 요약 3가지" color="bg-rose-500" theme={mockPrintTheme}
+                        onCopy={() => mockCopy(activeD.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${cleanKorean(s.korean)})`).join('\n\n'), 'one_sentence')} copied={mockCopiedSection === 'one_sentence'}>
+                        <div className="space-y-2">
+                          {activeD.one_sentence_summaries.map((s, i) => (
+                            <div key={i} className={`px-3 py-2.5 rounded-xl border ${mockPrintTheme === 'color' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-200'}`}>
+                              <div className="flex items-start gap-2">
+                                <span className={`font-black w-8 shrink-0 text-lg ${mockPrintTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
+                                {mockEditModeIdx === activeMockResultTab ? (
+                                  <div className="flex-1 flex flex-col gap-1">
+                                    <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-rose-400"
+                                      value={s.english}
+                                      onChange={e => setMockEditedResults(prev => {
+                                        const cur = prev[activeMockResultTab] ?? activeResult.materials;
+                                        const sums = [...cur.one_sentence_summaries]; sums[i] = { ...sums[i], english: e.target.value };
+                                        return { ...prev, [activeMockResultTab]: { ...cur, one_sentence_summaries: sums } };
+                                      })} />
+                                    <input className="w-full border border-rose-200 rounded p-1 font-bold text-slate-500 text-sm focus:outline-none focus:border-rose-400"
+                                      value={s.korean}
+                                      onChange={e => setMockEditedResults(prev => {
+                                        const cur = prev[activeMockResultTab] ?? activeResult.materials;
+                                        const sums = [...cur.one_sentence_summaries]; sums[i] = { ...sums[i], korean: e.target.value };
+                                        return { ...prev, [activeMockResultTab]: { ...cur, one_sentence_summaries: sums } };
+                                      })} />
+                                  </div>
+                                ) : (
+                                  <div className="flex-1">
+                                    <p className="text-slate-700 font-bold leading-relaxed text-lg mb-1">{renderBold(s.english)}</p>
+                                    <p className="text-slate-500 font-bold text-base">{renderSingleBold('(' + cleanKorean(s.korean) + ')')}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </SectionCard>
+                      <SectionCard number="06" title="관련 어휘 10개" color="bg-slate-700" theme={mockPrintTheme}
+                        onCopy={() => mockCopy(activeD.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n'), 'vocab')} copied={mockCopiedSection === 'vocab'}>
+                        <table className="w-full text-lg border-collapse table-fixed">
+                          <colgroup><col style={{ width: '22%' }} /><col style={{ width: '19%' }} /><col style={{ width: '19%' }} /><col style={{ width: '19%' }} /><col style={{ width: '21%' }} /></colgroup>
+                          <thead>
+                            <tr className="bg-slate-800 text-white">
+                              {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+                                <th key={i} className={`px-2 py-2 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activeD.vocabulary_table.map((row, i) => {
+                              const updateVocab = (patch: Partial<VocabRow>) => setMockEditedResults(prev => {
+                                const cur = prev[activeMockResultTab] ?? activeResult.materials;
+                                const vocab = [...cur.vocabulary_table]; vocab[i] = { ...vocab[i], ...patch };
+                                return { ...prev, [activeMockResultTab]: { ...cur, vocabulary_table: vocab } };
+                              });
+                              return (
+                                <tr key={i} className={mockPrintTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
+                                  <td className="px-2 py-2 border-b border-slate-100">
+                                    {mockEditModeIdx === activeMockResultTab ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
+                                        <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
+                                      </div>
+                                    ) : (<><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-base ml-1">({row.meaning})</span></>)}
+                                  </td>
+                                  {([['syn1', 'syn1_m'], ['syn2', 'syn2_m'], ['syn3', 'syn3_m']] as const).map(([wk, mk], j) => (
+                                    <td key={j} className="px-2 py-2 border-b border-slate-100">
+                                      {mockEditModeIdx === activeMockResultTab ? (
+                                        <div className="flex flex-col gap-0.5">
+                                          <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
+                                          <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
+                                        </div>
+                                      ) : (<><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-base ml-1">({row[mk]})</span></>)}
+                                    </td>
+                                  ))}
+                                  <td className="px-2 py-2 border-b border-slate-100">
+                                    {mockEditModeIdx === activeMockResultTab ? (
+                                      <div className="flex flex-col gap-0.5">
+                                        <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
+                                        <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
+                                      </div>
+                                    ) : (<><span className="font-black text-rose-600">{row.antonym}</span><span className="text-slate-900 text-base ml-1">({row.antonym_m})</span></>)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </SectionCard>
+                    </div>
+                  </div>
+                )}
+                <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 shadow-lg px-3 py-2 rounded-2xl">
+                    <span className="text-slate-400 text-xs font-bold mr-1">테마</span>
+                    <button onClick={() => setMockPrintTheme('color')} className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${mockPrintTheme === 'color' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}>컬러</button>
+                    <button onClick={() => setMockPrintTheme('mono')} className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${mockPrintTheme === 'mono' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'}`}>흑백</button>
+                  </div>
+                  {mockSaveStatusMap[activeMockResultTab] === 'saving' && (
+                    <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
+                      <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />이력 저장 중...
+                    </div>
+                  )}
+                  {mockSaveStatusMap[activeMockResultTab] === 'done' && (
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-emerald-600">✅ 이력에 저장됨</div>
+                  )}
+                  {mockEditSaveStatusMap[activeMockResultTab] && mockEditSaveStatusMap[activeMockResultTab] !== 'idle' && (
+                    <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-lg border
+                      ${mockEditSaveStatusMap[activeMockResultTab] === 'saving' ? 'bg-white border-slate-200 text-slate-500' : mockEditSaveStatusMap[activeMockResultTab] === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
+                      {mockEditSaveStatusMap[activeMockResultTab] === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : mockEditSaveStatusMap[activeMockResultTab] === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
+                    </div>
+                  )}
+                  <div className="flex gap-3 flex-wrap justify-end">
+                    <button
+                      onClick={() => {
+                        if (mockEditModeIdx !== activeMockResultTab) {
+                          if (!mockEditedResults[activeMockResultTab]) setMockEditedResults(prev => ({ ...prev, [activeMockResultTab]: JSON.parse(JSON.stringify(activeResult.materials)) }));
+                          setMockEditSaveStatusMap(prev => ({ ...prev, [activeMockResultTab]: 'idle' }));
+                          setMockEditModeIdx(activeMockResultTab);
+                        } else { setMockEditModeIdx(null); }
+                      }}
+                      className={`px-5 py-3 rounded-2xl font-black text-sm shadow-lg transition-all active:scale-95 ${mockEditModeIdx === activeMockResultTab ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
+                      {mockEditModeIdx === activeMockResultTab ? '✏️ 편집 종료' : '✏️ 편집'}
+                    </button>
+                    {mockEditModeIdx === activeMockResultTab && (
+                      <button onClick={() => handleMockEditSave(activeMockResultTab)} disabled={mockEditSaveStatusMap[activeMockResultTab] === 'saving'}
+                        className="px-5 py-3 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded-2xl shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                        {mockEditSaveStatusMap[activeMockResultTab] === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
+                      </button>
+                    )}
+                    <button onClick={handleMockDownloadProblem} disabled={!!mockPdfLoading}
+                      className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
+                      {mockPdfLoading === '문제' ? '⏳ 생성 중...' : '⬇️ 문제 PDF'}
+                    </button>
+                    <button onClick={handleMockDownloadAnswer} disabled={!!mockPdfLoading}
+                      className="bg-violet-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-violet-700 active:scale-95 transition-all disabled:opacity-50">
+                      {mockPdfLoading === '답안' ? '⏳ 생성 중...' : '⬇️ 답안·해설 PDF'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </>
+      )}
+
+      {/* ══ 생성 이력 탭 ══ */}
+      {activeMainTab === 'history' && (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs font-bold text-amber-700">
+            생성 이력은 생성일로부터 30일 후 자동 삭제됩니다. (직접 입력 + 모의고사 통합 이력)
+          </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-black text-slate-500">날짜</label>
@@ -1197,7 +1867,7 @@ export default function PdfEditorPage() {
               <label className="text-xs font-black text-slate-500">키워드 검색</label>
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && fetchHistory()}
-                placeholder="지문 내 단어를 입력하세요..."
+                placeholder="지문 단어 또는 시험명 검색..."
                 className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
             </div>
             <button onClick={() => fetchHistory()} disabled={historyLoading}
@@ -1207,9 +1877,7 @@ export default function PdfEditorPage() {
                 className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-black rounded-xl hover:bg-gray-200 transition-all">초기화</button>
             )}
           </div>
-
           {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
-
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
               <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
@@ -1226,7 +1894,6 @@ export default function PdfEditorPage() {
               </div>
             </div>
           )}
-
           {historyLoading ? (
             <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
           ) : historyList.length === 0 ? (
@@ -1237,43 +1904,54 @@ export default function PdfEditorPage() {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
-              <div className="grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
+              <div className="grid grid-cols-[32px_130px_72px_1fr_52px_60px_60px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
                 <input type="checkbox" checked={selectedIds.size === historyList.length && historyList.length > 0}
                   onChange={toggleSelectAll} className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
-                {['날짜', '제목', '지문 요약', '난이도', '문제', '해설'].map((h, i) => (
+                {['날짜', '유형', '내용', '난이도', '문제', '해설'].map((h, i) => (
                   <span key={i} className={i >= 4 ? 'text-center' : ''}>{h}</span>
                 ))}
               </div>
               {historyList.map((item, i) => (
                 <div key={item.id}
-                  className={`grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
+                  className={`grid grid-cols-[32px_130px_72px_1fr_52px_60px_60px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-indigo-50/40 transition-colors
                     ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                   <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)}
                     className="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
                   <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
                     {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span className="text-sm font-bold text-slate-700 truncate" title={item.title || ''}>
-                    {item.title || <span className="text-slate-300">-</span>}
+                  <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${item._source === 'input' ? 'bg-indigo-100 text-indigo-700' : 'bg-teal-100 text-teal-700'}`}>
+                    {item._source === 'input' ? '직접입력' : '모의고사'}
                   </span>
-                  <button onClick={() => setPassageModal({ title: '원문 지문', text: item.passage_full })}
-                    className="text-xs text-slate-600 font-bold truncate text-left hover:text-indigo-600 hover:underline transition-colors w-full">
-                    {item.passage_excerpt}
-                    <span className="ml-1 text-indigo-400 font-black whitespace-nowrap">[전체 보기]</span>
-                  </button>
+                  {item._source === 'input' ? (
+                    <button onClick={() => setPassageModal({ title: '원문 지문', text: item.passage_full })}
+                      className="text-xs text-slate-600 font-bold truncate text-left hover:text-indigo-600 hover:underline transition-colors w-full">
+                      {item.title ? <span className="font-black">{item.title} — </span> : null}
+                      {item.passage_excerpt}
+                      <span className="ml-1 text-indigo-400 font-black whitespace-nowrap">[전체]</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-700 truncate">
+                      {item.year}년 {item.institution} {item.question_number}번
+                    </span>
+                  )}
                   <span className={`text-xs font-black px-2 py-1 rounded-full text-center ${DIFF_COLORS[item.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
                     {item.difficulty || '-'}
                   </span>
                   <div className="flex justify-center">
                     {item.pdf_path ? (
-                      <button onClick={() => downloadFromHistory(item.pdf_path, `${item.title || '영어문제'}_문제.pdf`)}
-                        className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 문제</button>
+                      <button onClick={() => {
+                        const name = item._source === 'input' ? (item.title || '영어문제') : `${item.year}_${item.institution}_${item.question_number}번`;
+                        downloadFromHistory(item.pdf_path, `${name}_문제.pdf`);
+                      }} className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 문제</button>
                     ) : <span className="text-xs text-slate-300 font-bold text-center w-full">저장중</span>}
                   </div>
                   <div className="flex justify-center">
                     {item.answer_pdf_path ? (
-                      <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '영어문제'}_해설.pdf`)}
-                        className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 해설</button>
+                      <button onClick={() => {
+                        const name = item._source === 'input' ? (item.title || '영어문제') : `${item.year}_${item.institution}_${item.question_number}번`;
+                        downloadFromHistory(item.answer_pdf_path!, `${name}_해설.pdf`);
+                      }} className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 해설</button>
                     ) : <span className="text-xs text-slate-300 font-bold text-center w-full">-</span>}
                   </div>
                 </div>

@@ -22,11 +22,9 @@ const menuItems: MenuItem[] = [
     label: 'AI 문제 생성',
     icon: '🤖',
     children: [
-      { href: '/admin/pdf-editor',           label: '지문분석 툴/워크북',  icon: '📝' },
-      { href: '/admin/mock-exam-workbook',   label: '모의고사 툴/워크북',  icon: '📖' },
-      { href: '/admin/ai-questions',         label: '실전 변형 문제',      icon: '🎯' },
-      { href: '/admin/mock-exam-questions',  label: '모의고사 변형 문제',  icon: '📚' },
-      { href: '/admin/vocab-choice',          label: '어휘 선택 문제',      icon: '📌' },
+      { href: '/admin/pdf-editor',    label: '지문분석 툴/워크북', icon: '📝' },
+      { href: '/admin/ai-questions',  label: '실전 변형 문제',     icon: '🎯' },
+      { href: '/admin/vocab-choice',  label: '어휘 선택 문제',     icon: '📌' },
     ],
   },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
@@ -85,7 +83,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   }, [pathname]);
 
   useEffect(() => {
-    const aiPaths = ['/admin/pdf-editor', '/admin/mock-exam-workbook', '/admin/ai-questions', '/admin/mock-exam-questions', '/admin/vocab-choice'];
+    const aiPaths = ['/admin/pdf-editor', '/admin/ai-questions', '/admin/vocab-choice'];
     if (aiPaths.some(p => pathname.startsWith(p))) setExpandedGroup('AI 문제 생성');
   }, [pathname]);
 
