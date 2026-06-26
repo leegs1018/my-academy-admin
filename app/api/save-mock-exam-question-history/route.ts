@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         difficulty?: string;
       };
 
-    const { error: insertErr } = await adminClient.from('mock_exam_question_history').insert({
+    const { data: insertData, error: insertErr } = await adminClient.from('mock_exam_question_history').insert({
       academy_id: user.id,
       year,
       grade,
@@ -38,11 +38,11 @@ export async function POST(request: Request) {
       difficulty: difficulty ?? null,
       question_pdf_path: questionPdfPath,
       answer_pdf_path: answerPdfPath ?? null,
-    });
+    }).select('id').single();
 
     if (insertErr) return NextResponse.json({ error: `DB 저장 실패: ${insertErr.message}` }, { status: 500 });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, id: insertData?.id });
   } catch (error) {
     console.error('[save-mock-exam-question-history] 오류:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : '알 수 없는 오류' }, { status: 500 });

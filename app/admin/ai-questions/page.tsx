@@ -757,6 +757,10 @@ export default function AiQuestionsPage() {
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [passageModal, setPassageModal] = useState<{ title: string; text: string } | null>(null);
+  const [questionRatings, setQuestionRatings] = useState<Record<string, 'good' | 'bad' | null>>({});
+  const [mockQuestionRatings, setMockQuestionRatings] = useState<Record<string, 'good' | 'bad' | null>>({});
+  const [ratingHistoryId, setRatingHistoryId] = useState<string | null>(null);
+  const [mockRatingHistoryId, setMockRatingHistoryId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1026,7 +1030,14 @@ export default function AiQuestionsPage() {
           difficulty: difficultyLabel,
         }),
       });
-      setMockAutoSaveStatus(res.ok ? 'done' : 'error');
+      if (res.ok) {
+        const saveJson = await res.json().catch(() => ({})) as { id?: string };
+        setMockAutoSaveStatus('done');
+        if (saveJson.id) setMockRatingHistoryId(saveJson.id);
+        setMockQuestionRatings({});
+      } else {
+        setMockAutoSaveStatus('error');
+      }
     } catch { setMockAutoSaveStatus('error'); }
   };
 
@@ -1080,6 +1091,38 @@ export default function AiQuestionsPage() {
       const blob = await buildAnswerPdfBlob(sorted, mockPdfTitle.trim());
       triggerDownload(blob, `${mockPdfTitle.trim() || '모의고사변형문제'}_답안해설.pdf`);
     } finally { setMockPdfLoading(false); }
+  };
+
+  // ── 문제 평가 (👍/👎) ──
+  const handleRateQuestion = async (
+    idx: number,
+    rating: 'good' | 'bad',
+    q: ExamQuestion,
+    historyId: string | null,
+    ratingsState: Record<string, 'good' | 'bad' | null>,
+    setRatingsState: React.Dispatch<React.SetStateAction<Record<string, 'good' | 'bad' | null>>>,
+    conAmount: number,
+  ) => {
+    const key = String(idx);
+    if (ratingsState[key]) return;
+    setRatingsState(prev => ({ ...prev, [key]: rating }));
+    if (rating === 'bad') {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch('/api/report-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          history_id: historyId ?? 'unknown',
+          question_index: idx,
+          question_type: q.type,
+          question_json: q,
+          passage_text: q._passageText ?? '',
+          con_amount: conAmount,
+          rating: 'bad',
+        }),
+      });
+    }
   };
 
   // ── 자동 저장 ──
@@ -1141,10 +1184,13 @@ export default function AiQuestionsPage() {
           difficulty: difficultyLevel,
         }),
       });
-      let json: { success?: boolean; error?: string } = {};
+      let json: { success?: boolean; error?: string; id?: string } = {};
       try { json = await res.json(); } catch { /* non-JSON response */ }
-      if (res.ok && json.success) setSaveStatus('done');
-      else { setSaveStatus('error'); setSaveErrorMsg(json.error || `저장 실패 (${res.status})`); }
+      if (res.ok && json.success) {
+        setSaveStatus('done');
+        if (json.id) setRatingHistoryId(json.id);
+        setQuestionRatings({});
+      } else { setSaveStatus('error'); setSaveErrorMsg(json.error || `저장 실패 (${res.status})`); }
     } catch (e) {
       setSaveStatus('error');
       setSaveErrorMsg(e instanceof Error ? e.message : '네트워크 오류');
@@ -1963,6 +2009,35 @@ export default function AiQuestionsPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* 문제 품질 평가 */}
+                      {(() => {
+                        const rKey = String(idx);
+                        const rated = questionRatings[rKey];
+                        return (
+                          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-3">
+                            <span className="text-xs font-black text-gray-400">문제 품질</span>
+                            <button
+                              disabled={!!rated}
+                              onClick={() => handleRateQuestion(idx, 'good', q, ratingHistoryId, questionRatings, setQuestionRatings, aiPrice ?? 1)}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
+                                ${rated === 'good' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-gray-200 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
+                            >
+                              👍 좋아요
+                            </button>
+                            <button
+                              disabled={!!rated}
+                              onClick={() => handleRateQuestion(idx, 'bad', q, ratingHistoryId, questionRatings, setQuestionRatings, aiPrice ?? 1)}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
+                                ${rated === 'bad' ? 'bg-rose-500 text-white border-rose-500' : 'border-gray-200 text-gray-400 hover:border-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
+                            >
+                              👎 신고
+                            </button>
+                            {rated === 'bad' && <span className="text-xs font-bold text-rose-500">신고가 접수되었습니다. 검토 후 CON이 환불됩니다.</span>}
+                            {rated === 'good' && <span className="text-xs font-bold text-emerald-600">감사합니다!</span>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -2452,6 +2527,35 @@ export default function AiQuestionsPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* 문제 품질 평가 */}
+                      {(() => {
+                        const rKey = String(idx);
+                        const rated = mockQuestionRatings[rKey];
+                        return (
+                          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-3">
+                            <span className="text-xs font-black text-gray-400">문제 품질</span>
+                            <button
+                              disabled={!!rated}
+                              onClick={() => handleRateQuestion(idx, 'good', q, mockRatingHistoryId, mockQuestionRatings, setMockQuestionRatings, aiPrice ?? 1)}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
+                                ${rated === 'good' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-gray-200 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
+                            >
+                              👍 좋아요
+                            </button>
+                            <button
+                              disabled={!!rated}
+                              onClick={() => handleRateQuestion(idx, 'bad', q, mockRatingHistoryId, mockQuestionRatings, setMockQuestionRatings, aiPrice ?? 1)}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
+                                ${rated === 'bad' ? 'bg-rose-500 text-white border-rose-500' : 'border-gray-200 text-gray-400 hover:border-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
+                            >
+                              👎 신고
+                            </button>
+                            {rated === 'bad' && <span className="text-xs font-bold text-rose-500">신고가 접수되었습니다. 검토 후 CON이 환불됩니다.</span>}
+                            {rated === 'good' && <span className="text-xs font-bold text-emerald-600">감사합니다!</span>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );

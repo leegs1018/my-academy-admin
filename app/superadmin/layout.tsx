@@ -14,6 +14,7 @@ const menuItems = [
   { href: '/superadmin/sms',              label: 'SMS 발송',           icon: '📱' },
   { href: '/superadmin/notices',          label: '공지사항 관리',      icon: '📢' },
   { href: '/superadmin/inquiries',        label: '문의 관리',          icon: '💬' },
+  { href: '/superadmin/question-reports', label: '문제 신고 관리',     icon: '🚨' },
   { href: '/superadmin/site-settings',    label: '사이트 설정',        icon: '⚙️' },
 ];
 
