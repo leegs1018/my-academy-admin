@@ -5,8 +5,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const authError = await requireSuperAdmin(request);
   if (authError) return authError;
 
@@ -34,7 +35,7 @@ export async function PATCH(
   const { data: report, error: fetchErr } = await db
     .from('question_reports')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (fetchErr || !report) {
@@ -48,7 +49,7 @@ export async function PATCH(
   const { error: updateErr } = await db
     .from('question_reports')
     .update({ status: action === 'approve' ? 'approved' : 'rejected' })
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (updateErr) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
