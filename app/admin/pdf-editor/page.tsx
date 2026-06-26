@@ -190,7 +190,7 @@ async function buildAnswerPdfBlob(result: GeneratedMaterials, title: string): Pr
   const { jsPDF } = await import('jspdf');
 
   const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;background:white;padding:40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;';
+  el.style.cssText = 'position:fixed;top:0;left:0;z-index:-9999;width:800px;background:white;padding:40px;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;';
 
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   let html = '';
