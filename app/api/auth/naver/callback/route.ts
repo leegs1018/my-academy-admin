@@ -71,9 +71,13 @@ export async function GET(request: NextRequest) {
     options: { redirectTo: `${origin}/auth/callback` },
   });
 
-  if (linkError || !linkData?.properties?.action_link) {
+  if (linkError || !linkData?.properties?.hashed_token) {
     return NextResponse.redirect(`${origin}/login?error=naver_failed`);
   }
 
-  return NextResponse.redirect(linkData.properties.action_link);
+  // action_link를 거치지 않고 token_hash를 직접 auth/callback에 전달
+  const hashedToken = linkData.properties.hashed_token;
+  return NextResponse.redirect(
+    `${origin}/auth/callback?token_hash=${encodeURIComponent(hashedToken)}&type=magiclink`
+  );
 }
