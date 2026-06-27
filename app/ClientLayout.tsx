@@ -27,6 +27,7 @@ const menuItems: MenuItem[] = [
       { href: '/admin/vocab-choice',  label: '어휘 선택 문제',     icon: '📌' },
     ],
   },
+  { href: '/admin/con-history',  label: 'CON 사용 이력',   icon: '⭐' },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
   { href: '/admin/inquiries',    label: '문의하기',        icon: '💬' },
 ];
@@ -148,7 +149,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             {(userRole === 'admin'
               ? menuItems
               : menuItems.filter(item =>
-                  item.label === 'AI 문제 생성' || item.label === '공지사항' || item.label === '문의하기'
+                  item.label === 'AI 문제 생성' || item.label === 'CON 사용 이력' || item.label === '공지사항' || item.label === '문의하기'
                 )
             ).map((item) => {
               if (item.children) {
