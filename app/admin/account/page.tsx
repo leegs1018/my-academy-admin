@@ -26,12 +26,20 @@ export default function AccountPage() {
 
   // 계정 정보
   const [email, setEmail] = useState('');
+  const [provider, setProvider] = useState('email'); // 가입 방법
   const [academyName, setAcademyName] = useState('');
   const [academyPhone, setAcademyPhone] = useState('');
   const [mobile, setMobile] = useState('');
   const [points, setPoints] = useState(0);
   const [kioskCode, setKioskCode] = useState('');
   const [userId, setUserId] = useState('');
+
+  const SNS_PROVIDERS = ['google', 'kakao', 'naver'];
+  const PROVIDER_LABEL: Record<string, string> = {
+    google: 'Google',
+    kakao: '카카오',
+    naver: '네이버',
+  };
 
   // 로고
   const [logoUrl, setLogoUrl] = useState('');
@@ -64,8 +72,41 @@ export default function AccountPage() {
       if (!session) { router.replace('/login'); return; }
       setEmail(session.user.email || '');
       setUserId(session.user.id);
+
+      // SNS 로그인 감지 → 비밀번호 확인 단계 자동 스킵
+      const detectedProvider =
+        session.user.user_metadata?.provider ||
+        session.user.app_metadata?.provider ||
+        'email';
+      setProvider(detectedProvider);
+
+      if (SNS_PROVIDERS.includes(detectedProvider)) {
+        // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
+        const { data } = await supabase
+          .from('academy_config')
+          .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url')
+          .eq('user_id', session.user.id)
+          .single();
+        if (data) {
+          setAcademyName(data.academy_name || '');
+          setAcademyPhone(data.academy_phone || '');
+          setMobile(data.mobile || '');
+          setPoints(data.points || 0);
+          setKioskCode(data.kiosk_code || '');
+          setLogoUrl(data.logo_url || '');
+          if (data.logo_url) {
+            const { data: signedData } = await supabase.storage
+              .from('academy-logos')
+              .createSignedUrl(data.logo_url, 3600);
+            if (signedData?.signedUrl) setLogoPreview(signedData.signedUrl);
+          }
+        }
+        setVerified(true);
+        loadConTransactions(1, session.user.id);
+      }
     };
     init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // ── 비밀번호 확인 ────────────────────────────────
@@ -315,6 +356,19 @@ export default function AccountPage() {
                 {email}
               </div>
             </div>
+            <div>
+              <label className="block text-xs font-black text-gray-400 mb-1.5">가입 방법</label>
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1.5 text-xs font-black rounded-xl border ${
+                  provider === 'google' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                  provider === 'kakao'  ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                  provider === 'naver'  ? 'bg-green-50 text-green-600 border-green-200' :
+                  'bg-gray-50 text-gray-500 border-gray-200'
+                }`}>
+                  {PROVIDER_LABEL[provider] ?? '이메일'} 로그인
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -459,8 +513,8 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* 비밀번호 변경 */}
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+        {/* 비밀번호 변경 - SNS 사용자는 숨김 */}
+        {!SNS_PROVIDERS.includes(provider) && <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
           <button
             onClick={() => setShowPwChange(!showPwChange)}
             className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
@@ -506,7 +560,7 @@ export default function AccountPage() {
               </button>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* CON 사용 이력 */}
         <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
