@@ -16,6 +16,7 @@ export default function CompleteProfilePage() {
   });
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [provider, setProvider] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
@@ -31,9 +32,18 @@ export default function CompleteProfilePage() {
         router.replace(role === 'admin' ? '/admin' : '/admin/pdf-editor');
         return;
       }
+      // 로그인 플랫폼 감지
+      const p = session.user.user_metadata?.provider ?? session.user.app_metadata?.provider ?? '';
+      setProvider(p);
       setChecking(false);
     });
   }, [router]);
+
+  const providerLabel: Record<string, string> = {
+    google: '구글',
+    kakao: '카카오',
+    naver: '네이버',
+  };
 
   const change = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -101,8 +111,13 @@ export default function CompleteProfilePage() {
           <Link href="/" className="inline-flex w-12 h-12 bg-slate-900 rounded-2xl items-center justify-center rotate-3 mb-4 hover:scale-110 transition-transform">
             <span className="text-yellow-400 font-black text-2xl italic">C</span>
           </Link>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tighter">학원 정보 입력</h1>
-          <p className="text-slate-400 font-medium mt-2">서비스 이용을 위해 학원 정보를 입력해주세요.</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tighter">학원 정보 추가 입력</h1>
+          <p className="text-slate-400 font-medium mt-2">
+            {providerLabel[provider] ? (
+              <><span className="text-slate-700 font-bold">{providerLabel[provider]} 로그인</span>이 완료되었습니다.<br /></>
+            ) : null}
+            서비스 이용을 위해 학원 정보를 입력해주세요.
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
