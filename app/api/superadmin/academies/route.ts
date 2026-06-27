@@ -27,9 +27,12 @@ export async function GET(request: NextRequest) {
 
   const emailMap: Record<string, string> = {};
   const roleMap: Record<string, string> = {};
+  const providerMap: Record<string, string> = {};
   allUsers.forEach((u: any) => {
     emailMap[u.id] = u.email || '';
     roleMap[u.id] = u.user_metadata?.role ?? 'ai_only';
+    // Naver는 user_metadata.provider에 수동 저장, Google/Kakao는 app_metadata.provider에 자동 저장
+    providerMap[u.id] = u.user_metadata?.provider || u.app_metadata?.provider || 'email';
   });
 
   const studentCount: Record<string, number> = {};
@@ -46,6 +49,7 @@ export async function GET(request: NextRequest) {
     ...a,
     email: emailMap[a.user_id] || '',
     role: roleMap[a.user_id] ?? 'ai_only',
+    provider: providerMap[a.user_id] ?? 'email',
     student_count: studentCount[a.user_id] || 0,
     sms_count: smsCount[a.user_id] || 0,
   }));

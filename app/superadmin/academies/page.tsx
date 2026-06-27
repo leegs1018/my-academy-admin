@@ -15,7 +15,15 @@ interface Academy {
   student_count: number;
   sms_count: number;
   role: 'ai_only' | 'admin';
+  provider: string;
 }
+
+const PROVIDER_BADGE: Record<string, { label: string; className: string }> = {
+  google:  { label: 'Google',  className: 'bg-blue-900/40 text-blue-300 border border-blue-800' },
+  kakao:   { label: '카카오',  className: 'bg-yellow-900/40 text-yellow-300 border border-yellow-800' },
+  naver:   { label: '네이버',  className: 'bg-green-900/40 text-green-300 border border-green-800' },
+  email:   { label: '이메일',  className: 'bg-slate-800 text-slate-400 border border-slate-700' },
+};
 
 interface ChargeModal {
   academy: Academy;
@@ -149,6 +157,7 @@ export default function AcademiesPage() {
             <thead className="bg-slate-800/50">
               <tr>
                 <th className="py-3 px-4 text-left text-xs font-black text-slate-500">학원명</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">가입방법</th>
                 <th className="py-3 px-4 text-left text-xs font-black text-slate-500">이메일</th>
                 <th className="py-3 px-4 text-left text-xs font-black text-slate-500 hidden md:table-cell">전화번호</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">키오스크</th>
@@ -168,6 +177,16 @@ export default function AcademiesPage() {
                   <tr key={a.user_id} className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-black text-white">{a.academy_name || '(미설정)'}</span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {(() => {
+                        const badge = PROVIDER_BADGE[a.provider] ?? PROVIDER_BADGE.email;
+                        return (
+                          <span className={`inline-block px-2 py-0.5 text-[10px] font-black rounded-md ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-slate-400 font-bold text-xs">{a.email}</td>
                     <td className="py-3 px-4 text-slate-400 font-bold text-xs hidden md:table-cell">
@@ -219,7 +238,7 @@ export default function AcademiesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={10} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={11} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>
