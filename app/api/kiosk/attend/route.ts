@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import CryptoJS from 'crypto-js';
+import { getFeaturePrice, getConBalance } from '@/lib/credits';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -143,14 +144,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '출결 처리 중 오류가 발생했습니다.' }, { status: 500 });
   }
 
-  // 학부모 SMS 발송
+  // 학부모 SMS 발송 + CON 차감
   let smsResult: { ok: boolean; error?: string } = { ok: true };
   if (student.parent_phone) {
+    const smsMessage = `[${academy_name}] ${student.name} 학생이 ${today.slice(5, 7)}월 ${today.slice(8, 10)}일 수업에 ${action}하였습니다.`;
+    const msgType = Buffer.byteLength(smsMessage, 'utf8') > 90 ? 'lms' : 'sms';
+    const pricePerMsg = await getFeaturePrice(msgType);
+
+    // CON 잔액 확인 (부족해도 SMS는 발송하되 차감만 스킵)
+    const balance = await getConBalance(academy_id);
+    const canDeduct = balance >= pricePerMsg;
+
     smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
     if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
 
+    // 발송 성공 + CON 충분 → 차감
+    if (smsResult.ok && canDeduct && pricePerMsg > 0) {
+      await supabaseAdmin.rpc('deduct_con', {
+        p_academy_id: academy_id,
+        p_amount: pricePerMsg,
+        p_feature_key: msgType,
+        p_description: `키오스크 ${msgType.toUpperCase()} 발송 (${student.name} ${action})`,
+      });
+    }
+
     // 발송 이력 기록
-    const smsMessage = `[${academy_name}] ${student.name} 학생이 ${today.slice(5, 7)}월 ${today.slice(8, 10)}일 수업에 ${action}하였습니다.`;
     await supabaseAdmin.from('sms_logs').insert({
       academy_id,
       message: smsMessage,

@@ -31,8 +31,8 @@ const FEATURE_OPTIONS = [
   { value: 'ai_question_per_type',        label: '실전변형 (직접)' },
   { value: 'mock_exam_question_per_type', label: '실전변형 (모의)' },
   { value: 'vocab_choice',                label: '어휘선택' },
-  { value: 'sms',                         label: 'SMS' },
-  { value: 'lms',                         label: 'LMS' },
+  { value: 'sms',                         label: 'SMS / 키오스크 SMS' },
+  { value: 'lms',                         label: 'LMS / 키오스크 LMS' },
 ];
 
 function featureLabel(key: string | null) {
