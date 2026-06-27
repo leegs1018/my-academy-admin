@@ -31,8 +31,12 @@ export async function GET(request: NextRequest) {
   allUsers.forEach((u: any) => {
     emailMap[u.id] = u.email || '';
     roleMap[u.id] = u.user_metadata?.role ?? 'ai_only';
-    // Naver는 user_metadata.provider에 수동 저장, Google/Kakao는 app_metadata.provider에 자동 저장
-    providerMap[u.id] = u.user_metadata?.provider || u.app_metadata?.provider || 'email';
+    // Naver: user_metadata.provider에 수동 저장
+    // Google/Kakao: app_metadata.provider에 자동 저장
+    // 기존 이메일 계정에 SNS 연결 시 identities 배열에서 확인
+    const SNS = ['google', 'kakao', 'naver'];
+    const snsIdentity = (u.identities ?? []).find((i: { provider: string }) => SNS.includes(i.provider));
+    providerMap[u.id] = u.user_metadata?.provider || snsIdentity?.provider || u.app_metadata?.provider || 'email';
   });
 
   const studentCount: Record<string, number> = {};

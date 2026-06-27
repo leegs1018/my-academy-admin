@@ -80,8 +80,12 @@ export default function AccountPage() {
       setUserId(session.user.id);
 
       // SNS 로그인 감지 → 비밀번호 확인 단계 자동 스킵
+      // identities 배열도 확인 (기존 이메일 계정에 SNS 연결된 경우 app_metadata.provider가 'email'로 남음)
+      const identities = session.user.identities ?? [];
+      const snsIdentity = identities.find((i: { provider: string }) => SNS_PROVIDERS.includes(i.provider));
       const detectedProvider =
         session.user.user_metadata?.provider ||
+        snsIdentity?.provider ||
         session.user.app_metadata?.provider ||
         'email';
       setProvider(detectedProvider);
