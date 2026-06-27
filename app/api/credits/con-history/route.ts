@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
+// 사용처 그룹 → feature_key 배열 매핑
+const FEATURE_GROUP: Record<string, string[]> = {
+  workbook: ['pdf_analysis', 'mock_workbook'],
+  exam:     ['ai_question_per_type', 'mock_exam_question_per_type'],
+  vocab:    ['vocab_choice'],
+  kiosk:    ['kiosk'],
+  sms:      ['sms'],
+  lms:      ['lms'],
+};
+
+function applyFeatureFilter<T extends object>(query: T, typeFilter: string, featureFilter: string): T {
+  // 충전 유형 선택 시 사용처 필터 무시
+  if (typeFilter === 'charge' || featureFilter === 'all') return query;
+
+  const keys = FEATURE_GROUP[featureFilter];
+  if (!keys) return query;
+  if (keys.length === 1) {
+    return (query as any).eq('feature_key', keys[0]);
+  }
+  return (query as any).in('feature_key', keys);
+}
+
 export async function GET(request: NextRequest) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,45 +58,33 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false });
 
   if (typeFilter !== 'all') query = query.eq('type', typeFilter);
-  if (featureFilter !== 'all') {
-    if (featureFilter === 'charge') {
-      query = query.eq('type', 'charge');
-    } else {
-      query = query.eq('feature_key', featureFilter);
-    }
-  }
+  query = applyFeatureFilter(query, typeFilter, featureFilter);
   if (search) query = query.ilike('description', `%${search}%`);
   if (startDate) query = query.gte('created_at', startDate);
   if (endDate) {
-    const endDateObj = new Date(endDate);
-    endDateObj.setDate(endDateObj.getDate() + 1);
-    query = query.lt('created_at', endDateObj.toISOString().split('T')[0]);
+    const d = new Date(endDate);
+    d.setDate(d.getDate() + 1);
+    query = query.lt('created_at', d.toISOString().split('T')[0]);
   }
 
   const from = (page - 1) * pageSize;
   const { data: transactions, count, error } = await query.range(from, from + pageSize - 1);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 필터 조건과 동일하게 집계
+  // 집계 (동일 필터 적용)
   let summaryQuery = db
     .from('con_transactions')
-    .select('type, amount, feature_key')
+    .select('type, amount')
     .eq('academy_id', user.id);
 
   if (typeFilter !== 'all') summaryQuery = summaryQuery.eq('type', typeFilter);
-  if (featureFilter !== 'all') {
-    if (featureFilter === 'charge') {
-      summaryQuery = summaryQuery.eq('type', 'charge');
-    } else {
-      summaryQuery = summaryQuery.eq('feature_key', featureFilter);
-    }
-  }
+  summaryQuery = applyFeatureFilter(summaryQuery, typeFilter, featureFilter);
   if (search) summaryQuery = summaryQuery.ilike('description', `%${search}%`);
   if (startDate) summaryQuery = summaryQuery.gte('created_at', startDate);
   if (endDate) {
-    const endDateObj = new Date(endDate);
-    endDateObj.setDate(endDateObj.getDate() + 1);
-    summaryQuery = summaryQuery.lt('created_at', endDateObj.toISOString().split('T')[0]);
+    const d = new Date(endDate);
+    d.setDate(d.getDate() + 1);
+    summaryQuery = summaryQuery.lt('created_at', d.toISOString().split('T')[0]);
   }
 
   const { data: summaryRows } = await summaryQuery;

@@ -13,30 +13,35 @@ interface ConTx {
 }
 
 const FEATURE_LABELS: Record<string, { label: string; color: string }> = {
-  pdf_analysis:                  { label: '지문분석',  color: 'text-blue-400' },
-  mock_workbook:                 { label: '워크북',    color: 'text-indigo-400' },
-  ai_question_per_type:          { label: '실전변형',  color: 'text-purple-400' },
-  mock_exam_question_per_type:   { label: '실전변형',  color: 'text-purple-400' },
-  vocab_choice:                  { label: '어휘선택',  color: 'text-pink-400' },
-  sms:                           { label: 'SMS',       color: 'text-green-400' },
-  lms:                           { label: 'LMS',       color: 'text-teal-400' },
-  kiosk:                         { label: '키오스크',  color: 'text-orange-400' },
+  pdf_analysis:                  { label: '워크북',    color: 'text-blue-500 dark:text-blue-400' },
+  mock_workbook:                 { label: '워크북',    color: 'text-blue-500 dark:text-blue-400' },
+  ai_question_per_type:          { label: '실전변형',  color: 'text-purple-500 dark:text-purple-400' },
+  mock_exam_question_per_type:   { label: '실전변형',  color: 'text-purple-500 dark:text-purple-400' },
+  vocab_choice:                  { label: '어휘선택',  color: 'text-pink-500 dark:text-pink-400' },
+  sms:                           { label: 'SMS',       color: 'text-green-600 dark:text-green-400' },
+  lms:                           { label: 'LMS',       color: 'text-teal-600 dark:text-teal-400' },
+  kiosk:                         { label: '키오스크',  color: 'text-orange-500 dark:text-orange-400' },
 };
 
 const FEATURE_OPTIONS = [
-  { value: 'all',                         label: '전체 사용처' },
-  { value: 'charge',                      label: '충전' },
-  { value: 'pdf_analysis',                label: '지문분석' },
-  { value: 'mock_workbook',               label: '워크북' },
-  { value: 'ai_question_per_type',        label: '실전변형 (직접)' },
-  { value: 'mock_exam_question_per_type', label: '실전변형 (모의)' },
-  { value: 'vocab_choice',                label: '어휘선택' },
-  { value: 'sms',                         label: 'SMS / 키오스크 SMS' },
-  { value: 'lms',                         label: 'LMS / 키오스크 LMS' },
+  { value: 'all',      label: '전체 사용처' },
+  { value: 'workbook', label: '워크북' },
+  { value: 'exam',     label: '실전변형' },
+  { value: 'vocab',    label: '어휘선택' },
+  { value: 'kiosk',    label: '키오스크' },
+  { value: 'sms',      label: 'SMS 문자' },
+  { value: 'lms',      label: 'LMS 문자' },
 ];
 
+const FREE_KEYWORDS = ['무료', '가입 기념', '추천인', '무료지급'];
+
+function isFreeCharge(description: string | null): boolean {
+  if (!description) return false;
+  return FREE_KEYWORDS.some(k => description.includes(k));
+}
+
 function featureLabel(key: string | null) {
-  if (!key) return { label: '충전', color: 'text-yellow-400' };
+  if (!key) return null;
   return FEATURE_LABELS[key] ?? { label: key, color: 'text-slate-400' };
 }
 
@@ -45,13 +50,9 @@ function formatDate(iso: string) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function today() {
-  return new Date().toISOString().split('T')[0];
-}
-
+function today() { return new Date().toISOString().split('T')[0]; }
 function monthAgo() {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
+  const d = new Date(); d.setMonth(d.getMonth() - 1);
   return d.toISOString().split('T')[0];
 }
 
@@ -94,11 +95,9 @@ export default function ConHistoryPage() {
     }
   }, [startDate, endDate, typeFilter, featureFilter, search, pageSize]);
 
-  useEffect(() => { fetchData(1); }, [fetchData, pageSize]);
+  useEffect(() => { fetchData(1); }, [fetchData]);
 
-  const handleSearch = () => {
-    setSearch(searchInput);
-  };
+  const handleSearch = () => setSearch(searchInput);
 
   const handleReset = () => {
     setStartDate(monthAgo());
@@ -123,25 +122,16 @@ export default function ConHistoryPage() {
         {/* 날짜 */}
         <div className="flex flex-wrap gap-3 items-center">
           <span className="text-xs font-black text-gray-500 dark:text-slate-400 w-14">기간</span>
-          <input
-            type="date"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            className="px-3 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
-          />
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+            className="px-3 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500" />
           <span className="text-gray-400 font-bold text-sm">~</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            className="px-3 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
-          />
-          {/* 단축 버튼 */}
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+            className="px-3 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500" />
           {[
             { label: '오늘', fn: () => { setStartDate(today()); setEndDate(today()); } },
-            { label: '1주일', fn: () => { const d = new Date(); d.setDate(d.getDate() - 7); setStartDate(d.toISOString().split('T')[0]); setEndDate(today()); } },
-            { label: '1개월', fn: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); setStartDate(d.toISOString().split('T')[0]); setEndDate(today()); } },
-            { label: '3개월', fn: () => { const d = new Date(); d.setMonth(d.getMonth() - 3); setStartDate(d.toISOString().split('T')[0]); setEndDate(today()); } },
+            { label: '1주일', fn: () => { const d=new Date(); d.setDate(d.getDate()-7); setStartDate(d.toISOString().split('T')[0]); setEndDate(today()); } },
+            { label: '1개월', fn: () => { const d=new Date(); d.setMonth(d.getMonth()-1); setStartDate(d.toISOString().split('T')[0]); setEndDate(today()); } },
+            { label: '3개월', fn: () => { const d=new Date(); d.setMonth(d.getMonth()-3); setStartDate(d.toISOString().split('T')[0]); setEndDate(today()); } },
           ].map(({ label, fn }) => (
             <button key={label} onClick={fn}
               className="px-3 py-2 text-xs font-black bg-gray-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-gray-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all border border-gray-200 dark:border-slate-700">
@@ -150,7 +140,7 @@ export default function ConHistoryPage() {
           ))}
         </div>
 
-        {/* 유형 + 사용처 */}
+        {/* 유형 */}
         <div className="flex flex-wrap gap-3 items-center">
           <span className="text-xs font-black text-gray-500 dark:text-slate-400 w-14">유형</span>
           {[
@@ -158,8 +148,7 @@ export default function ConHistoryPage() {
             { value: 'charge', label: '충전' },
             { value: 'deduct', label: '차감' },
           ].map(opt => (
-            <button key={opt.value}
-              onClick={() => setTypeFilter(opt.value)}
+            <button key={opt.value} onClick={() => setTypeFilter(opt.value)}
               className={`px-4 py-2 text-xs font-black rounded-xl border transition-all ${
                 typeFilter === opt.value
                   ? 'bg-indigo-600 text-white border-indigo-600'
@@ -170,29 +159,28 @@ export default function ConHistoryPage() {
           ))}
         </div>
 
+        {/* 사용처 */}
         <div className="flex flex-wrap gap-3 items-center">
           <span className="text-xs font-black text-gray-500 dark:text-slate-400 w-14">사용처</span>
-          <select
-            value={featureFilter}
-            onChange={e => setFeatureFilter(e.target.value)}
-            className="px-3 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500">
+          <select value={featureFilter} onChange={e => setFeatureFilter(e.target.value)}
+            disabled={typeFilter === 'charge'}
+            className="px-3 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed">
             {FEATURE_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          {typeFilter === 'charge' && (
+            <span className="text-xs font-bold text-gray-400 dark:text-slate-500">충전 선택 시 사용처 무관</span>
+          )}
         </div>
 
         {/* 내용 검색 */}
         <div className="flex flex-wrap gap-3 items-center">
           <span className="text-xs font-black text-gray-500 dark:text-slate-400 w-14">내용</span>
-          <input
-            type="text"
-            placeholder="내용 검색..."
-            value={searchInput}
+          <input type="text" placeholder="내용 검색..." value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            className="px-4 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 w-64"
-          />
+            className="px-4 py-2 text-sm font-bold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 w-64" />
           <button onClick={handleSearch}
             className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-all">
             검색
@@ -205,33 +193,34 @@ export default function ConHistoryPage() {
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5">
           <p className="text-xs font-black text-gray-400 dark:text-slate-500 mb-1">총 충전</p>
-          <p className="text-2xl font-black text-yellow-500">+{summary.total_charge.toLocaleString()}<span className="text-sm ml-1">C</span></p>
+          <p className="text-2xl font-black text-emerald-500">+{summary.total_charge.toLocaleString()}<span className="text-sm ml-1">C</span></p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5">
           <p className="text-xs font-black text-gray-400 dark:text-slate-500 mb-1">총 차감</p>
-          <p className="text-2xl font-black text-red-400">-{summary.total_deduct.toLocaleString()}<span className="text-sm ml-1">C</span></p>
+          <p className="text-2xl font-black text-red-500">-{summary.total_deduct.toLocaleString()}<span className="text-sm ml-1">C</span></p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5">
-          <p className="text-xs font-black text-gray-400 dark:text-slate-500 mb-1">순 잔액 변동</p>
-          <p className={`text-2xl font-black ${summary.total_charge - summary.total_deduct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className="text-xs font-black text-gray-400 dark:text-slate-500 mb-1">순 잔액</p>
+          <p className="text-2xl font-black text-yellow-500">
             {summary.total_charge - summary.total_deduct >= 0 ? '+' : ''}{(summary.total_charge - summary.total_deduct).toLocaleString()}<span className="text-sm ml-1">C</span>
           </p>
         </div>
       </div>
 
-      {/* 테이블 헤더: 건수 선택 */}
+      {/* 건수 선택 */}
       <div className="flex items-center justify-between">
         <p className="text-xs font-black text-gray-400 dark:text-slate-500">
-          {total.toLocaleString()}건 중 {((page - 1) * pageSize + 1).toLocaleString()}–{Math.min(page * pageSize, total).toLocaleString()}번째
+          {total > 0
+            ? `${total.toLocaleString()}건 중 ${((page-1)*pageSize+1).toLocaleString()}–${Math.min(page*pageSize, total).toLocaleString()}번째`
+            : '결과 없음'}
         </p>
         <div className="flex items-center gap-2">
           <span className="text-xs font-black text-gray-400 dark:text-slate-500">페이지 당</span>
           {[20, 50, 100].map(n => (
-            <button key={n}
-              onClick={() => { setPageSize(n); }}
+            <button key={n} onClick={() => setPageSize(n)}
               className={`px-3 py-1.5 text-xs font-black rounded-lg border transition-all ${
                 pageSize === n
                   ? 'bg-indigo-600 text-white border-indigo-600'
@@ -270,31 +259,45 @@ export default function ConHistoryPage() {
               </thead>
               <tbody>
                 {transactions.map(tx => {
-                  const fl = tx.type === 'charge'
-                    ? { label: '충전', color: 'text-yellow-400' }
-                    : featureLabel(tx.feature_key);
+                  const fl = featureLabel(tx.feature_key);
+                  const isCharge = tx.type === 'charge';
+                  const free = isCharge && isFreeCharge(tx.description);
                   return (
                     <tr key={tx.id} className="border-t border-gray-100 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="py-3 px-4 text-xs font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(tx.created_at)}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className={`inline-block px-2 py-0.5 text-[10px] font-black rounded-md ${
-                          tx.type === 'charge'
-                            ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-800/50'
-                            : 'bg-red-900/30 text-red-400 border border-red-800/50'
-                        }`}>
-                          {tx.type === 'charge' ? '충전' : '차감'}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={`text-xs font-black px-2 py-0.5 rounded border ${
+                            isCharge
+                              ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700'
+                              : 'text-red-500 dark:text-red-400 border-red-300 dark:border-red-700'
+                          }`}>
+                            {isCharge ? '충전' : '차감'}
+                          </span>
+                          {isCharge && (
+                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${
+                              free
+                                ? 'text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700'
+                                : 'text-yellow-600 dark:text-yellow-400 border-yellow-300 dark:border-yellow-700'
+                            }`}>
+                              {free ? '무료' : '유료'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className={`text-xs font-black ${fl.color}`}>{fl.label}</span>
+                        {fl
+                          ? <span className={`text-xs font-black ${fl.color}`}>{fl.label}</span>
+                          : <span className="text-xs font-black text-emerald-500 dark:text-emerald-400">충전</span>
+                        }
                       </td>
                       <td className="py-3 px-4 text-xs font-bold text-gray-700 dark:text-slate-300 max-w-[260px] truncate">
                         {tx.description || '-'}
                       </td>
-                      <td className={`py-3 px-4 text-right text-sm font-black ${tx.type === 'charge' ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {tx.type === 'charge' ? '+' : '-'}{tx.amount.toLocaleString()}C
+                      <td className={`py-3 px-4 text-right text-sm font-black ${isCharge ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                        {isCharge ? '+' : '-'}{tx.amount.toLocaleString()}C
                       </td>
                       <td className="py-3 px-4 text-right text-sm font-black text-gray-700 dark:text-white">
                         {tx.balance_after.toLocaleString()}C
@@ -311,18 +314,12 @@ export default function ConHistoryPage() {
       {/* 페이지네이션 */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <button
-            onClick={() => fetchData(page - 1)}
-            disabled={page <= 1}
+          <button onClick={() => fetchData(page - 1)} disabled={page <= 1}
             className="px-4 py-2 text-xs font-black bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-600 dark:text-slate-300 disabled:opacity-40 hover:border-indigo-400 transition-all">
             ← 이전
           </button>
-          <span className="text-xs font-black text-gray-500 dark:text-slate-400 px-3">
-            {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => fetchData(page + 1)}
-            disabled={page >= totalPages}
+          <span className="text-xs font-black text-gray-500 dark:text-slate-400 px-3">{page} / {totalPages}</span>
+          <button onClick={() => fetchData(page + 1)} disabled={page >= totalPages}
             className="px-4 py-2 text-xs font-black bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-600 dark:text-slate-300 disabled:opacity-40 hover:border-indigo-400 transition-all">
             다음 →
           </button>

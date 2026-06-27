@@ -158,12 +158,12 @@ export async function POST(req: Request) {
     smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
     if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
 
-    // 발송 성공 + CON 충분 → 차감
+    // 발송 성공 + CON 충분 → 차감 (feature_key는 'kiosk'로 통일)
     if (smsResult.ok && canDeduct && pricePerMsg > 0) {
       await supabaseAdmin.rpc('deduct_con', {
         p_academy_id: academy_id,
         p_amount: pricePerMsg,
-        p_feature_key: msgType,
+        p_feature_key: 'kiosk',
         p_description: `키오스크 ${msgType.toUpperCase()} 발송 (${student.name} ${action})`,
       });
     }

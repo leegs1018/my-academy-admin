@@ -29,6 +29,7 @@ interface ChargeModal {
   academy: Academy;
   amount: string;
   description: string;
+  is_free: boolean;
   loading: boolean;
   result: string;
 }
@@ -81,7 +82,7 @@ export default function AcademiesPage() {
   };
 
   const openChargeModal = (academy: Academy) => {
-    setChargeModal({ academy, amount: '', description: '', loading: false, result: '' });
+    setChargeModal({ academy, amount: '', description: '', is_free: false, loading: false, result: '' });
   };
 
   const handleCharge = async () => {
@@ -98,7 +99,8 @@ export default function AcademiesPage() {
         body: JSON.stringify({
           academy_id: chargeModal.academy.user_id,
           amount,
-          description: chargeModal.description || `슈퍼어드민 충전 (${amount} CON)`,
+          description: chargeModal.description,
+          is_free: chargeModal.is_free,
         }),
       });
       const data = await res.json();
@@ -277,11 +279,33 @@ export default function AcademiesPage() {
                 />
                 <p className="text-xs text-slate-500 mt-1.5 font-bold">1,000 CON = 10,000원</p>
               </div>
+              {/* 무료 / 유료 선택 */}
+              <div>
+                <label className="block text-xs font-black text-slate-400 mb-2">충전 유형</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: false, label: '유료충전', desc: '실제 결제 충전', color: 'border-yellow-500 bg-yellow-500/10 text-yellow-300' },
+                    { value: true,  label: '무료지급', desc: '이벤트/보상 지급', color: 'border-blue-500 bg-blue-500/10 text-blue-300' },
+                  ].map(opt => (
+                    <button key={String(opt.value)}
+                      onClick={() => setChargeModal(prev => prev ? { ...prev, is_free: opt.value } : null)}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-left px-3 transition-all ${
+                        chargeModal.is_free === opt.value
+                          ? opt.color
+                          : 'border-slate-700 bg-slate-800 text-slate-400'
+                      }`}>
+                      <p className="text-xs font-black">{opt.label}</p>
+                      <p className="text-[10px] font-bold opacity-70 mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-black text-slate-400 mb-2">메모 (선택)</label>
                 <input
                   type="text"
-                  placeholder="예: 1만원 결제 충전"
+                  placeholder={chargeModal.is_free ? '예: 신규 가입 혜택' : '예: 1만원 결제 충전'}
                   value={chargeModal.description}
                   onChange={e => setChargeModal(prev => prev ? { ...prev, description: e.target.value } : null)}
                   className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-bold focus:border-yellow-500 focus:outline-none text-sm placeholder:text-slate-600"
