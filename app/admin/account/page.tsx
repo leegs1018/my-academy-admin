@@ -277,7 +277,7 @@ export default function AccountPage() {
 
     if (!res.ok) {
       if (data.error === 'paid_con_exists') {
-        alert('유료 충전한 CON 잔액이 있습니다.\n고객센터(031-903-8205)로 문의하여 환불 처리 후 탈퇴를 진행해주세요.');
+        alert('유료 충전한 CON 잔액이 있습니다.\n문의하기 페이지에서 환불 문의 후 탈퇴를 진행해주세요.');
       } else {
         alert('탈퇴 처리 중 오류가 발생했습니다. 고객센터로 문의해주세요.');
       }
@@ -708,7 +708,7 @@ export default function AccountPage() {
                 <p className="text-xs font-black text-yellow-700 mb-1">💰 유료 충전 CON 안내</p>
                 <p className="text-xs font-bold text-yellow-600">
                   유료로 충전한 CON 잔액이 있는 경우 탈퇴가 제한됩니다.<br />
-                  고객센터 <span className="font-black">031-903-8205</span> 로 문의하여 환불 후 탈퇴를 진행해주세요.
+                  <a href="/admin/inquiries" className="underline font-black">문의하기</a> 페이지에서 환불 문의 후 탈퇴를 진행해주세요.
                 </p>
               </div>
 
