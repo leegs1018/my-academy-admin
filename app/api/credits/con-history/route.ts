@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   const featureFilter = searchParams.get('feature_key') || 'all';
   const search = searchParams.get('search') || '';
   const page = parseInt(searchParams.get('page') || '1', 10);
-  const pageSize = 30;
+  const pageSize = Math.min(parseInt(searchParams.get('page_size') || '20', 10), 100);
 
   const db = createAdminClient();
 

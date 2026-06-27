@@ -33,7 +33,6 @@ const FEATURE_OPTIONS = [
   { value: 'vocab_choice',                label: '어휘선택' },
   { value: 'sms',                         label: 'SMS' },
   { value: 'lms',                         label: 'LMS' },
-  { value: 'kiosk',                       label: '키오스크' },
 ];
 
 function featureLabel(key: string | null) {
@@ -69,14 +68,14 @@ export default function ConHistoryPage() {
   const [featureFilter, setFeatureFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-
-  const PAGE_SIZE = 30;
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchData = useCallback(async (p: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
         page: String(p),
+        page_size: String(pageSize),
         type: typeFilter,
         feature_key: featureFilter,
         search,
@@ -93,9 +92,9 @@ export default function ConHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, typeFilter, featureFilter, search]);
+  }, [startDate, endDate, typeFilter, featureFilter, search, pageSize]);
 
-  useEffect(() => { fetchData(1); }, [fetchData]);
+  useEffect(() => { fetchData(1); }, [fetchData, pageSize]);
 
   const handleSearch = () => {
     setSearch(searchInput);
@@ -110,7 +109,7 @@ export default function ConHistoryPage() {
     setSearchInput('');
   };
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div className="space-y-6">
@@ -220,6 +219,27 @@ export default function ConHistoryPage() {
           <p className={`text-2xl font-black ${summary.total_charge - summary.total_deduct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {summary.total_charge - summary.total_deduct >= 0 ? '+' : ''}{(summary.total_charge - summary.total_deduct).toLocaleString()}<span className="text-sm ml-1">C</span>
           </p>
+        </div>
+      </div>
+
+      {/* 테이블 헤더: 건수 선택 */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-black text-gray-400 dark:text-slate-500">
+          {total.toLocaleString()}건 중 {((page - 1) * pageSize + 1).toLocaleString()}–{Math.min(page * pageSize, total).toLocaleString()}번째
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-gray-400 dark:text-slate-500">페이지 당</span>
+          {[20, 50, 100].map(n => (
+            <button key={n}
+              onClick={() => { setPageSize(n); }}
+              className={`px-3 py-1.5 text-xs font-black rounded-lg border transition-all ${
+                pageSize === n
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:border-indigo-400'
+              }`}>
+              {n}건
+            </button>
+          ))}
         </div>
       </div>
 
