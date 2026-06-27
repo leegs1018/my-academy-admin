@@ -26,26 +26,36 @@ function DemoScreen({ tab }: { tab: typeof DEMO_TABS[number] }) {
         {/* 생성된 문제 카드 */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-black px-2.5 py-1 rounded-full border bg-green-100 text-green-700 border-green-200">어법 유형</span>
+            <span className="text-xs font-black px-2.5 py-1 rounded-full border bg-blue-100 text-blue-700 border-blue-200">주제/제목 유형</span>
             <span className="text-sm font-black text-gray-800">문제 1</span>
           </div>
-          <p className="text-sm font-bold text-gray-800 mb-3">다음 글의 밑줄 친 부분 중, 어법상 틀린 것은?</p>
+          <p className="text-sm font-bold text-gray-800 mb-3">다음 글의 주제로 가장 적절한 것은?</p>
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed">
-            The development of artificial intelligence has <span className="font-black text-slate-900">①</span><span style={{textDecoration:'underline',fontWeight:700}}>transformed</span> the way people interact with technology, <span className="font-black text-slate-900">②</span><span style={{textDecoration:'underline',fontWeight:700}}>making</span> it possible for machines to understand human language. These systems are trained on vast datasets, <span className="font-black text-slate-900">③</span><span style={{textDecoration:'underline',fontWeight:700}}>that</span> allows them to generate responses. Despite their capabilities, <span className="font-black text-slate-900">④</span><span style={{textDecoration:'underline',fontWeight:700}}>what</span> many experts point out is the need for careful oversight. The technology must be used <span className="font-black text-slate-900">⑤</span><span style={{textDecoration:'underline',fontWeight:700}}>responsibly</span> to ensure it benefits society.
+            Artificial intelligence has fundamentally changed the way students learn. Adaptive learning platforms analyze each student&apos;s performance in real time, identifying strengths and weaknesses to provide personalized content. Unlike traditional one-size-fits-all instruction, AI-powered systems adjust the difficulty level and pacing based on individual progress, ensuring that no student is left behind or held back.
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="text-xs font-black text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded-lg">✅ 정답/해설 보기</div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-gray-400">문제 품질</span>
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-black text-gray-400">👍 좋아요</div>
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-black text-gray-400">👎 신고</div>
+          <div className="space-y-1.5 mb-4">
+            {[
+              { n: '①', text: 'the ethical concerns of AI in education', correct: false },
+              { n: '②', text: 'how AI personalizes learning for each student', correct: true },
+              { n: '③', text: 'the history of adaptive learning platforms', correct: false },
+              { n: '④', text: 'challenges faced by traditional classroom teaching', correct: false },
+              { n: '⑤', text: 'the role of teachers in AI-assisted education', correct: false },
+            ].map(c => (
+              <div key={c.n} className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs font-medium ${c.correct ? 'bg-indigo-50 border border-indigo-200 text-indigo-800 font-black' : 'text-slate-600'}`}>
+                <span className={`font-black flex-shrink-0 ${c.correct ? 'text-indigo-600' : 'text-slate-500'}`}>{c.n}</span>
+                <span>{c.text}</span>
               </div>
-            </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs font-black text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded-lg">✅ 정답/해설 보기</div>
+            <span className="text-xs font-black text-gray-400">문제 품질</span>
+            <div className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-black text-gray-400">👍 좋아요</div>
+            <div className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-black text-gray-400">👎 신고</div>
           </div>
         </div>
         {/* 두 번째 카드 미리보기 */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm opacity-60">
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm opacity-50">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-xs font-black px-2.5 py-1 rounded-full border bg-rose-100 text-rose-700 border-rose-200">빈칸 추론 유형</span>
             <span className="text-sm font-black text-gray-800">문제 2</span>
@@ -360,16 +370,6 @@ export default function LandingPageClient() {
                       <span className="font-black text-sm text-slate-900">CON <span className="text-yellow-500">EDU</span></span>
                     </div>
                     <div className="space-y-0.5">
-                      {[
-                        { icon: '🏠', label: '홈 대시보드' },
-                        { icon: '👤', label: '학생 등록 관리' },
-                        { icon: '📋', label: '학생 명부' },
-                        { icon: '✍️', label: '성적 관리' },
-                      ].map(m => (
-                        <div key={m.label} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-slate-500">
-                          <span>{m.icon}</span><span>{m.label}</span>
-                        </div>
-                      ))}
                       <div className="px-3 py-1.5">
                         <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">AI 문제 생성</div>
                         {[
@@ -382,6 +382,14 @@ export default function LandingPageClient() {
                           </div>
                         ))}
                       </div>
+                      {[
+                        { icon: '📢', label: '공지사항' },
+                        { icon: '💬', label: '문의하기' },
+                      ].map(m => (
+                        <div key={m.label} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-slate-500">
+                          <span>{m.icon}</span><span>{m.label}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
