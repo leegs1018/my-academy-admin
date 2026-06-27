@@ -65,6 +65,12 @@ export default function AccountPage() {
   const [conTxPage, setConTxPage] = useState(1);
   const [conTxTotal, setConTxTotal] = useState(0);
 
+  // 회원 탈퇴
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawConfirm, setWithdrawConfirm] = useState('');
+  const [withdrawChecked, setWithdrawChecked] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+
   // ── 초기 세션 확인 ───────────────────────────────
   useEffect(() => {
     const init = async () => {
@@ -256,6 +262,32 @@ export default function AccountPage() {
     setKioskResetting(false);
     if (!error) setKioskCode(newCode);
     else alert('재발급 중 오류가 발생했습니다.');
+  };
+
+  // ── 회원 탈퇴 ────────────────────────────────────
+  const handleWithdraw = async () => {
+    if (withdrawConfirm !== '탈퇴합니다' || !withdrawChecked) return;
+    setWithdrawLoading(true);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { router.replace('/login'); return; }
+
+    const res = await fetch('/api/auth/withdraw', { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.error === 'paid_con_exists') {
+        alert('유료 충전한 CON 잔액이 있습니다.\n고객센터(031-903-8205)로 문의하여 환불 처리 후 탈퇴를 진행해주세요.');
+      } else {
+        alert('탈퇴 처리 중 오류가 발생했습니다. 고객센터로 문의해주세요.');
+      }
+      setWithdrawLoading(false);
+      return;
+    }
+
+    await supabase.auth.signOut();
+    localStorage.removeItem('con-edu-auto-login');
+    router.replace('/?withdrawn=1');
   };
 
   // ── 비밀번호 변경 ────────────────────────────────
@@ -631,7 +663,102 @@ export default function AccountPage() {
             </div>
           )}
         </div>
+        {/* 회원 탈퇴 */}
+        <div className="bg-white rounded-3xl border border-red-100 overflow-hidden shadow-sm">
+          <div className="px-6 py-5 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-black text-gray-700">회원 탈퇴</p>
+              <p className="text-xs text-gray-400 mt-0.5">탈퇴 시 모든 데이터가 삭제되며 복구할 수 없습니다.</p>
+            </div>
+            <button
+              onClick={() => { setShowWithdrawModal(true); setWithdrawConfirm(''); setWithdrawChecked(false); }}
+              className="px-4 py-2 text-sm font-black text-red-500 bg-red-50 hover:bg-red-100 rounded-2xl transition-all border border-red-100"
+            >
+              회원 탈퇴
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* 회원 탈퇴 모달 */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !withdrawLoading && setShowWithdrawModal(false)} />
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-100">
+              <h3 className="text-lg font-black text-gray-900">회원 탈퇴</h3>
+              <p className="text-xs text-gray-400 mt-1">탈퇴 전 아래 내용을 꼭 확인해주세요.</p>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* 삭제 데이터 안내 */}
+              <div className="bg-red-50 rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-black text-red-600 uppercase tracking-wider">탈퇴 시 삭제되는 데이터</p>
+                <ul className="text-xs font-bold text-red-500 space-y-1">
+                  <li>• 학원 정보 (학원명, 전화번호, 담당자 정보)</li>
+                  <li>• 등록된 학생 데이터</li>
+                  <li>• AI 문제 생성 이력</li>
+                  <li>• 지문분석 워크북 이력</li>
+                  <li>• 잔여 무료 CON (소멸)</li>
+                </ul>
+              </div>
+
+              {/* CON 환불 안내 */}
+              <div className="bg-yellow-50 rounded-2xl p-4">
+                <p className="text-xs font-black text-yellow-700 mb-1">💰 유료 충전 CON 안내</p>
+                <p className="text-xs font-bold text-yellow-600">
+                  유료로 충전한 CON 잔액이 있는 경우 탈퇴가 제한됩니다.<br />
+                  고객센터 <span className="font-black">031-903-8205</span> 로 문의하여 환불 후 탈퇴를 진행해주세요.
+                </p>
+              </div>
+
+              {/* 동의 체크 */}
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={withdrawChecked}
+                  onChange={e => setWithdrawChecked(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 accent-red-500 cursor-pointer flex-shrink-0"
+                />
+                <span className="text-xs font-bold text-gray-600">
+                  위 내용을 확인하였으며, 유료 충전 CON 잔액이 없음을 확인합니다. 탈퇴 후 데이터 복구가 불가능함에 동의합니다.
+                </span>
+              </label>
+
+              {/* 확인 입력 */}
+              <div>
+                <label className="block text-xs font-black text-gray-500 mb-2">
+                  확인을 위해 <span className="text-red-500">탈퇴합니다</span> 를 입력해주세요.
+                </label>
+                <input
+                  type="text"
+                  value={withdrawConfirm}
+                  onChange={e => setWithdrawConfirm(e.target.value)}
+                  placeholder="탈퇴합니다"
+                  className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-red-400 focus:bg-white outline-none transition-all font-bold text-gray-900 text-sm placeholder:text-gray-300"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setShowWithdrawModal(false)}
+                disabled={withdrawLoading}
+                className="flex-1 py-3 text-sm font-black text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-2xl transition-all disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleWithdraw}
+                disabled={withdrawLoading || withdrawConfirm !== '탈퇴합니다' || !withdrawChecked}
+                className="flex-1 py-3 text-sm font-black text-white bg-red-500 hover:bg-red-600 rounded-2xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {withdrawLoading ? '처리 중...' : '탈퇴하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
