@@ -454,8 +454,8 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 
     if (q.type !== 'flow' && q.type !== 'grammar') {
       html += `<div style="display:flex;flex-direction:column;gap:3px;">`;
-      for (let j = 0; j < q.choices.length; j++) {
-        const c = q.choices[j];
+      for (let j = 0; j < (q.choices ?? []).length; j++) {
+        const c = (q.choices ?? [])[j];
         if (q.type === 'vocab_paraphrase') {
           const gm = c.text.match(/^([①②③④⑤])\s*(.+)$/);
           const ch = gm ? gm[1] : (CIRCLE_NUMS[c.number - 1] ?? '');
@@ -1779,7 +1779,7 @@ export default function AiQuestionsPage() {
                 {questions.map((q, idx) => {
                   const typeOpt = QUESTION_TYPE_OPTIONS.find(o => o.key === q.type);
                   const isRevealed = revealedAnswers.has(idx);
-                  const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow') ? CIRCLE_NUMS[q.answer - 1] : (q.type === 'sentence_order' ? (q.choices[q.answer - 1]?.text ?? `${q.answer}번`) : `${q.answer}번`);
+                  const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow') ? CIRCLE_NUMS[q.answer - 1] : (q.type === 'sentence_order' ? ((q.choices ?? [])[q.answer - 1]?.text ?? `${q.answer}번`) : `${q.answer}번`);
                   return (
                     <div key={idx} id={`exam-q-${idx}`} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                       {/* 카드 헤더 */}
@@ -1950,7 +1950,7 @@ export default function AiQuestionsPage() {
                       {/* 선지 */}
                       {q.type !== 'flow' && q.type !== 'grammar' && (
                         <div className="space-y-2.5 mb-5">
-                          {q.choices.map((c, ci) => {
+                          {(q.choices ?? []).map((c, ci) => {
                             const isCorrect = isRevealed && (c.number === q.answer || ci + 1 === q.answer);
                             return (
                               <div key={ci}
@@ -2417,7 +2417,7 @@ export default function AiQuestionsPage() {
                 const showGroupHeader = q._passageNumber !== undefined && q._passageNumber !== prevQ?._passageNumber;
                 const answerDisplay = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
                   ? CIRCLE_NUMS[q.answer - 1]
-                  : (q.type === 'sentence_order' ? (q.choices[q.answer - 1]?.text ?? `${q.answer}번`) : `${q.answer}번`);
+                  : (q.type === 'sentence_order' ? ((q.choices ?? [])[q.answer - 1]?.text ?? `${q.answer}번`) : `${q.answer}번`);
                 return (
                   <div key={idx}>
                     {showGroupHeader && mockSortedSelectedNumbers.length > 1 && (
