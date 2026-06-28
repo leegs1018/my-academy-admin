@@ -61,7 +61,7 @@ export default function CompleteProfilePage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
-    const points = form.referralCode ? 2000 : 1000;
+    const points = form.referralCode ? 600 : 300;
     let kioskCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     let saved = false;
