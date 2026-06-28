@@ -412,15 +412,16 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       const instr = pts[0]?.trim() || '';
       const sumText = pts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
       html += instrP(`${num}. ${esc(instr)}`);
-      if (originalPassage) html += passageBox(escP(originalPassage));
+      const passageForSummary = q._passageText || originalPassage;
+      if (passageForSummary) html += passageBox(escP(passageForSummary));
       if (sumText) {
         html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:10px;">`;
         html += `<div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:4px;">[요약문]</div>`;
         html += `<div style="font-size:12px;line-height:1.8;color:#334155;">${escP(sumText)}</div></div>`;
       }
-    } else if (q.type === 'topic_title' && originalPassage) {
+    } else if (q.type === 'topic_title' && (q._passageText || originalPassage)) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
-      html += passageBox(escP(originalPassage));
+      html += passageBox(escP(q._passageText || originalPassage || ''));
     } else if (q.modified_passage && q.type === 'grammar') {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escGrammar(q.modified_passage.replace(/\[([^\]]+)\]/g, '$1'), q.choices));
@@ -1809,12 +1810,13 @@ export default function AiQuestionsPage() {
                         const parts = q.question_text.split('\n\n');
                         const instruction = parts[0]?.trim() || '';
                         const summaryText = parts.slice(1).join('\n\n').replace(/^\[요약문\]\s*/i, '').trim();
+                        const passageToShow = q._passageText || originalPassageText;
                         return (
                           <>
                             <p className="text-sm font-bold text-gray-800 mb-3 whitespace-pre-wrap">{instruction}</p>
-                            {originalPassageText && (
+                            {passageToShow && (
                               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
-                                {originalPassageText}
+                                {passageToShow}
                               </div>
                             )}
                             {summaryText && (
@@ -1833,9 +1835,9 @@ export default function AiQuestionsPage() {
                           <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
                             {q.question_text}
                           </div>
-                          {originalPassageText && (
+                          {(q._passageText || originalPassageText) && (
                             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
-                              {originalPassageText}
+                              {q._passageText || originalPassageText}
                             </div>
                           )}
                         </>

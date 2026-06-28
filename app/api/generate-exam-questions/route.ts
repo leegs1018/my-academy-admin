@@ -1754,12 +1754,12 @@ export async function POST(request: Request) {
           const sA = getSeg('A'), sB = getSeg('B'), sC = getSeg('C');
           if (sA && sB && sC && intro) {
             const segByLabel: Record<string, string> = { A: sA, B: sB, C: sC };
-            const currentOrder = ANSWER_ORDERS[(q!.answer - 1) % 5] ?? ANSWER_ORDERS[0];
+            const currentOrder = ANSWER_ORDERS[q!.answer] ?? ANSWER_ORDERS[1];
             // 현재 답 기준으로 논리 순서 추출
             const logicalSegs = currentOrder.map(l => segByLabel[l]);
             // 1~5 중 무작위 새 답 선택
             const newAnswer = Math.floor(Math.random() * 5) + 1;
-            const newOrder = ANSWER_ORDERS[newAnswer - 1];
+            const newOrder = ANSWER_ORDERS[newAnswer] ?? ANSWER_ORDERS[1];
             // 새 레이블에 논리 순서 배분
             const segForNew: Record<string, string> = {};
             newOrder.forEach((label, i) => { segForNew[label] = logicalSegs[i]; });

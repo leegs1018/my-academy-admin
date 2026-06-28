@@ -61,6 +61,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
 
+    // 업(good) 평가 시 즉시 good_questions에 저장 (AI 피드백 개선용)
+    if (rating === 'good') {
+      await adminClient.from('good_questions').insert({
+        question_type,
+        passage_text: passage_text ?? '',
+        question_json,
+        academy_id: user.id,
+        user_email: user.email ?? '',
+      });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[report-question] 오류:', error);

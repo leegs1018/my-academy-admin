@@ -55,8 +55,9 @@ export async function PATCH(
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
-  // 승인 시 CON 환불
+  // 승인 시 CON 환불 + 품질 저하 문제 DB 저장
   if (action === 'approve') {
+    // CON 환불
     const { data: conData, error: conError } = await db.rpc('charge_con', {
       p_academy_id: report.academy_id,
       p_amount: report.con_amount,
@@ -67,6 +68,16 @@ export async function PATCH(
     if (conError) {
       return NextResponse.json({ error: `CON 환불 실패: ${conError.message}` }, { status: 500 });
     }
+
+    // 품질 저하 문제 저장 (AI 피드백 개선용)
+    await db.from('bad_questions').insert({
+      report_id: report.id,
+      question_type: report.question_type,
+      passage_text: report.passage_text ?? '',
+      question_json: report.question_json,
+      academy_id: report.academy_id,
+      user_email: report.user_email ?? '',
+    });
 
     return NextResponse.json({ success: true, action: 'approved', new_balance: conData });
   }

@@ -36,6 +36,11 @@ type WorkbookResult = Record<string, unknown> & {
   error?: string;
 };
 
+interface TypeResult {
+  type: WorkbookType;
+  results: WorkbookResult[];
+}
+
 interface HistoryItem {
   id: string;
   title: string | null;
@@ -160,17 +165,16 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
   return chunks;
 }
 
-async function capturePdfFromElement(elementId: string): Promise<Blob> {
+async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean): Promise<boolean> {
   const el = document.getElementById(elementId);
-  if (!el) throw new Error(`PDF 요소를 찾을 수 없습니다 (${elementId})`);
+  if (!el) return false;
   const { toJpeg } = await import('html-to-image');
-  const { jsPDF } = await import('jspdf');
   const W = 210, M = 10, cW = W - 2 * M, maxH = 277;
   const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
   const img = document.createElement('img') as HTMLImageElement;
   await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('img load')); img.src = url; });
   const contentH = cW * (img.naturalHeight / img.naturalWidth);
-  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  if (!isFirst) pdf.addPage();
   if (contentH <= maxH) {
     pdf.addImage(url, 'JPEG', M, M, cW, contentH);
   } else {
@@ -178,7 +182,7 @@ async function capturePdfFromElement(elementId: string): Promise<Blob> {
     canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     const ctx = canvas.getContext('2d')!; ctx.drawImage(img, 0, 0);
     const pagePixelH = Math.floor(img.naturalHeight * (maxH / contentH));
-    let sliceY = 0; let firstPage = true;
+    let sliceY = 0; let firstSlice = true;
     while (sliceY < img.naturalHeight) {
       const sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
       const sliceCanvas = document.createElement('canvas');
@@ -187,10 +191,28 @@ async function capturePdfFromElement(elementId: string): Promise<Blob> {
       sliceCtx.drawImage(canvas, 0, sliceY, img.naturalWidth, sliceH, 0, 0, img.naturalWidth, sliceH);
       const sliceUrl = sliceCanvas.toDataURL('image/jpeg', 0.92);
       const sliceContentH = cW * (sliceH / img.naturalWidth);
-      if (!firstPage) pdf.addPage();
+      if (!firstSlice) pdf.addPage();
       pdf.addImage(sliceUrl, 'JPEG', M, M, cW, sliceContentH);
-      sliceY += sliceH; firstPage = false;
+      sliceY += sliceH; firstSlice = false;
     }
+  }
+  return true;
+}
+
+async function capturePdfFromElement(elementId: string): Promise<Blob> {
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  await addElementToPdf(pdf, elementId, true);
+  return pdf.output('blob');
+}
+
+async function captureAllToPdf(elementIds: string[]): Promise<Blob> {
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  let isFirst = true;
+  for (const id of elementIds) {
+    const added = await addElementToPdf(pdf, id, isFirst);
+    if (added) isFirst = false;
   }
   return pdf.output('blob');
 }
@@ -224,20 +246,83 @@ function RenderVocabChoicePassage({ passage, answerKey, showAnswer }: { passage:
   );
 }
 
-function RenderVocabFill({ passage, wordBank, answerKey, showAnswer }: {
-  passage: string; wordBank: string[]; answerKey: string; showAnswer: boolean;
-}) {
-  const answerMap: Record<number, string> = {};
+function buildVocabFillAnswerMap(answerKey: string): Record<number, string> {
+  const map: Record<number, string> = {};
   const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
   const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
-  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
+  nums.forEach((n, i) => { map[n] = (keyParts[i] || '').trim(); });
+  return map;
+}
 
+function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean }: {
+  sentences: Array<{en: string; ko: string}>; answerKey: string; showAnswer: boolean; showKorean: boolean;
+}) {
+  const answerMap = buildVocabFillAnswerMap(answerKey);
+  return (
+    <div className="space-y-2">
+      {(sentences || []).map((s, si) => {
+        const parts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
+        return (
+          <div key={si}>
+            <p className="text-sm font-medium leading-8 text-slate-800">
+              {parts.map((part, i) => {
+                if (i % 3 === 0) return <span key={i}>{part}</span>;
+                if (i % 3 === 2) return null;
+                const num = parseInt(part);
+                const letter = parts[i + 1] ?? '';
+                const ans = answerMap[num] ?? '';
+                return showAnswer ? (
+                  <span key={i} className="inline-flex items-center gap-0.5 mx-0.5">
+                    <span className="text-[10px] font-black text-slate-400">({num})</span>
+                    <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 font-black text-xs rounded">{ans}</span>
+                  </span>
+                ) : (
+                  <span key={i} className="inline-flex items-center mx-0.5">
+                    <span className="text-[10px] font-black text-slate-400">({num})</span>
+                    <span className="text-xs font-black text-slate-900">{letter}</span>
+                    <span className="border-b-2 border-slate-400 inline-block w-16" />
+                  </span>
+                );
+              })}
+            </p>
+            {showKorean && s.ko && (
+              <p className="text-xs font-medium text-slate-500 mt-0.5 pl-2 border-l-2 border-slate-200">{s.ko}</p>
+            )}
+          </div>
+        );
+      })}
+      {showAnswer && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-3">
+          <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
+          <p className="text-sm font-bold text-slate-700 leading-relaxed">{answerKey}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RenderVocabFill({ result, showAnswer, showKorean }: {
+  result: WorkbookResult; showAnswer: boolean; showKorean: boolean;
+}) {
+  if (result.sentences) {
+    return <RenderVocabFillSentences
+      sentences={result.sentences as Array<{en:string;ko:string}>}
+      answerKey={result.answer_key as string || ''}
+      showAnswer={showAnswer}
+      showKorean={showKorean}
+    />;
+  }
+  // Legacy format fallback
+  const passage = result.passage as string || '';
+  const wordBank = result.word_bank as string[] || [];
+  const answerKey = result.answer_key as string || '';
+  const answerMap = buildVocabFillAnswerMap(answerKey);
   const parts = passage.split(/_\((\d+)\)_/);
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
         <p className="text-xs font-black text-blue-600 mb-1">보기</p>
-        <p className="text-sm font-bold text-slate-700">{(wordBank || []).join('  /  ')}</p>
+        <p className="text-sm font-bold text-slate-700">{wordBank.join('  /  ')}</p>
       </div>
       <p className="text-sm font-medium leading-8 text-slate-800">
         {parts.map((part, i) => {
@@ -262,27 +347,37 @@ function RenderVocabFill({ passage, wordBank, answerKey, showAnswer }: {
   );
 }
 
+function buildGrammarCorrectAnswerMap(answerKey: string): Record<number, string> {
+  const map: Record<number, string> = {};
+  const matches = [...answerKey.matchAll(/(\d+)\.\s*[^\s→]+\s*→\s*([^\s]+(?:\s+\S+)*?)(?=\s+\d+\.|$)/g)];
+  matches.forEach(m => { map[parseInt(m[1])] = m[2].trim(); });
+  if (Object.keys(map).length === 0) {
+    // fallback: `1. word  2. word` without arrow
+    const parts = answerKey.split(/\s+\d+\.\s*/).filter(Boolean);
+    const nums = [...answerKey.matchAll(/(\d+)\.\s*/g)].map(m => parseInt(m[1]));
+    nums.forEach((n, i) => { map[n] = (parts[i] || '').trim(); });
+  }
+  return map;
+}
+
 function RenderGrammarCorrect({ passage, answerKey, showAnswer }: { passage: string; answerKey: string; showAnswer: boolean }) {
-  const circleNums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫'];
-  const regex = /([①②③④⑤⑥⑦⑧⑨⑩⑪⑫])\[([^\]]+)\]/g;
+  const answerMap = buildGrammarCorrectAnswerMap(answerKey);
+  const regex = /(\d+)\[([^\]]+)\]/g;
   const parts: React.ReactNode[] = [];
   let last = 0, m: RegExpExecArray | null;
   while ((m = regex.exec(passage)) !== null) {
     if (m.index > last) parts.push(<span key={last}>{passage.slice(last, m.index)}</span>);
-    const circle = m[1];
+    const num = parseInt(m[1]);
     const word = m[2];
-    const idx = circleNums.indexOf(circle);
-    const ansLine = answerKey.split('\n').find(l => l.startsWith(circle));
-    const correct = ansLine?.split('→')[1]?.trim() ?? '';
+    const correct = answerMap[num] ?? '';
     parts.push(
       <span key={m.index} className={`inline-flex items-center gap-0.5 ${showAnswer ? 'bg-rose-100 rounded px-1' : ''}`}>
-        <span className="text-xs font-black text-slate-500">{circle}</span>
-        <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'line-through text-rose-500' : 'bg-slate-100 text-slate-700'}`}>{word}</span>
+        <span className="text-xs font-black text-slate-400">{num}</span>
+        <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'line-through text-rose-500' : 'bg-slate-100 text-slate-700'}`}>[{word}]</span>
         {showAnswer && correct && <span className="text-xs font-black text-emerald-600">→{correct}</span>}
       </span>
     );
     last = m.index + m[0].length;
-    void idx;
   }
   if (last < passage.length) parts.push(<span key={last}>{passage.slice(last)}</span>);
   return (
@@ -291,7 +386,49 @@ function RenderGrammarCorrect({ passage, answerKey, showAnswer }: { passage: str
       {showAnswer && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
           <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
-          <pre className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{answerKey}</pre>
+          <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{answerKey}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RenderGrammarCorrectAdv({ sentences, answerKey, showAnswer }: {
+  sentences: Array<{num: number; text: string}>; answerKey: string; showAnswer: boolean;
+}) {
+  const answerMap: Record<number, string> = {};
+  if (answerKey) {
+    const entries = answerKey.split(/\s{2,}|\n/).filter(Boolean);
+    entries.forEach(entry => {
+      const m = entry.match(/^(\d+)\.\s*(.+)$/);
+      if (m) answerMap[parseInt(m[1])] = m[2].trim();
+    });
+  }
+  return (
+    <div className="space-y-2">
+      {(sentences || []).map((s, i) => (
+        <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
+          <div className="bg-slate-50 px-3 py-2.5 flex gap-2">
+            <span className="text-xs font-black text-slate-400 shrink-0 w-5">{s.num}.</span>
+            <span className="text-sm font-medium text-slate-800 leading-6">{s.text}</span>
+          </div>
+          {showAnswer && answerMap[s.num] && (
+            <div className="px-3 py-2 bg-rose-50 border-t border-rose-100 flex gap-2">
+              <span className="text-xs font-black text-rose-400 shrink-0 w-5"></span>
+              <span className="text-xs font-black text-rose-600">{answerMap[s.num]}</span>
+            </div>
+          )}
+          {!showAnswer && (
+            <div className="px-3 py-2">
+              <div className="h-5 border-b border-dashed border-slate-200"></div>
+            </div>
+          )}
+        </div>
+      ))}
+      {showAnswer && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-2">
+          <p className="text-xs font-black text-yellow-700 mb-1">전체 정답</p>
+          <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{answerKey}</p>
         </div>
       )}
     </div>
@@ -302,51 +439,39 @@ function RenderTranslation({ sentences, showAnswer }: {
   sentences: Array<{num: number; en: string; ko: string}>; showAnswer: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       {(sentences || []).map((s, i) => (
-        <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
-          <div className="bg-slate-50 px-3 py-2">
-            <span className="text-xs font-black text-slate-400 mr-2">{s.num}</span>
-            <span className="text-sm font-medium text-slate-800">{s.en}</span>
+        <div key={i} className="space-y-1">
+          <p className="text-sm font-semibold text-slate-800 leading-relaxed">{s.en}</p>
+          <div className="border-b border-slate-300 pb-0.5 flex items-end gap-1">
+            <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
+            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1">{s.ko}</span>}
           </div>
-          {showAnswer && (
-            <div className="px-3 py-2 bg-yellow-50">
-              <span className="text-sm font-bold text-yellow-800">{s.ko}</span>
-            </div>
-          )}
-          {!showAnswer && (
-            <div className="px-3 py-2">
-              <div className="h-5 border-b border-slate-200"></div>
-            </div>
-          )}
+          {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
         </div>
       ))}
     </div>
   );
 }
 
-function RenderWordOrder({ sentences, showAnswer }: {
-  sentences: Array<{num: number; ko: string; scrambled: string[]; answer: string}>; showAnswer: boolean;
+function RenderWordOrder({ sentences, showAnswer, showKorean }: {
+  sentences: Array<{num: number; ko: string; scrambled: string[]; answer: string}>; showAnswer: boolean; showKorean: boolean;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {(sentences || []).map((s, i) => (
-        <div key={i} className="border border-slate-100 rounded-xl p-3 space-y-2">
-          <div className="flex items-start gap-2">
-            <span className="text-xs font-black text-slate-400 mt-0.5">{s.num}</span>
-            <span className="text-sm font-bold text-slate-600">{s.ko}</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {(s.scrambled || []).map((w, j) => (
-              <span key={j} className="px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-bold text-indigo-700">{w}</span>
-            ))}
-          </div>
-          {showAnswer && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-1.5">
-              <p className="text-xs font-black text-yellow-600 mb-0.5">정답</p>
-              <p className="text-sm font-bold text-slate-700">{s.answer}</p>
-            </div>
+        <div key={i} className="space-y-1.5">
+          {showKorean && (
+            <p className="text-sm font-bold text-rose-600 leading-relaxed">{s.ko}</p>
           )}
+          <p className="text-xs font-bold text-slate-500">
+            ({(s.scrambled || []).join(' / ')})
+          </p>
+          <div className="border-b border-slate-300 pb-0.5 flex items-end gap-1 min-h-[22px]">
+            <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
+            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1">{s.answer}</span>}
+          </div>
+          {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
         </div>
       ))}
     </div>
@@ -357,51 +482,101 @@ function RenderEnglishWriting({ sentences, showAnswer }: {
   sentences: Array<{num: number; ko: string; hint_start: string; hint_end: string; answer: string}>; showAnswer: boolean;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {(sentences || []).map((s, i) => (
-        <div key={i} className="border border-slate-100 rounded-xl p-3 space-y-1.5">
-          <div className="flex items-start gap-2">
-            <span className="text-xs font-black text-slate-400 mt-0.5">{s.num}</span>
-            <span className="text-sm font-bold text-slate-700">{s.ko}</span>
+        <div key={i} className="space-y-1.5">
+          <p className="text-sm font-bold text-slate-800 leading-relaxed">{s.ko}</p>
+          <div className="border-b border-slate-300 pb-0.5 flex items-end gap-1 min-h-[22px]">
+            <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
+            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1">{s.answer}</span>}
           </div>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-            <span className="text-indigo-600">{s.hint_start}</span>
-            <span className="flex-1 border-b border-dashed border-slate-300"></span>
-            <span className="text-indigo-600">{s.hint_end}</span>
-          </div>
-          {showAnswer && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-1.5">
-              <p className="text-sm font-bold text-slate-700">{s.answer}</p>
-            </div>
-          )}
+          {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
         </div>
       ))}
     </div>
   );
 }
 
-function RenderPassageTranslation({ items }: {
-  items: Array<{en: string; ko: string; vocab: string[]}>
-}) {
+type VocabRow = { word: string; meaning: string; syn1: string; syn1_m: string; syn2: string; syn2_m: string; syn3: string; syn3_m: string; antonym: string; antonym_m: string };
+type PassageSentence = { en: string; ko: string; key_words?: string[] };
+
+function highlightKeyWords(text: string, keyWords: string[]): React.ReactNode {
+  if (!keyWords || keyWords.length === 0) return <span>{text}</span>;
+  const escaped = keyWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const parts = text.split(regex);
+  const colors = ['text-rose-600', 'text-blue-600', 'text-emerald-600', 'text-violet-600', 'text-amber-600'];
+  let colorIdx = 0;
+  const usedColors: Record<string, string> = {};
   return (
-    <div className="space-y-3">
-      {(items || []).map((item, i) => (
-        <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
-          <div className="bg-slate-50 px-3 py-2">
-            <p className="text-sm font-medium text-slate-800">{item.en}</p>
-          </div>
-          <div className="px-3 py-2 bg-emerald-50">
-            <p className="text-sm font-bold text-emerald-800">{item.ko}</p>
-          </div>
-          {item.vocab && item.vocab.length > 0 && (
-            <div className="px-3 py-2 flex flex-wrap gap-1.5">
-              {item.vocab.map((v, j) => (
-                <span key={j} className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{v}</span>
-              ))}
-            </div>
-          )}
+    <>
+      {parts.map((part, i) => {
+        const matched = keyWords.find(kw => kw.toLowerCase() === part.toLowerCase());
+        if (matched) {
+          if (!usedColors[matched.toLowerCase()]) {
+            usedColors[matched.toLowerCase()] = colors[colorIdx++ % colors.length];
+          }
+          return <span key={i} className={`font-black ${usedColors[matched.toLowerCase()]}`}>{part}</span>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function RenderPassageTranslation({ result }: { result: WorkbookResult }) {
+  const sentences = result.sentences as PassageSentence[] || result.items as PassageSentence[] || [];
+  const vocabTable = result.vocab_table as VocabRow[] || [];
+  return (
+    <div className="space-y-1">
+      {sentences.map((s, i) => (
+        <div key={i} className="py-1 border-b border-slate-100 last:border-0">
+          <p className="text-sm font-medium text-slate-800 leading-relaxed">
+            {highlightKeyWords(s.en, s.key_words || [])}
+          </p>
+          <p className="text-sm font-bold text-slate-800 leading-relaxed mt-0.5">{s.ko}</p>
         </div>
       ))}
+      {vocabTable.length > 0 && (
+        <div className="mt-6">
+          <p className="text-xs font-black text-slate-500 mb-2">지문의 주요 어휘와 뜻</p>
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white">
+                  {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+                    <th key={i} className="px-2 py-1.5 text-left font-black">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {vocabTable.map((row, i) => (
+                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                    <td className="px-2 py-1.5 border-r border-slate-100">
+                      <span className="font-black text-slate-800">{row.word}</span>
+                      {row.meaning && <span className="text-slate-500 ml-1">({row.meaning})</span>}
+                    </td>
+                    {[['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']].map(([k,m]) => (
+                      <td key={k} className="px-2 py-1.5 border-r border-slate-100">
+                        {(row as Record<string,string>)[k] && <>
+                          <span className="font-bold text-blue-700">{(row as Record<string,string>)[k]}</span>
+                          {(row as Record<string,string>)[m] && <span className="text-slate-500 ml-1">({(row as Record<string,string>)[m]})</span>}
+                        </>}
+                      </td>
+                    ))}
+                    <td className="px-2 py-1.5">
+                      {row.antonym && <>
+                        <span className="font-bold text-rose-600">{row.antonym}</span>
+                        {row.antonym_m && <span className="text-slate-500 ml-1">({row.antonym_m})</span>}
+                      </>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -412,8 +587,8 @@ function RenderParagraphOrder({ data, showAnswer }: {
 }) {
   return (
     <div className="space-y-3">
-      <div className="border-2 border-indigo-300 rounded-xl p-3 bg-indigo-50">
-        <p className="text-xs font-black text-indigo-600 mb-1">제시 단락 (고정)</p>
+      <div className="border-2 border-slate-900 rounded-xl p-3 bg-white">
+        <p className="text-xs font-black text-slate-900 mb-1">제시 단락 (고정)</p>
         <p className="text-sm font-medium text-slate-800">{data.fixed_paragraph}</p>
       </div>
       {(data.shuffled_paragraphs || []).map((p, i) => (
@@ -438,8 +613,8 @@ function RenderSentenceInsertion({ data, showAnswer }: {
 }) {
   return (
     <div className="space-y-3">
-      <div className="border-2 border-violet-300 rounded-xl p-3 bg-violet-50">
-        <p className="text-xs font-black text-violet-600 mb-1">삽입할 문장</p>
+      <div className="border-2 border-slate-900 rounded-xl p-3 bg-white">
+        <p className="text-xs font-black text-slate-900 mb-1">삽입할 문장</p>
         <p className="text-sm font-bold text-slate-800 italic">{data.insert_sentence}</p>
       </div>
       <p className="text-sm font-medium leading-8 text-slate-800">{data.passage}</p>
@@ -467,7 +642,7 @@ function RenderSuneungPassage({ passage, answerKey, showAnswer }: { passage: str
   );
 }
 
-function RenderResultContent({ result, type, showAnswer }: { result: WorkbookResult; type: WorkbookType; showAnswer: boolean }) {
+function RenderResultContent({ result, type, showAnswer, showKorean }: { result: WorkbookResult; type: WorkbookType; showAnswer: boolean; showKorean?: boolean }) {
   if (result.error) return <p className="text-rose-500 font-bold text-sm">{result.error as string}</p>;
 
   const isCombo = type.startsWith('combo_');
@@ -481,12 +656,12 @@ function RenderResultContent({ result, type, showAnswer }: { result: WorkbookRes
     return (
       <div className="space-y-6">
         <div>
-          <p className="text-xs font-black text-indigo-600 mb-2">Section 1 — {TYPE_LABELS[t1 as WorkbookType]}</p>
-          <RenderResultContent result={s1} type={t1 as WorkbookType} showAnswer={showAnswer} />
+          <p className="text-xs font-black text-slate-900 mb-2">Section 1 — {TYPE_LABELS[t1 as WorkbookType]}</p>
+          <RenderResultContent result={s1} type={t1 as WorkbookType} showAnswer={showAnswer} showKorean={showKorean} />
         </div>
         <div className="border-t border-slate-200 pt-4">
           <p className="text-xs font-black text-violet-600 mb-2">Section 2 — {TYPE_LABELS[t2 as WorkbookType]}</p>
-          <RenderResultContent result={s2} type={t2 as WorkbookType} showAnswer={showAnswer} />
+          <RenderResultContent result={s2} type={t2 as WorkbookType} showAnswer={showAnswer} showKorean={showKorean} />
         </div>
       </div>
     );
@@ -497,18 +672,19 @@ function RenderResultContent({ result, type, showAnswer }: { result: WorkbookRes
     case 'grammar_choice':
       return <RenderVocabChoicePassage passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
     case 'vocab_fill':
-      return <RenderVocabFill passage={result.passage as string} wordBank={result.word_bank as string[]} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
+      return <RenderVocabFill result={result} showAnswer={showAnswer} showKorean={showKorean ?? false} />;
     case 'grammar_correct':
-    case 'grammar_correct_adv':
       return <RenderGrammarCorrect passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
+    case 'grammar_correct_adv':
+      return <RenderGrammarCorrectAdv sentences={result.sentences as Array<{num:number;text:string}>} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
     case 'translation':
       return <RenderTranslation sentences={result.sentences as Array<{num:number;en:string;ko:string}>} showAnswer={showAnswer} />;
     case 'word_order':
-      return <RenderWordOrder sentences={result.sentences as Array<{num:number;ko:string;scrambled:string[];answer:string}>} showAnswer={showAnswer} />;
+      return <RenderWordOrder sentences={result.sentences as Array<{num:number;ko:string;scrambled:string[];answer:string}>} showAnswer={showAnswer} showKorean={showKorean ?? false} />;
     case 'english_writing':
       return <RenderEnglishWriting sentences={result.sentences as Array<{num:number;ko:string;hint_start:string;hint_end:string;answer:string}>} showAnswer={showAnswer} />;
     case 'passage_translation':
-      return <RenderPassageTranslation items={result.items as Array<{en:string;ko:string;vocab:string[]}>} />;
+      return <RenderPassageTranslation result={result} />;
     case 'paragraph_order':
       return <RenderParagraphOrder data={result as {fixed_paragraph:string;shuffled_paragraphs:Array<{label:string;text:string}>;answer_key:string}} showAnswer={showAnswer} />;
     case 'sentence_insertion':
@@ -570,10 +746,59 @@ function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResul
   );
 }
 
-function PdfVocabFill({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string; showKorean?: boolean }) {
+  const answerKey = result.answer_key as string;
+
+  // New sentences[] format
+  if (result.sentences && Array.isArray(result.sentences)) {
+    const sentences = result.sentences as Array<{ en: string; ko?: string }>;
+    const answerMap = buildVocabFillAnswerMap(answerKey);
+    return (
+      <div id={id} style={PDF_BASE}>
+        <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sentences.map((s, si) => {
+            const rawParts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
+            return (
+              <div key={si} style={{ marginBottom: 4 }}>
+                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+                  {rawParts.map((part, i) => {
+                    if (i % 3 === 0) return <span key={i}>{part}</span>;
+                    if (i % 3 === 1) {
+                      const num = parseInt(part);
+                      const letter = rawParts[i + 1];
+                      const ans = answerMap[num];
+                      if (isAnswer) {
+                        return <span key={i} style={{ background: '#FFF9C4', borderRadius: 3, padding: '0 4px', fontWeight: 900 }}>{ans}</span>;
+                      }
+                      return (
+                        <span key={i} style={{ display: 'inline-block', minWidth: 60, borderBottom: '1.5px solid #333', textAlign: 'center', fontSize: 11, color: '#555' }}>
+                          {num}[{letter}____]
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+                </p>
+                {showKorean && s.ko && (
+                  <p style={{ margin: '2px 0 0 0', fontSize: 11, color: '#666', fontStyle: 'italic' }}>{s.ko}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {isAnswer && (
+          <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
+            <strong>정답:</strong> {answerKey}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Legacy format (passage + word_bank)
   const passage = result.passage as string;
   const wordBank = result.word_bank as string[];
-  const answerKey = result.answer_key as string;
   const answerMap: Record<number, string> = {};
   const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
   const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
@@ -606,23 +831,24 @@ function PdfVocabFill({ result, isAnswer, title, id }: { result: WorkbookResult;
 function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const passage = result.passage as string;
   const answerKey = result.answer_key as string;
-  const regex = /([①②③④⑤⑥⑦⑧⑨⑩⑪⑫])\[([^\]]+)\]/g;
+  const answerMap = buildGrammarCorrectAnswerMap(answerKey);
+  const regex = /(\d+)\[([^\]]+)\]/g;
   const parts: React.ReactNode[] = [];
   let last = 0; let m: RegExpExecArray | null;
   while ((m = regex.exec(passage)) !== null) {
     if (m.index > last) parts.push(<span key={last}>{passage.slice(last, m.index)}</span>);
-    const circle = m[1]; const word = m[2];
-    const ansLine = answerKey.split('\n').find(l => l.startsWith(circle));
-    const correct = ansLine?.split('→')[1]?.trim() ?? '';
+    const num = parseInt(m[1]); const word = m[2];
+    const correct = answerMap[num] ?? '';
     if (isAnswer) {
       parts.push(
         <span key={m.index} style={{ background: '#FEE2E2', borderRadius: 3, padding: '0 3px' }}>
-          {circle}<span style={{ textDecoration: 'line-through', color: '#EF4444' }}>{word}</span>
+          <span style={{ fontSize: 10, color: '#666' }}>{num}</span>
+          <span style={{ textDecoration: 'line-through', color: '#EF4444' }}>[{word}]</span>
           {correct && <span style={{ color: '#16A34A', fontWeight: 900 }}>→{correct}</span>}
         </span>
       );
     } else {
-      parts.push(<span key={m.index} style={{ background: '#FFF9C4', borderRadius: 3, padding: '0 3px' }}>{circle}[{word}]</span>);
+      parts.push(<span key={m.index} style={{ background: '#FFF9C4', borderRadius: 3, padding: '0 3px' }}><span style={{ fontSize: 10, color: '#666' }}>{num}</span>[{word}]</span>);
     }
     last = m.index + m[0].length;
   }
@@ -633,7 +859,44 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
       <p style={PDF_P}>{parts}</p>
       {isAnswer && (
         <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
-          <strong>정답:</strong><br /><pre style={{ margin: 0, fontFamily: 'inherit' }}>{answerKey}</pre>
+          <strong>정답:</strong> {answerKey}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfGrammarCorrectAdv({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const sentences = result.sentences as Array<{num: number; text: string}>;
+  const answerKey = result.answer_key as string;
+  const answerMap: Record<number, string> = {};
+  if (answerKey) {
+    const entries = answerKey.split(/\s{2,}|\n/).filter(Boolean);
+    entries.forEach(entry => {
+      const m = entry.match(/^(\d+)\.\s*(.+)$/);
+      if (m) answerMap[parseInt(m[1])] = m[2].trim();
+    });
+  }
+  return (
+    <div id={id} style={PDF_BASE}>
+      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {(sentences || []).map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: '#888', minWidth: 20 }}>{s.num}.</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>{s.text}</p>
+              {isAnswer && answerMap[s.num]
+                ? <p style={{ margin: '2px 0 0', fontSize: 11, color: '#DC2626', fontWeight: 700 }}>{answerMap[s.num]}</p>
+                : !isAnswer && <div style={{ height: 16, borderBottom: '1px dashed #ccc', marginTop: 4 }}></div>
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+      {isAnswer && (
+        <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
+          <strong>전체 정답:</strong> {answerKey}
         </div>
       )}
     </div>
@@ -645,14 +908,15 @@ function PdfTranslation({ result, isAnswer, title, id }: { result: WorkbookResul
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
-          <div key={i} style={{ borderLeft: '3px solid #6366F1', paddingLeft: 10 }}>
-            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}><strong>{s.num}.</strong> {s.en}</p>
-            {isAnswer
-              ? <p style={{ margin: '4px 0 0', fontSize: 13, color: '#92400E', fontWeight: 700 }}>{s.ko}</p>
-              : <div style={{ height: 20, borderBottom: '1px dashed #ccc', marginTop: 4 }}></div>
-            }
+          <div key={i}>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#3730A3', lineHeight: 1.7 }}>{s.en}</p>
+            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
+              <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
+              {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.ko}</span>}
+            </div>
+            {!isAnswer && <div style={{ borderBottom: '1px solid #CBD5E1', height: 18, marginTop: 6 }}></div>}
           </div>
         ))}
       </div>
@@ -660,22 +924,25 @@ function PdfTranslation({ result, isAnswer, title, id }: { result: WorkbookResul
   );
 }
 
-function PdfWordOrder({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+function PdfWordOrder({ result, isAnswer, title, id, showKorean }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string; showKorean?: boolean }) {
   const sentences = result.sentences as Array<{num:number;ko:string;scrambled:string[];answer:string}>;
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: '#374151' }}>{s.num}. {s.ko}</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-              {(s.scrambled || []).map((w, j) => (
-                <span key={j} style={{ background: '#EEF2FF', border: '1px solid #A5B4FC', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 700 }}>{w}</span>
-              ))}
+            {showKorean && (
+              <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 700, color: '#DC2626' }}>{s.ko}</p>
+            )}
+            <p style={{ margin: '0 0 4px', fontSize: 11, color: '#475569' }}>
+              ({(s.scrambled || []).join(' / ')})
+            </p>
+            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
+              <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
+              {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.answer}</span>}
             </div>
-            {isAnswer && <p style={{ margin: '2px 0 0 0', fontSize: 12, fontWeight: 900, color: '#92400E' }}>→ {s.answer}</p>}
-            {!isAnswer && <div style={{ height: 16, borderBottom: '1px dashed #ccc' }}></div>}
+            {!isAnswer && <div style={{ borderBottom: '1px solid #CBD5E1', height: 18, marginTop: 6 }}></div>}
           </div>
         ))}
       </div>
@@ -688,14 +955,15 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700 }}>{s.num}. {s.ko}</p>
-            <p style={{ margin: '0 0 2px', fontSize: 11, color: '#6366F1', fontWeight: 700 }}>
-              {s.hint_start} __________ {s.hint_end}
-            </p>
-            {isAnswer && <p style={{ margin: '2px 0 0', fontSize: 12, fontWeight: 900, color: '#92400E' }}>{s.answer}</p>}
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#3730A3', lineHeight: 1.7 }}>{s.ko}</p>
+            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
+              <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
+              {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.answer}</span>}
+            </div>
+            {!isAnswer && <div style={{ borderBottom: '1px solid #CBD5E1', height: 18, marginTop: 6 }}></div>}
           </div>
         ))}
       </div>
@@ -704,21 +972,76 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
 }
 
 function PdfPassageTranslation({ result, id }: { result: WorkbookResult; id: string }) {
-  const items = result.items as Array<{en:string;ko:string;vocab:string[]}>;
+  const sentences = (result.sentences || result.items) as PassageSentence[];
+  const vocabTable = result.vocab_table as VocabRow[] || [];
+  const keyColors: Record<string, string> = {};
+  const pdfColors = ['#DC2626','#2563EB','#059669','#7C3AED','#D97706'];
+  let ci = 0;
+  sentences?.forEach(s => (s.key_words || []).forEach(kw => {
+    if (!keyColors[kw.toLowerCase()]) keyColors[kw.toLowerCase()] = pdfColors[ci++ % pdfColors.length];
+  }));
+
+  const renderHighlighted = (text: string, keyWords: string[]) => {
+    if (!keyWords || keyWords.length === 0) return text;
+    const escaped = keyWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, i) => {
+      const color = keyColors[part.toLowerCase()];
+      if (color) return <span key={i} style={{ color, fontWeight: 900 }}>{part}</span>;
+      return <span key={i}>{part}</span>;
+    });
+  };
+
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>본문 해석지</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {(items || []).map((item, i) => (
-          <div key={i} style={{ borderLeft: '3px solid #10B981', paddingLeft: 10 }}>
-            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>{item.en}</p>
-            <p style={{ margin: '3px 0 0', fontSize: 13, color: '#065F46', fontWeight: 700 }}>{item.ko}</p>
-            {item.vocab && item.vocab.length > 0 && (
-              <p style={{ margin: '3px 0 0', fontSize: 11, color: '#6B7280' }}>{item.vocab.join('  |  ')}</p>
-            )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {(sentences || []).map((s, i) => (
+          <div key={i} style={{ paddingBottom: 6, borderBottom: '1px solid #F1F5F9' }}>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7 }}>{renderHighlighted(s.en, s.key_words || [])}</p>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#3730A3', fontWeight: 700, lineHeight: 1.6 }}>{s.ko}</p>
           </div>
         ))}
       </div>
+      {vocabTable.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 900, color: '#374151' }}>지문의 주요 어휘와 뜻</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+            <thead>
+              <tr style={{ background: '#1E293B', color: '#fff' }}>
+                {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+                  <th key={i} style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 900, borderRight: '1px solid #334155' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {vocabTable.map((row, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                  <td style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
+                    <span style={{ fontWeight: 900 }}>{row.word}</span>
+                    {row.meaning && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.meaning})</span>}
+                  </td>
+                  {[['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']].map(([k,m]) => (
+                    <td key={k} style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
+                      {(row as Record<string,string>)[k] && <>
+                        <span style={{ color: '#1D4ED8', fontWeight: 700 }}>{(row as Record<string,string>)[k]}</span>
+                        {(row as Record<string,string>)[m] && <span style={{ color: '#64748B', marginLeft: 3 }}>({(row as Record<string,string>)[m]})</span>}
+                      </>}
+                    </td>
+                  ))}
+                  <td style={{ padding: '3px 6px', borderBottom: '1px solid #E2E8F0' }}>
+                    {row.antonym && <>
+                      <span style={{ color: '#DC2626', fontWeight: 700 }}>{row.antonym}</span>
+                      {row.antonym_m && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.antonym_m})</span>}
+                    </>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -728,7 +1051,7 @@ function PdfParagraphOrder({ result, isAnswer, title, id }: { result: WorkbookRe
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
-      <div style={{ background: '#EEF2FF', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, lineHeight: 1.7 }}>
+      <div style={{ background: '#fff', border: '2px solid #0F172A', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, lineHeight: 1.7 }}>
         <strong>제시 단락</strong><br />{data.fixed_paragraph}
       </div>
       {(data.shuffled_paragraphs || []).map((p, i) => (
@@ -839,7 +1162,7 @@ function PdfResultContent({ result, type, isAnswer, title, id, embedded }: {
     case 'sentence_insertion': {
       const data = result as {insert_sentence:string;passage:string;answer_key:string};
       return wrap(<>{h2}
-        <div style={{background:'#F5F3FF',border:'2px solid #A78BFA',borderRadius:6,padding:'10px 14px',marginBottom:14,fontSize:13,fontStyle:'italic',lineHeight:1.7}}>{data.insert_sentence}</div>
+        <div style={{background:'#fff',border:'2px solid #0F172A',borderRadius:6,padding:'10px 14px',marginBottom:14,fontSize:13,fontStyle:'italic',lineHeight:1.7}}>{data.insert_sentence}</div>
         <p style={PDF_P}>{data.passage}</p>
         {isAnswer&&<div style={{background:'#FFF9C4',borderRadius:6,padding:'10px 14px',marginTop:10,fontSize:13,fontWeight:700}}>{data.answer_key}</div>}
       </>);
@@ -892,14 +1215,15 @@ export default function WorkbookPage() {
   const [loadingNumbers, setLoadingNumbers] = useState<Set<string>>(new Set());
 
   // Shared: type, difficulty, generation
-  const [selectedCategory, setSelectedCategory] = useState('vocab');
-  const [workbookType, setWorkbookType] = useState<WorkbookType>('vocab_choice');
+  const [selectedTypes, setSelectedTypes] = useState<Set<WorkbookType>>(new Set(['vocab_choice']));
   const [difficulty, setDifficulty] = useState<Difficulty>('b2');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
-  const [results, setResults] = useState<WorkbookResult[]>([]);
+  const [allResults, setAllResults] = useState<TypeResult[]>([]);
+  const [activeTypeTab, setActiveTypeTab] = useState(0);
   const [activeResultTab, setActiveResultTab] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [showKorean, setShowKorean] = useState(false);
   const [pricePerUse, setPricePerUse] = useState(20);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingAnswerPdf, setDownloadingAnswerPdf] = useState(false);
@@ -1013,6 +1337,7 @@ export default function WorkbookPage() {
 
   const handleGenerate = async () => {
     if (!session) { setGenerateError('로그인이 필요합니다.'); return; }
+    if (selectedTypes.size === 0) { setGenerateError('유형을 하나 이상 선택해주세요.'); return; }
     setGenerateError('');
 
     let passageTexts: string[] = [];
@@ -1026,34 +1351,37 @@ export default function WorkbookPage() {
       if (passageTexts.length === 0) { setGenerateError('지문을 불러오는 중입니다.'); return; }
     }
 
+    const typesArray = [...selectedTypes];
     setGenerating(true);
-    setResults([]);
+    setAllResults([]);
+    setActiveTypeTab(0);
     setActiveResultTab(0);
     setShowAnswer(false);
 
+    const newAllResults: TypeResult[] = [];
     try {
-      const res = await fetch('/api/generate-workbook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          passages: passageTexts,
-          type: workbookType,
-          difficulty,
-          academy_id: session.user.id,
-        }),
-      });
-      const json = await res.json() as { success?: boolean; results?: WorkbookResult[]; error?: string; required?: number; balance?: number };
-      if (!res.ok || !json.success) {
-        if (json.error === 'INSUFFICIENT_CON') {
-          throw new Error(`CON이 부족합니다. (필요: ${json.required}C, 보유: ${json.balance}C)`);
+      for (let ti = 0; ti < typesArray.length; ti++) {
+        const type = typesArray[ti];
+        const res = await fetch('/api/generate-workbook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passages: passageTexts, type, difficulty, academy_id: session.user.id }),
+        });
+        const json = await res.json() as { success?: boolean; results?: WorkbookResult[]; error?: string; required?: number; balance?: number };
+        if (!res.ok || !json.success) {
+          if (json.error === 'INSUFFICIENT_CON') {
+            throw new Error(`CON이 부족합니다. (필요: ${json.required}C, 보유: ${json.balance}C)`);
+          }
+          throw new Error(json.error || '생성 실패');
         }
-        throw new Error(json.error || '생성 실패');
+        newAllResults.push({ type, results: json.results ?? [] });
+        setAllResults([...newAllResults]);
       }
-      setResults(json.results ?? []);
       // Auto-save for vocab_choice type (backward compat)
-      if (workbookType === 'vocab_choice' && json.results && json.results.length > 0) {
+      const vcIdx = typesArray.indexOf('vocab_choice');
+      if (vcIdx >= 0 && newAllResults[vcIdx]?.results.length > 0) {
         const title = activeTab === 'input' ? inputTitle : mockTitle;
-        setTimeout(() => autoSaveVocabChoice(json.results!, passageTexts, title), 1500);
+        setTimeout(() => autoSaveVocabChoice(newAllResults[vcIdx].results, passageTexts, title, vcIdx), 1500);
       }
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
@@ -1062,7 +1390,7 @@ export default function WorkbookPage() {
     }
   };
 
-  const autoSaveVocabChoice = async (res: WorkbookResult[], passageTexts: string[], title: string) => {
+  const autoSaveVocabChoice = async (res: WorkbookResult[], passageTexts: string[], title: string, typeIdx: number) => {
     if (!session) return;
     setSavingHistory(true);
     try {
@@ -1070,8 +1398,8 @@ export default function WorkbookPage() {
         const r = res[i];
         if (r.error || !r.passage) continue;
         const [problemBlob, answerBlob] = await Promise.all([
-          capturePdfFromElement(`wb-pdf-problem-${i}`),
-          capturePdfFromElement(`wb-pdf-answer-${i}`),
+          capturePdfFromElement(`wb-pdf-problem-${typeIdx}-${i}`),
+          capturePdfFromElement(`wb-pdf-answer-${typeIdx}-${i}`),
         ]);
         const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -1106,10 +1434,12 @@ export default function WorkbookPage() {
   };
 
   const handleDownloadPdf = async (withAnswer: boolean) => {
-    const r = results[activeResultTab];
+    const typeResult = allResults[activeTypeTab];
+    if (!typeResult) return;
+    const r = typeResult.results[activeResultTab];
     if (!r) return;
     const suffix = withAnswer ? 'answer' : 'problem';
-    const id = `wb-pdf-${suffix}-${activeResultTab}`;
+    const id = `wb-pdf-${suffix}-${activeTypeTab}-${activeResultTab}`;
     if (withAnswer) setDownloadingAnswerPdf(true);
     else setDownloadingPdf(true);
     try {
@@ -1118,8 +1448,9 @@ export default function WorkbookPage() {
       const a = document.createElement('a');
       a.href = url;
       const title = activeTab === 'input' ? inputTitle : mockTitle;
-      const passageLabel = results.length > 1 ? `_지문${activeResultTab + 1}` : '';
-      a.download = `${title || TYPE_LABELS[workbookType]}${passageLabel}${withAnswer ? '_정답' : '_문제'}.pdf`;
+      const typeLabel = TYPE_LABELS[typeResult.type];
+      const passageLabel = typeResult.results.length > 1 ? `_지문${activeResultTab + 1}` : '';
+      a.download = `${title || typeLabel}${passageLabel}${withAnswer ? '_정답' : '_문제'}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -1127,6 +1458,31 @@ export default function WorkbookPage() {
     } finally {
       if (withAnswer) setDownloadingAnswerPdf(false);
       else setDownloadingPdf(false);
+    }
+  };
+
+  const [downloadingAllPdf, setDownloadingAllPdf] = useState(false);
+  const handleDownloadAllPdf = async (withAnswer: boolean) => {
+    if (!allResults.length) return;
+    setDownloadingAllPdf(true);
+    try {
+      const suffix = withAnswer ? 'answer' : 'problem';
+      const ids: string[] = [];
+      allResults.forEach(({ results }, ti) => {
+        results.forEach((_, pi) => { ids.push(`wb-pdf-${suffix}-${ti}-${pi}`); });
+      });
+      const blob = await captureAllToPdf(ids);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const title = activeTab === 'input' ? inputTitle : mockTitle;
+      a.download = `${title || '워크북'}_전체${withAnswer ? '_정답' : '_문제'}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'PDF 생성 실패');
+    } finally {
+      setDownloadingAllPdf(false);
     }
   };
 
@@ -1190,15 +1546,26 @@ export default function WorkbookPage() {
   const validInputPassages = passages.filter(p => effectiveText(p).trim().length >= 50);
   const validMockPassages = sortedSelectedNumbers.filter(n => passageMap[n]);
   const passageCount = activeTab === 'input' ? validInputPassages.length : validMockPassages.length;
-  const totalCost = pricePerUse * Math.max(passageCount, 1);
-  const canGenerate = !generating && (
+  const typeCount = selectedTypes.size;
+  const totalCost = pricePerUse * Math.max(passageCount, 1) * Math.max(typeCount, 1);
+  const canGenerate = !generating && selectedTypes.size > 0 && (
     activeTab === 'input' ? validInputPassages.length > 0 :
     validMockPassages.length > 0 && loadingNumbers.size === 0
   );
+  const currentTypeResult = allResults[activeTypeTab];
+  const currentType = currentTypeResult?.type;
 
   // ─── render ────────────────────────────────────────────────────────────────
 
-  const currentCategory = CATEGORIES.find(c => c.key === selectedCategory) ?? CATEGORIES[0];
+  const toggleType = (key: WorkbookType) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const allTypeKeys: WorkbookType[] = CATEGORIES.flatMap(c => c.types.map(t => t.key));
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16">
@@ -1218,7 +1585,7 @@ export default function WorkbookPage() {
             { key: 'history', label: '📋 생성 이력' },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${activeTab === t.key ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
+              className={`flex-1 py-2.5 text-sm font-black rounded-xl transition-all ${activeTab === t.key ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
               {t.label}
             </button>
           ))}
@@ -1232,7 +1599,7 @@ export default function WorkbookPage() {
                 <label className="block text-xs font-black text-slate-500 mb-1.5">제목 (선택)</label>
                 <input type="text" placeholder="예: 2024 수능 18번" value={inputTitle}
                   onChange={e => setInputTitle(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-300" />
               </div>
 
               {/* Passage cards */}
@@ -1240,7 +1607,7 @@ export default function WorkbookPage() {
                 {passages.map((card, cardIdx) => (
                   <div key={card.id} className="border border-gray-200 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-indigo-600">지문 {cardIdx + 1}</span>
+                      <span className="text-xs font-black text-slate-900">지문 {cardIdx + 1}</span>
                       {passages.length > 1 && (
                         <button onClick={() => removePassage(card.id)}
                           className="text-xs font-black text-slate-400 hover:text-rose-500 transition-colors px-2 py-1 hover:bg-rose-50 rounded-lg">
@@ -1253,7 +1620,7 @@ export default function WorkbookPage() {
                     <div className="flex gap-2 bg-slate-100 p-1 rounded-xl w-fit">
                       {([['text', '✏️ 텍스트'], ['image', '📷 사진']] as const).map(([mode, label]) => (
                         <button key={mode} onClick={() => updatePassage(card.id, { mode })}
-                          className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${card.mode === mode ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                          className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${card.mode === mode ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
                           {label}
                         </button>
                       ))}
@@ -1264,7 +1631,7 @@ export default function WorkbookPage() {
                         <textarea rows={7} placeholder="영어 지문을 붙여넣으세요..."
                           value={card.text}
                           onChange={e => updatePassage(card.id, { text: e.target.value })}
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y" />
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-300 resize-y" />
                         <p className="text-xs text-slate-400 font-bold text-right mt-1">{card.text.trim().length}자</p>
                       </div>
                     )}
@@ -1276,7 +1643,7 @@ export default function WorkbookPage() {
                           onDragLeave={() => updatePassage(card.id, { isDragging: false })}
                           onDrop={e => { e.preventDefault(); updatePassage(card.id, { isDragging: false }); const f = e.dataTransfer.files[0]; if (f) handleImageSelect(card.id, f); }}
                           className={`block w-full border-4 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all
-                            ${card.isDragging ? 'border-indigo-500 bg-indigo-50' : card.imageFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50'}`}>
+                            ${card.isDragging ? 'border-indigo-500 bg-slate-50' : card.imageFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50/50'}`}>
                           <div className="text-4xl mb-2">{card.imageFile ? '🖼️' : '📷'}</div>
                           {card.imageFile
                             ? <><p className="font-black text-emerald-700">{card.imageFile.name}</p><p className="text-xs text-slate-400 mt-1">다른 사진으로 변경하려면 클릭</p></>
@@ -1293,10 +1660,10 @@ export default function WorkbookPage() {
                             </div>
                             <div className="md:w-1/2 flex flex-col gap-2">
                               {!card.ocrDone ? (
-                                <div className="flex-1 flex flex-col items-center justify-center p-6 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
-                                  <p className="font-black text-indigo-500 text-center mb-3 text-sm">AI가 텍스트를 자동 추출해드려요</p>
+                                <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                                  <p className="font-black text-slate-600 text-center mb-3 text-sm">AI가 텍스트를 자동 추출해드려요</p>
                                   <button onClick={() => handleOCR(card.id)} disabled={card.ocrLoading}
-                                    className="bg-indigo-600 text-white px-6 py-2.5 rounded-2xl font-black text-sm hover:bg-indigo-700 transition-all disabled:opacity-50">
+                                    className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-sm hover:bg-black transition-all disabled:opacity-50">
                                     {card.ocrLoading ? '⏳ 추출 중...' : '🔍 텍스트 추출'}
                                   </button>
                                 </div>
@@ -1322,7 +1689,7 @@ export default function WorkbookPage() {
 
                 {passages.length < 10 && (
                   <button onClick={addPassage}
-                    className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-2xl text-sm font-black text-indigo-500 hover:border-indigo-400 hover:bg-indigo-50 transition-all">
+                    className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-sm font-black text-slate-600 hover:border-slate-400 hover:bg-slate-50 transition-all">
                     + 지문 추가 ({passages.length}/10)
                   </button>
                 )}
@@ -1339,7 +1706,7 @@ export default function WorkbookPage() {
                 <label className="block text-xs font-black text-slate-500 mb-1.5">제목 (선택)</label>
                 <input type="text" placeholder="예: 2024년 고1 3월 18번" value={mockTitle}
                   onChange={e => setMockTitle(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-300" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {[
@@ -1350,7 +1717,7 @@ export default function WorkbookPage() {
                   <div key={label}>
                     <label className="block text-xs font-black text-slate-500 mb-1">{label}</label>
                     <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white disabled:bg-gray-50 disabled:text-slate-300">
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-300 bg-white disabled:bg-gray-50 disabled:text-slate-300">
                       <option value="">선택</option>
                       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
@@ -1368,7 +1735,7 @@ export default function WorkbookPage() {
                       return (
                         <button key={n} onClick={() => toggleNumber(num)} disabled={isLoading}
                           className={`px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
-                            isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
+                            isSelected ? 'bg-slate-900 border-slate-900 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                           } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
                           {isLoading ? '...' : `${n}번`}
                         </button>
@@ -1383,7 +1750,7 @@ export default function WorkbookPage() {
                     passageMap[num] && (
                       <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-black text-indigo-600">{num}번 지문</p>
+                          <p className="text-xs font-black text-slate-900">{num}번 지문</p>
                           <p className="text-xs text-slate-400 font-bold">{passageMap[num].trim().length}자</p>
                         </div>
                         <p className="text-sm text-slate-600 font-medium leading-relaxed select-none"
@@ -1403,34 +1770,43 @@ export default function WorkbookPage() {
         {/* ── 유형 선택 (입력/모의고사 탭 공통) ── */}
         {activeTab !== 'history' && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
-            <label className="block text-xs font-black text-slate-500">유형 선택</label>
-
-            {/* Category buttons */}
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map(cat => (
-                <button key={cat.key}
-                  onClick={() => {
-                    setSelectedCategory(cat.key);
-                    setWorkbookType(cat.types[0].key);
-                  }}
-                  className={`px-4 py-2 rounded-xl text-sm font-black border-2 transition-all ${
-                    selectedCategory === cat.key ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
-                  }`}>
-                  {cat.label}
-                </button>
-              ))}
+            {/* Type selector header */}
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black text-slate-500">
+                유형 선택 <span className="text-slate-900">({selectedTypes.size}개 선택)</span>
+              </label>
+              <div className="flex gap-3">
+                <button onClick={() => setSelectedTypes(new Set(allTypeKeys))}
+                  className="text-xs font-black text-slate-900 hover:underline">전체 선택</button>
+                <button onClick={() => setSelectedTypes(new Set())}
+                  className="text-xs font-black text-slate-400 hover:underline">전체 해제</button>
+              </div>
             </div>
 
-            {/* Sub-type buttons */}
-            <div className="flex flex-wrap gap-2">
-              {currentCategory.types.map(t => (
-                <button key={t.key}
-                  onClick={() => setWorkbookType(t.key)}
-                  className={`px-4 py-2 rounded-xl text-sm font-black border-2 transition-all ${
-                    workbookType === t.key ? 'bg-slate-900 border-slate-900 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'
-                  }`}>
-                  {t.label}
-                </button>
+            {/* All categories with checkboxes */}
+            <div className="space-y-3">
+              {CATEGORIES.map(cat => (
+                <div key={cat.key}>
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wide mb-1.5">{cat.label}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {cat.types.map(t => {
+                      const isSelected = selectedTypes.has(t.key);
+                      return (
+                        <button key={t.key} onClick={() => toggleType(t.key)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
+                            isSelected
+                              ? 'bg-slate-900 border-slate-900 text-white shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                          }`}>
+                          <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] flex-shrink-0 ${
+                            isSelected ? 'bg-white border-white text-slate-900' : 'border-slate-300'
+                          }`}>{isSelected && '✓'}</span>
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -1451,15 +1827,19 @@ export default function WorkbookPage() {
 
             {/* Cost info */}
             <p className="text-center text-sm font-bold text-slate-400">
-              지문 {passageCount > 0 ? passageCount : 1}개 × <span className="text-yellow-500 font-black">{pricePerUse}C</span>
-              {passageCount > 1 && <span className="text-slate-500"> = <span className="text-yellow-500 font-black">{totalCost}C</span></span>}
+              지문 {Math.max(passageCount, 1)}개
+              {typeCount > 0 && <> × 유형 <span className="text-slate-600 font-black">{typeCount}개</span></>}
+              {' × '}<span className="text-yellow-500 font-black">{pricePerUse}C</span>
+              {' = '}<span className="text-yellow-500 font-black">{totalCost}C</span>
             </p>
 
             <button onClick={handleGenerate} disabled={!canGenerate}
-              className="w-full py-4 text-base font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-indigo-200">
+              className="w-full py-4 text-base font-black bg-slate-900 hover:bg-black text-white rounded-2xl transition-all disabled:opacity-50 shadow-lg shadow-slate-200">
               {generating
-                ? `⏳ AI가 생성 중... (${results.length}/${passageCount})`
-                : `✨ ${TYPE_LABELS[workbookType]} 생성하기 (${totalCost}C)`}
+                ? `⏳ AI가 생성 중... (유형 ${allResults.length}/${typeCount} 완료)`
+                : selectedTypes.size === 0
+                  ? '유형을 선택해주세요'
+                  : `✨ ${typeCount}개 유형 생성하기 (${totalCost}C)`}
             </button>
           </div>
         )}
@@ -1472,50 +1852,84 @@ export default function WorkbookPage() {
         )}
 
         {/* ── Results ── */}
-        {results.length > 0 && activeTab !== 'history' && (
+        {allResults.length > 0 && activeTab !== 'history' && (
           <div className="space-y-3">
-            {results.length > 1 && (
-              <div className="flex gap-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-1.5">
-                {results.map((_, idx) => (
-                  <button key={idx} onClick={() => setActiveResultTab(idx)}
-                    className={`flex-1 py-2 text-sm font-black rounded-xl transition-all ${activeResultTab === idx ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
-                    지문 {idx + 1}
+            {/* Type tabs */}
+            {allResults.length > 1 && (
+              <div className="flex gap-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-1.5 flex-wrap">
+                {allResults.map(({ type }, ti) => (
+                  <button key={ti} onClick={() => { setActiveTypeTab(ti); setActiveResultTab(0); setShowAnswer(false); }}
+                    className={`flex-1 min-w-[90px] py-2 text-xs font-black rounded-xl transition-all ${activeTypeTab === ti ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    {TYPE_LABELS[type]}
                   </button>
                 ))}
               </div>
             )}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-black text-slate-800">
-                    {TYPE_LABELS[workbookType]}
-                    {results.length > 1 ? ` — 지문 ${activeResultTab + 1}` : ''} 생성 완료
-                  </span>
-                  {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {workbookType !== 'passage_translation' && (
-                    <button onClick={() => setShowAnswer(!showAnswer)}
-                      className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                      {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
-                    </button>
-                  )}
-                  <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
-                    className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-50">
-                    {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
+            {/* Passage tabs */}
+            {currentTypeResult && currentTypeResult.results.length > 1 && (
+              <div className="flex gap-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-1.5">
+                {currentTypeResult.results.map((_, pi) => (
+                  <button key={pi} onClick={() => setActiveResultTab(pi)}
+                    className={`flex-1 py-2 text-sm font-black rounded-xl transition-all ${activeResultTab === pi ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    지문 {pi + 1}
                   </button>
-                  {workbookType !== 'passage_translation' && (
-                    <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
-                      className="px-4 py-2 text-xs font-black bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-all disabled:opacity-50">
-                      {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
+                ))}
+              </div>
+            )}
+            {currentTypeResult && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="font-black text-slate-800">
+                      {TYPE_LABELS[currentType]}
+                      {currentTypeResult.results.length > 1 ? ` — 지문 ${activeResultTab + 1}` : ''} 생성 완료
+                    </span>
+                    {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(currentType === 'vocab_fill' || currentType === 'word_order') && (
+                      <button onClick={() => setShowKorean(!showKorean)}
+                        className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showKorean ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        {showKorean ? '🇰🇷 한글 포함 중' : '🇰🇷 한글 번역'}
+                      </button>
+                    )}
+                    {currentType !== 'passage_translation' && (
+                      <button onClick={() => setShowAnswer(!showAnswer)}
+                        className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
+                      </button>
+                    )}
+                    <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
+                      className="px-4 py-2 text-xs font-black bg-slate-700 hover:bg-slate-900 text-white rounded-xl transition-all disabled:opacity-50">
+                      {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
                     </button>
+                    {currentType !== 'passage_translation' && (
+                      <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
+                        className="px-4 py-2 text-xs font-black bg-slate-500 hover:bg-slate-700 text-white rounded-xl transition-all disabled:opacity-50">
+                        {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
+                      </button>
+                    )}
+                    {allResults.length > 1 && (
+                      <button onClick={() => handleDownloadAllPdf(false)} disabled={downloadingAllPdf}
+                        className="px-4 py-2 text-xs font-black bg-slate-900 hover:bg-black text-white rounded-xl transition-all disabled:opacity-50">
+                        {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 문제 PDF'}
+                      </button>
+                    )}
+                    {allResults.length > 1 && currentType !== 'passage_translation' && (
+                      <button onClick={() => handleDownloadAllPdf(true)} disabled={downloadingAllPdf}
+                        className="px-4 py-2 text-xs font-black border-2 border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white rounded-xl transition-all disabled:opacity-50">
+                        {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 정답 PDF'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="px-5 py-5">
+                  {currentTypeResult.results[activeResultTab] && (
+                    <RenderResultContent result={currentTypeResult.results[activeResultTab]} type={currentType} showAnswer={showAnswer} showKorean={showKorean} />
                   )}
                 </div>
               </div>
-              <div className="px-5 py-5">
-                <RenderResultContent result={results[activeResultTab]} type={workbookType} showAnswer={showAnswer} />
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1529,17 +1943,17 @@ export default function WorkbookPage() {
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-black text-slate-500">날짜</label>
                 <input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-300" />
               </div>
               <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
                 <label className="text-xs font-black text-slate-500">키워드 검색</label>
                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && fetchHistory()}
                   placeholder="지문 내 단어를 입력하세요..."
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-300" />
               </div>
               <button onClick={() => fetchHistory()} disabled={historyLoading}
-                className="px-4 py-2 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 disabled:opacity-50">
+                className="px-4 py-2 bg-slate-900 text-white text-sm font-black rounded-xl hover:bg-black disabled:opacity-50">
                 🔍 검색
               </button>
               {(searchDate || searchQuery) && (
@@ -1551,8 +1965,8 @@ export default function WorkbookPage() {
             </div>
             {historyError && <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {historyError}</p></div>}
             {selectedIds.size > 0 && (
-              <div className="flex items-center gap-3 px-5 py-3 bg-indigo-50 border border-indigo-200 rounded-2xl">
-                <span className="font-black text-indigo-700 text-sm">{selectedIds.size}개 선택됨</span>
+              <div className="flex items-center gap-3 px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                <span className="font-black text-slate-800 text-sm">{selectedIds.size}개 선택됨</span>
                 <div className="flex gap-2 ml-auto">
                   <button onClick={deleteSelected} disabled={bulkDeleting}
                     className="px-4 py-2 bg-rose-500 text-white rounded-xl font-black text-sm hover:bg-rose-600 disabled:opacity-50">
@@ -1573,15 +1987,15 @@ export default function WorkbookPage() {
               <div className="bg-white rounded-[2rem] shadow-lg border border-slate-100 overflow-hidden">
                 <div className="grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-500">
                   <input type="checkbox" checked={selectedIds.size === historyList.length && historyList.length > 0} onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded accent-indigo-600 cursor-pointer mt-0.5" />
+                    className="w-4 h-4 rounded accent-slate-900 cursor-pointer mt-0.5" />
                   {['날짜', '제목', '지문 요약', '난이도', '문제', '정답'].map((h, i) => <span key={i} className={i >= 4 ? 'text-center' : ''}>{h}</span>)}
                 </div>
                 {historyList.map((item, i) => (
                   <div key={item.id}
-                    className={`grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-indigo-50/40
-                      ${selectedIds.has(item.id) ? 'bg-indigo-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                    className={`grid grid-cols-[32px_140px_160px_1fr_52px_64px_64px] gap-2 px-4 py-3 items-center border-b border-slate-100 last:border-0 hover:bg-slate-50/40
+                      ${selectedIds.has(item.id) ? 'bg-slate-50' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                     <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)}
-                      className="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
+                      className="w-4 h-4 rounded accent-slate-900 cursor-pointer" />
                     <span className="text-xs font-bold text-slate-600 whitespace-nowrap">
                       {new Date(item.created_at).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -1593,7 +2007,7 @@ export default function WorkbookPage() {
                     <div className="flex justify-center">
                       {item.pdf_path
                         ? <button onClick={() => downloadFromHistory(item.pdf_path!, `${item.title || '워크북'}_문제.pdf`)}
-                            className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black w-full text-center">⬇️ 문제</button>
+                            className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-slate-800 rounded-lg text-xs font-black w-full text-center">⬇️ 문제</button>
                         : <span className="text-xs text-slate-300 font-bold text-center w-full">저장중</span>}
                     </div>
                     <div className="flex justify-center">
@@ -1610,96 +2024,101 @@ export default function WorkbookPage() {
         )}
 
         {/* ── PDF 렌더 영역 (hidden, html-to-image 캡처용) ── */}
-        {results.map((result, idx) => {
-          const title = (activeTab === 'input' ? inputTitle : mockTitle) || TYPE_LABELS[workbookType];
-          const passageLabel = results.length > 1 ? ` (지문 ${idx + 1})` : '';
-          const fullTitle = `${title}${passageLabel}`;
+        {allResults.map(({ type, results: typeResults }, ti) =>
+          typeResults.map((result, pi) => {
+            if (result.error) return null;
+            const baseTitle = (activeTab === 'input' ? inputTitle : mockTitle) || TYPE_LABELS[type];
+            const passageLabel = typeResults.length > 1 ? ` (지문 ${pi + 1})` : '';
+            const fullTitle = `${baseTitle}${passageLabel}`;
+            const problemId = `wb-pdf-problem-${ti}-${pi}`;
+            const answerId = `wb-pdf-answer-${ti}-${pi}`;
+            const key = `${ti}-${pi}`;
 
-          if (result.error) return null;
-
-          if (workbookType.startsWith('combo_')) {
-            return (
-              <PdfCombo key={idx} result={result} type={workbookType} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-            );
-          }
-
-          switch (workbookType) {
-            case 'vocab_choice':
-            case 'grammar_choice':
+            if (type.startsWith('combo_')) {
               return (
-                <React.Fragment key={idx}>
-                  <PdfVocabChoice result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfVocabChoice result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
+                <React.Fragment key={key}>
+                  <PdfCombo result={result} type={type} isAnswer={false} title={fullTitle} id={problemId} />
+                  <PdfCombo result={result} type={type} isAnswer={true} title={fullTitle} id={answerId} />
                 </React.Fragment>
               );
-            case 'vocab_fill':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfVocabFill result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfVocabFill result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            case 'grammar_correct':
-            case 'grammar_correct_adv':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfGrammarCorrect result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfGrammarCorrect result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            case 'translation':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfTranslation result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfTranslation result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            case 'word_order':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfWordOrder result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfWordOrder result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            case 'english_writing':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfEnglishWriting result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfEnglishWriting result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            case 'passage_translation':
-              return <PdfPassageTranslation key={idx} result={result} id={`wb-pdf-problem-${idx}`} />;
-            case 'paragraph_order':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfParagraphOrder result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfParagraphOrder result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            case 'sentence_insertion':
-              return (
-                <React.Fragment key={idx}>
-                  <PdfSentenceInsertion result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfSentenceInsertion result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-            default:
-              return (
-                <React.Fragment key={idx}>
-                  <PdfSimple result={result} isAnswer={false} title={fullTitle} id={`wb-pdf-problem-${idx}`} />
-                  <PdfSimple result={result} isAnswer={true} title={fullTitle} id={`wb-pdf-answer-${idx}`} />
-                </React.Fragment>
-              );
-          }
-        })}
-        {/* combo answer PDFs */}
-        {results.map((result, idx) => {
-          if (!workbookType.startsWith('combo_') || result.error) return null;
-          const title = (activeTab === 'input' ? inputTitle : mockTitle) || TYPE_LABELS[workbookType];
-          const passageLabel = results.length > 1 ? ` (지문 ${idx + 1})` : '';
-          return <PdfCombo key={`ans-${idx}`} result={result} type={workbookType} isAnswer={true} title={`${title}${passageLabel}`} id={`wb-pdf-answer-${idx}`} />;
-        })}
+            }
+            switch (type) {
+              case 'vocab_choice':
+              case 'grammar_choice':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfVocabChoice result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfVocabChoice result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'vocab_fill':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfVocabFill result={result} isAnswer={false} title={fullTitle} id={problemId} showKorean={showKorean} />
+                    <PdfVocabFill result={result} isAnswer={true} title={fullTitle} id={answerId} showKorean={showKorean} />
+                  </React.Fragment>
+                );
+              case 'grammar_correct':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfGrammarCorrect result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfGrammarCorrect result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'grammar_correct_adv':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfGrammarCorrectAdv result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfGrammarCorrectAdv result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'translation':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfTranslation result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfTranslation result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'word_order':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfWordOrder result={result} isAnswer={false} title={fullTitle} id={problemId} showKorean={showKorean} />
+                    <PdfWordOrder result={result} isAnswer={true} title={fullTitle} id={answerId} showKorean={showKorean} />
+                  </React.Fragment>
+                );
+              case 'english_writing':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfEnglishWriting result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfEnglishWriting result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'passage_translation':
+                return <PdfPassageTranslation key={key} result={result} id={problemId} />;
+              case 'paragraph_order':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfParagraphOrder result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfParagraphOrder result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'sentence_insertion':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSentenceInsertion result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfSentenceInsertion result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              default:
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSimple result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfSimple result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+            }
+          })
+        )}
 
       </div>
     </div>
