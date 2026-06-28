@@ -22,9 +22,9 @@ const menuItems: MenuItem[] = [
     label: 'AI 문제 생성',
     icon: '🤖',
     children: [
-      { href: '/admin/pdf-editor',    label: '지문분석 툴/워크북', icon: '📝' },
-      { href: '/admin/ai-questions',  label: '실전 변형 문제',     icon: '🎯' },
-      { href: '/admin/vocab-choice',  label: '어휘 선택 문제',     icon: '📌' },
+      { href: '/admin/pdf-editor',    label: '지문분석',     icon: '📝' },
+      { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
+      { href: '/admin/vocab-choice',  label: '워크북',       icon: '📌' },
     ],
   },
   { href: '/admin/con-history',  label: 'CON 사용 이력',   icon: '⭐' },
