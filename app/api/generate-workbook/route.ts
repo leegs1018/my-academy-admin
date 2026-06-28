@@ -1,0 +1,528 @@
+import { NextResponse } from 'next/server';
+import OpenAI from 'openai';
+import { getFeaturePrice, getConBalance } from '@/lib/credits';
+import { createAdminClient } from '@/lib/supabase-admin';
+
+export const maxDuration = 120;
+
+export type WorkbookType =
+  | 'vocab_choice'
+  | 'vocab_fill'
+  | 'grammar_choice'
+  | 'grammar_correct'
+  | 'grammar_correct_adv'
+  | 'translation'
+  | 'word_order'
+  | 'english_writing'
+  | 'passage_translation'
+  | 'paragraph_order'
+  | 'sentence_insertion'
+  | 'suneung_vocab_right'
+  | 'suneung_vocab_wrong'
+  | 'suneung_grammar_right'
+  | 'suneung_grammar_wrong'
+  | 'combo_vocab_grammar'
+  | 'combo_vocab_fill'
+  | 'combo_grammar_order'
+  | 'combo_grammar_insert';
+
+const DIFF_GUIDE: Record<string, string> = {
+  b1: '중등~고등 하 수준',
+  b2: '고등 중 수준',
+  c1: '고등 상 수준',
+  c2: '고등 최상/수능 상위권 수준',
+};
+
+function buildPrompt(text: string, type: WorkbookType, difficulty: string): string {
+  const diff = `${difficulty} (${DIFF_GUIDE[difficulty] || DIFF_GUIDE['b2']})`;
+  const header = (title: string) =>
+    `당신은 한국 영어학원의 전문 영어 교사 AI입니다.\n[필수 원칙] 원본 지문을 절대 변형하지 마세요.\n\n${title}\n난이도: ${diff}\n\n=== 영어 지문 ===\n${text}\n=== 지문 끝 ===\n\n`;
+
+  switch (type) {
+
+    // ── 어휘 선택 ────────────────────────────────────────────────────────────
+    case 'vocab_choice':
+      return header('아래 영어 지문으로 어휘 선택 문제를 생성하세요.') +
+`생성 규칙:
+1. 지문 전체에서 20~25개의 핵심 어휘/표현을 선택합니다.
+2. 각 위치에 번호[어휘A / 어휘B / 어휘C] 형식으로 3개 선택지를 만듭니다. (정답 1개 + 오답 2개)
+3. 오답은 품사가 같고 문맥상 그럴듯하되 의미상 부적절한 단어여야 합니다.
+4. 원문 문장 구조를 그대로 유지하고, 선택 어휘 위치에만 번호와 대괄호를 삽입합니다.
+5. 정답이 1번째/2번째/3번째 위치에 균등하게 분산되도록 합니다.
+
+출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
+{
+  "passage": "지문 텍스트 (1[어휘A / 어휘B / 어휘C] 형식으로 삽입)",
+  "answer_key": "1. 정답어휘  2. 정답어휘 ..."
+}`;
+
+    // ── 어휘 완성 ────────────────────────────────────────────────────────────
+    case 'vocab_fill':
+      return header('아래 영어 지문으로 어휘 완성(빈칸 채우기) 문제를 생성하세요.') +
+`생성 규칙:
+1. 핵심 어휘 15~20개를 빈칸으로 만듭니다. 빈칸은 _(1)_ 형식으로 표시합니다.
+2. 보기 단어 박스를 제공합니다: 정답 단어 + 오답 단어(정답의 1.5배 수) 알파벳순.
+3. 각 빈칸에는 단 하나의 정답만 존재해야 합니다.
+4. 원문 문장 구조는 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "빈칸이 삽입된 지문 (_(1)_ 형식)",
+  "word_bank": ["alph", "order", "sorted", "words", ...],
+  "answer_key": "1. word  2. word ..."
+}`;
+
+    // ── 어법 선택 ────────────────────────────────────────────────────────────
+    case 'grammar_choice':
+      return header('아래 영어 지문으로 어법 선택 문제를 생성하세요.') +
+`생성 규칙:
+1. 어법 포인트 15~20개를 선택합니다.
+   (to부정사/동명사, 능동/수동, 주어-동사 수 일치, 관계사, 접속사, 형용사/부사 등)
+2. 각 위치에 번호[형태A / 형태B] 또는 번호[형태A / 형태B / 형태C] 형식으로 표시합니다.
+3. 오답은 어법적으로 명확히 틀린 형태여야 합니다.
+4. 정답 위치(1번째/2번째/3번째)를 균등 분산합니다.
+5. 원문 문장 구조는 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "어법 선택지가 삽입된 지문 (1[to go / going] 형식)",
+  "answer_key": "1. to go  2. 정답형태 ..."
+}`;
+
+    // ── 어법 수정 ────────────────────────────────────────────────────────────
+    case 'grammar_correct':
+      return header('아래 영어 지문에 어법 오류를 삽입하여 어법 수정 문제를 만드세요.') +
+`생성 규칙:
+1. 5~7개의 어법 오류를 삽입합니다. 오류 단어 앞에 ①~⑦ 번호를 붙입니다.
+2. 오류 유형: 동사 형태, 수 일치, 시제, 전치사, 관계사, to부정사/동명사 혼동
+3. 오류 단어는 ①[틀린단어] 형식으로 표시합니다.
+4. 오류가 없는 나머지 문장은 원본 그대로 유지합니다.
+5. 오류 위치가 지문 전체에 고르게 분산되도록 합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "오류 삽입된 지문 (①[틀린단어] 형식)",
+  "answer_key": "① 틀린단어 → 바른단어\\n② 틀린단어 → 바른단어 ..."
+}`;
+
+    // ── 어법 수정(상) ────────────────────────────────────────────────────────
+    case 'grammar_correct_adv':
+      return header('아래 영어 지문에 어법 오류를 삽입하여 심화 어법 수정 문제를 만드세요.') +
+`생성 규칙:
+1. 8~12개의 어법 오류를 삽입합니다. 오류 단어 앞에 ①~⑫ 번호를 붙입니다.
+2. 오류 유형: 동사 형태, 수 일치, 시제, 전치사, 관계사, to부정사/동명사,
+   분사구문(현재/과거), 도치구문, 강조구문, 접속사/관계사 혼동, 비교급/최상급 오류
+3. 오류 단어는 ①[틀린단어] 형식으로 표시합니다.
+4. 오류가 없는 나머지 문장은 원본 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "오류 삽입된 지문 (①[틀린단어] 형식)",
+  "answer_key": "① 틀린단어 → 바른단어\\n② 틀린단어 → 바른단어 ..."
+}`;
+
+    // ── 해석하기 ─────────────────────────────────────────────────────────────
+    case 'translation':
+      return header('아래 영어 지문으로 해석 연습 문제를 생성하세요.') +
+`생성 규칙:
+1. 지문을 문장 단위로 분리합니다 (10~15문장).
+2. 각 문장에 번호를 붙입니다.
+3. 영어 원문을 절대 바꾸지 말고, 자연스러운 한국어 해석을 제공합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "sentences": [
+    { "num": 1, "en": "원문 영어 문장.", "ko": "자연스러운 한국어 해석." },
+    ...
+  ]
+}`;
+
+    // ── 낱말 배열 ────────────────────────────────────────────────────────────
+    case 'word_order':
+      return header('아래 영어 지문으로 낱말 배열 문제를 생성하세요.') +
+`생성 규칙:
+1. 10~12문장을 선택합니다 (어순 배열이 의미 있는 복문/구조 우선).
+2. 각 문장을 단어 단위로 분리하여 순서를 무작위로 섞습니다.
+3. 마침표/쉼표는 인접한 단어에 붙인 채로 포함합니다.
+4. 문제: 한국어 뜻 + 섞인 단어 목록 → 학생이 영어 문장 완성.
+5. 원문 영어 문장은 절대 변형하지 않습니다.
+
+출력 형식 (순수 JSON만):
+{
+  "sentences": [
+    { "num": 1, "ko": "한국어 뜻", "scrambled": ["word3", "word1,", "word2"], "answer": "word1 word2 word3," },
+    ...
+  ]
+}`;
+
+    // ── 영작하기 ─────────────────────────────────────────────────────────────
+    case 'english_writing':
+      return header('아래 영어 지문으로 영작하기 문제를 생성하세요.') +
+`생성 규칙:
+1. 10~12문장을 선택합니다.
+2. 한국어 번역을 제시하고 학생이 원본 영어 문장을 영작합니다.
+3. 힌트: 각 문장의 첫 단어와 마지막 단어를 제공합니다.
+4. 원문 영어 문장은 절대 변형하지 않습니다.
+
+출력 형식 (순수 JSON만):
+{
+  "sentences": [
+    { "num": 1, "ko": "한국어 문장", "hint_start": "첫단어", "hint_end": "마지막단어.", "answer": "원본 영어 문장." },
+    ...
+  ]
+}`;
+
+    // ── 본문 해석지 ──────────────────────────────────────────────────────────
+    case 'passage_translation':
+      return header('아래 영어 지문으로 본문 해석지를 생성하세요.') +
+`생성 규칙:
+1. 지문 전체를 문장 단위로 분리합니다.
+2. 각 문장: 영어 원문(절대 변형 금지) + 자연스러운 한국어 해석 + 핵심 어휘/구문 포인트 1~2개.
+3. 어휘 포인트 형식: "단어: 뜻 (품사)" 또는 "구문: 설명"
+
+출력 형식 (순수 JSON만):
+{
+  "items": [
+    {
+      "en": "원문 영어 문장.",
+      "ko": "자연스러운 한국어 해석.",
+      "vocab": ["핵심어휘: 뜻 (품사)", "구문포인트: 설명"]
+    },
+    ...
+  ]
+}`;
+
+    // ── 문단 배열 ────────────────────────────────────────────────────────────
+    case 'paragraph_order':
+      return header('아래 영어 지문으로 문단 배열 문제를 생성하세요.') +
+`생성 규칙:
+1. 지문을 3~5개 단락(paragraph)으로 나눕니다.
+2. 첫 번째 단락은 고정 제시합니다 (문두 단락).
+3. 나머지 단락을 (A), (B), (C) 등으로 레이블 붙이고 순서를 섞어 제시합니다.
+4. 각 단락의 문장은 원본 그대로 유지합니다.
+5. 학생이 올바른 순서를 찾아 씁니다.
+
+출력 형식 (순수 JSON만):
+{
+  "fixed_paragraph": "첫 번째 단락 원문 (변형 금지)",
+  "shuffled_paragraphs": [
+    { "label": "A", "text": "단락 원문" },
+    { "label": "B", "text": "단락 원문" },
+    { "label": "C", "text": "단락 원문" }
+  ],
+  "answer_key": "올바른 순서: (B) - (C) - (A)"
+}`;
+
+    // ── 문장 삽입 ────────────────────────────────────────────────────────────
+    case 'sentence_insertion':
+      return header('아래 영어 지문으로 문장 삽입 문제를 생성하세요.') +
+`생성 규칙:
+1. 지문에서 삽입하기에 적절한 문장 1개를 선택합니다.
+2. 해당 문장을 제거한 지문에 ①②③④⑤ 5개의 삽입 가능 위치를 표시합니다.
+3. 삽입 위치는 문맥 흐름이 자연스러운 곳에 고르게 배치합니다.
+4. 정답 위치가 ①이나 ⑤에만 몰리지 않도록 합니다.
+5. 삽입 가능 위치 기호는 문장 사이에 삽입합니다 (예: "문장A. ① 문장B.").
+
+출력 형식 (순수 JSON만):
+{
+  "insert_sentence": "삽입할 문장 원문 (절대 변형 금지)",
+  "passage": "①②③④⑤ 표시가 있는 지문",
+  "answer_key": "정답: ③"
+}`;
+
+    // ── 적절한 어휘 (수능형) ─────────────────────────────────────────────────
+    case 'suneung_vocab_right':
+      return header('아래 영어 지문으로 수능형 "밑줄 친 단어의 쓰임이 적절하지 않은 것" 문제를 생성하세요.') +
+`생성 규칙:
+1. 5개의 단어 위치를 선정하여 ⓐⓑⓒⓓⓔ로 표시합니다.
+2. 4개는 원문의 적절한 단어 그대로 유지, 1개만 문맥상 부적절한 단어(반의어 또는 혼동어)로 교체합니다.
+3. 오류 위치는 ⓐ~ⓔ 중에서 고르게 분산합니다 (항상 ⓐ나 ⓔ로 고정하지 않음).
+4. 나머지 문장은 원본 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "ⓐ~ⓔ 표시가 있는 지문. 부적절한 단어 1개 포함.",
+  "answer_key": "정답: ⓒ (틀린단어 → 적절한단어로 수정)"
+}`;
+
+    // ── 부적절한 어휘 (수능형) ──────────────────────────────────────────────
+    case 'suneung_vocab_wrong':
+      return header('아래 영어 지문으로 수능형 "밑줄 친 단어 중 문맥상 낱말의 쓰임이 적절하지 않은 것" 문제를 생성하세요.') +
+`생성 규칙:
+1. 5개의 단어 위치를 선정하여 ①②③④⑤로 표시합니다.
+2. 4개는 원문의 적절한 단어 그대로 유지, 1개만 문맥상 부적절한 단어로 교체합니다.
+3. 교체 시 반의어, 혼동어(예: increase↔decrease, accept↔reject)를 사용합니다.
+4. 오류 위치는 ①~⑤ 고르게 분산합니다.
+5. 나머지 문장은 원본 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "①~⑤ 표시가 있는 지문. 부적절한 단어 1개 포함.",
+  "answer_key": "정답: ③ (틀린단어 → 적절한단어로 수정)"
+}`;
+
+    // ── 맞는 어법 (수능형) ──────────────────────────────────────────────────
+    case 'suneung_grammar_right':
+      return header('아래 영어 지문으로 수능형 "어법상 적절한 것을 고르시오 (A)(B)(C)" 문제를 생성하세요.') +
+`생성 규칙:
+1. 3개 위치에 (A)(B)(C)를 표시하고 각각 두 어법 선택지를 제공합니다.
+2. 선택지 예: (A) [ to go / going ], (B) [ which / what ], (C) [ is / are ]
+3. 원본 지문의 어법에 맞는 형태가 정답이어야 합니다.
+4. 오답은 어법적으로 명확히 틀린 형태를 사용합니다.
+5. 나머지 문장은 원본 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "(A)[ to go / going ] 형식이 삽입된 지문",
+  "answer_key": "(A) to go, (B) which, (C) are"
+}`;
+
+    // ── 틀린 어법 (수능형) ──────────────────────────────────────────────────
+    case 'suneung_grammar_wrong':
+      return header('아래 영어 지문으로 수능형 "어법상 틀린 것을 고르시오 ①~⑤" 문제를 생성하세요.') +
+`생성 규칙:
+1. 5개 위치에 ①~⑤ 번호를 붙입니다.
+2. 4개는 원본 어법상 맞는 표현 그대로 유지, 1개만 어법 오류로 교체합니다.
+3. 오류 유형: 동사 형태, 수 일치, 분사, 관계사, to부정사/동명사 혼동
+4. 오류 위치는 ①~⑤ 고르게 분산합니다.
+5. 나머지 문장은 원본 그대로 유지합니다.
+
+출력 형식 (순수 JSON만):
+{
+  "passage": "①~⑤ 번호가 붙은 지문. 어법 오류 1개 포함.",
+  "answer_key": "정답: ③ (틀린표현 → 올바른표현으로 수정)"
+}`;
+
+    // ── 1지문 2유형: 어휘+어법 ──────────────────────────────────────────────
+    case 'combo_vocab_grammar':
+      return header('아래 영어 지문으로 어휘 선택 문제와 어법 선택 문제를 동시에 생성하세요.') +
+`섹션1 (어휘 선택):
+- 12~15개 핵심 어휘 위치에 번호[A/B/C] 형식으로 선택지 삽입.
+- 정답 위치 균등 분산.
+
+섹션2 (어법 선택):
+- 어법 포인트 10~12개에 번호[형태A/형태B] 형식으로 선택지 삽입.
+- 섹션1과 다른 위치에서 선택.
+
+원본 지문을 절대 변형하지 마세요.
+
+출력 형식 (순수 JSON만):
+{
+  "section1": {
+    "passage": "어휘 선택지 삽입 지문 (1[A/B/C] 형식)",
+    "answer_key": "1. 정답  2. 정답 ..."
+  },
+  "section2": {
+    "passage": "어법 선택지 삽입 지문 (1[형태A/형태B] 형식)",
+    "answer_key": "1. 정답형태  2. 정답형태 ..."
+  }
+}`;
+
+    // ── 1지문 2유형: 어휘+문장완성 ─────────────────────────────────────────
+    case 'combo_vocab_fill':
+      return header('아래 영어 지문으로 어휘 선택 문제와 어휘 완성(빈칸) 문제를 동시에 생성하세요.') +
+`섹션1 (어휘 선택): 12~15개 어휘 선택지 (번호[A/B/C] 형식).
+섹션2 (어휘 완성): 10~13개 빈칸 (_(번호)_ 형식) + 보기 단어 박스.
+
+원본 지문을 절대 변형하지 마세요.
+
+출력 형식 (순수 JSON만):
+{
+  "section1": {
+    "passage": "어휘 선택지 삽입 지문",
+    "answer_key": "1. 정답  2. 정답 ..."
+  },
+  "section2": {
+    "passage": "빈칸 삽입 지문 (_(1)_ 형식)",
+    "word_bank": ["word1", "word2", ...],
+    "answer_key": "1. word  2. word ..."
+  }
+}`;
+
+    // ── 1지문 2유형: 어법+문장배열 ─────────────────────────────────────────
+    case 'combo_grammar_order':
+      return header('아래 영어 지문으로 어법 수정 문제와 낱말 배열 문제를 동시에 생성하세요.') +
+`섹션1 (어법 수정): 5~7개 어법 오류 삽입 (①[틀린단어] 형식).
+섹션2 (낱말 배열): 8~10문장 선택 → 단어 순서 섞기.
+
+원본 지문을 절대 변형하지 마세요.
+
+출력 형식 (순수 JSON만):
+{
+  "section1": {
+    "passage": "오류 삽입 지문 (①[틀린단어] 형식)",
+    "answer_key": "① 틀린 → 바른\\n② 틀린 → 바른 ..."
+  },
+  "section2": {
+    "sentences": [
+      { "num": 1, "ko": "한국어 뜻", "scrambled": ["w3","w1","w2"], "answer": "w1 w2 w3" }
+    ]
+  }
+}`;
+
+    // ── 1지문 2유형: 어법+문장삽입 ─────────────────────────────────────────
+    case 'combo_grammar_insert':
+      return header('아래 영어 지문으로 어법 선택 문제와 문장 삽입 문제를 동시에 생성하세요.') +
+`섹션1 (어법 선택): 12~15개 어법 포인트에 번호[형태A/형태B] 삽입.
+섹션2 (문장 삽입): 적절한 문장 1개 제거 → ①②③④⑤ 삽입 위치 표시.
+
+원본 지문을 절대 변형하지 마세요.
+
+출력 형식 (순수 JSON만):
+{
+  "section1": {
+    "passage": "어법 선택지 삽입 지문",
+    "answer_key": "1. 정답  2. 정답 ..."
+  },
+  "section2": {
+    "insert_sentence": "삽입할 문장",
+    "passage": "①~⑤ 표시 지문",
+    "answer_key": "정답: ②"
+  }
+}`;
+
+    default:
+      return header('아래 영어 지문으로 어휘 선택 문제를 생성하세요.') +
+`출력 형식: { "passage": "...", "answer_key": "..." }`;
+  }
+}
+
+function extractJson(text: string): string {
+  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) return codeBlock[1].trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end !== -1) return text.slice(start, end + 1);
+  return text.trim();
+}
+
+// 어휘 선택 정답 위치 균등 분산 (기존 로직 재사용)
+function redistributeVocabAnswers(passage: string, answerKey: string): string {
+  const choiceRegex = /(\d+)\[([^\]]+)\]/g;
+  type ItemInfo = { fullMatch: string; num: number; opts: string[]; answerIdx: number };
+  const items: ItemInfo[] = [];
+  const answerMap: Record<number, string> = {};
+
+  const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
+  const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
+
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(choiceRegex.source, 'g');
+  while ((match = regex.exec(passage)) !== null) {
+    const num = parseInt(match[1]);
+    const opts = match[2].split(/\s*\/\s*/).map(o => o.trim());
+    const ans = answerMap[num] || '';
+    const answerIdx = opts.findIndex(o => o.toLowerCase() === ans.toLowerCase());
+    if (answerIdx >= 0) items.push({ fullMatch: match[0], num, opts, answerIdx });
+  }
+  if (items.length === 0) return passage;
+
+  const total = items.length;
+  const perSlot = Math.ceil(total / 3);
+  const targets: number[] = [];
+  for (let p = 0; p < 3; p++) for (let k = 0; k < perSlot && targets.length < total; k++) targets.push(p);
+  for (let i = targets.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [targets[i], targets[j]] = [targets[j], targets[i]];
+  }
+
+  let newPassage = passage;
+  items.forEach((item, idx) => {
+    const tp = targets[idx];
+    if (item.answerIdx === tp) return;
+    const newOpts = [...item.opts];
+    [newOpts[item.answerIdx], newOpts[tp]] = [newOpts[tp], newOpts[item.answerIdx]];
+    newPassage = newPassage.replace(item.fullMatch, `${item.num}[${newOpts.join(' / ')}]`);
+  });
+  return newPassage;
+}
+
+export async function POST(request: Request) {
+  try {
+    const { passages, type, difficulty, academy_id } = await request.json() as {
+      passages: string[];
+      type: WorkbookType;
+      difficulty?: string;
+      academy_id?: string;
+    };
+
+    if (!passages || passages.length === 0) {
+      return NextResponse.json({ error: '지문을 입력해주세요.' }, { status: 400 });
+    }
+    const validPassages = passages.filter(p => p && p.trim().length >= 50);
+    if (validPassages.length === 0) {
+      return NextResponse.json({ error: '지문이 너무 짧습니다. (최소 50자)' }, { status: 400 });
+    }
+
+    // CON 차감: 지문 수 × 단가
+    if (academy_id) {
+      const price = await getFeaturePrice('vocab_choice');
+      const totalCost = price * validPassages.length;
+      if (totalCost > 0) {
+        const balance = await getConBalance(academy_id);
+        if (balance < totalCost) {
+          return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance }, { status: 402 });
+        }
+        const db = createAdminClient();
+        const { error: deductError } = await db.rpc('deduct_con', {
+          p_academy_id: academy_id,
+          p_amount: totalCost,
+          p_feature_key: 'vocab_choice',
+          p_description: `워크북 생성 (${type} × ${validPassages.length}지문)`,
+        });
+        if (deductError) {
+          if (deductError.message?.includes('INSUFFICIENT_CON')) {
+            const balance2 = await getConBalance(academy_id);
+            return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance: balance2 }, { status: 402 });
+          }
+          return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
+        }
+      }
+    }
+
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    const diff = difficulty || 'b2';
+
+    // 지문별 순차 생성
+    const results: unknown[] = [];
+    for (const text of validPassages) {
+      const prompt = buildPrompt(text.trim(), type, diff);
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const rawText = response.choices[0]?.message?.content ?? '';
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(extractJson(rawText)) as Record<string, unknown>;
+      } catch {
+        results.push({ error: 'AI 응답 파싱 실패. 다시 시도해주세요.' });
+        continue;
+      }
+
+      // 어휘 선택 계열 정답 분산 후처리
+      if (type === 'vocab_choice' && parsed.passage && parsed.answer_key) {
+        parsed.passage = redistributeVocabAnswers(parsed.passage as string, parsed.answer_key as string);
+      }
+      if (type === 'grammar_choice' && parsed.passage && parsed.answer_key) {
+        parsed.passage = redistributeVocabAnswers(parsed.passage as string, parsed.answer_key as string);
+      }
+      if (type === 'combo_vocab_grammar') {
+        const s1 = parsed.section1 as Record<string, unknown>;
+        if (s1?.passage && s1?.answer_key) {
+          s1.passage = redistributeVocabAnswers(s1.passage as string, s1.answer_key as string);
+        }
+      }
+
+      results.push({ ...parsed, _original_text: text.trim() });
+    }
+
+    return NextResponse.json({ success: true, type, results });
+  } catch (error: unknown) {
+    console.error('[generate-workbook] 오류:', error);
+    const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
