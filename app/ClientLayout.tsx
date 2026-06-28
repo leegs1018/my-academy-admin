@@ -23,8 +23,8 @@ const menuItems: MenuItem[] = [
     icon: '🤖',
     children: [
       { href: '/admin/pdf-editor',    label: '지문분석',     icon: '📝' },
-      { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
       { href: '/admin/vocab-choice',  label: '워크북',       icon: '📌' },
+      { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
     ],
   },
   { href: '/admin/con-history',  label: 'CON 사용 이력',   icon: '⭐' },
