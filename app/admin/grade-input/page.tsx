@@ -289,7 +289,7 @@ export default function GradeInputPage() {
       }
 
       const { data: studentData } = await supabase.from('students').select('*').eq('academy_id', userId).eq('class_name', targetClassName);
-      const { data: allGradeData } = await supabase.from('grades').select('*').eq('academy_id', userId).eq('category_id', catId).eq('class_id', parseInt(classId));
+      const { data: allGradeData } = await supabase.from('grades').select('*').eq('academy_id', userId).eq('category_id', catId).eq('class_id', classId);
 
       if (studentData) {
         const sortedStudents = [...studentData].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
@@ -335,29 +335,32 @@ export default function GradeInputPage() {
 
   const handleSave = async () => {
     if (!selectedCategoryId) return alert('과목 선택 필수!');
+    if (!selectedClassId) return alert('클래스 선택 필수!');
     setLoading(true);
     const currentCat = dynamicCategories.find(c => c.id === selectedCategoryId);
     const catName = currentCat?.name || '과목';
 
     const newGrades: any[] = [];
     sessionDates.forEach((session, idx) => {
+      if (!session.fullDate) return;
       const tName = `[${catName}] ${selectedMonth}월 ${idx + 1}회차`;
       students.forEach(student => {
-        const score = student.scores[idx];
+        const raw = student.scores?.[idx];
+        const scoreVal = (raw === '' || raw === undefined || raw === null) ? 0 : parseInt(String(raw), 10);
         newGrades.push({
           academy_id: userId,
           student_id: student.id,
           category_id: selectedCategoryId,
-          class_id: parseInt(selectedClassId),
+          class_id: selectedClassId,
           test_name: tName,
-          score: score === '' ? 0 : parseInt(score),
+          score: isNaN(scoreVal) ? 0 : scoreVal,
           test_date: session.fullDate,
           max_score: maxScore,
         });
       });
     });
 
-    // 해당 월 날짜 범위 (과목명 변경과 무관하게 category_id + class_id + 날짜로 삭제)
+    // 해당 월 날짜 범위
     const year = 2026;
     const startDate = `${year}-${String(selectedMonth).padStart(2, '0')}-01`;
     const nextMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
@@ -372,19 +375,23 @@ export default function GradeInputPage() {
           .delete()
           .eq('academy_id', userId)
           .eq('category_id', selectedCategoryId)
-          .eq('class_id', parseInt(selectedClassId))
+          .eq('class_id', selectedClassId)
           .in('student_id', studentIds)
           .gte('test_date', startDate)
           .lt('test_date', endDate);
-        if (delError) throw delError;
+        if (delError) throw new Error(`삭제 오류: ${delError.message} (code: ${delError.code})`);
       }
       if (newGrades.length > 0) {
         const { error: insError } = await supabase.from('grades').insert(newGrades);
-        if (insError) throw insError;
+        if (insError) throw new Error(`저장 오류: ${insError.message} (code: ${insError.code})`);
       }
       alert('성적이 성공적으로 저장되었습니다! ✅');
       fetchMaxScore(selectedCategoryId);
-    } catch (err) { console.error(err); alert('저장 중 오류 발생'); }
+    } catch (err) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`저장 중 오류 발생\n\n${msg}`);
+    }
     finally { setLoading(false); }
   };
 
