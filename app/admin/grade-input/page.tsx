@@ -341,9 +341,11 @@ export default function GradeInputPage() {
     const catName = currentCat?.name || '과목';
 
     const newGrades: any[] = [];
+    const testNames: string[] = [];
     sessionDates.forEach((session, idx) => {
       if (!session.fullDate) return;
       const tName = `[${catName}] ${selectedMonth}월 ${idx + 1}회차`;
+      testNames.push(tName);
       students.forEach(student => {
         const raw = student.scores?.[idx];
         const scoreVal = (raw === '' || raw === undefined || raw === null) ? 0 : parseInt(String(raw), 10);
@@ -360,25 +362,15 @@ export default function GradeInputPage() {
       });
     });
 
-    // 해당 월 날짜 범위
-    const year = 2026;
-    const startDate = `${year}-${String(selectedMonth).padStart(2, '0')}-01`;
-    const nextMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
-    const nextYear = selectedMonth === 12 ? year + 1 : year;
-    const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
-
     try {
       const studentIds = students.map(s => s.id);
-      if (studentIds.length > 0) {
+      if (studentIds.length > 0 && testNames.length > 0) {
         const { error: delError } = await supabase
           .from('grades')
           .delete()
           .eq('academy_id', userId)
-          .eq('category_id', selectedCategoryId)
-          .eq('class_id', selectedClassId)
           .in('student_id', studentIds)
-          .gte('test_date', startDate)
-          .lt('test_date', endDate);
+          .in('test_name', testNames);
         if (delError) throw new Error(`삭제 오류: ${delError.message} (code: ${delError.code})`);
       }
       if (newGrades.length > 0) {
