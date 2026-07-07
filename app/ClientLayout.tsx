@@ -27,6 +27,7 @@ const menuItems: MenuItem[] = [
       { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
     ],
   },
+  { href: '/admin/guide',        label: '이용 가이드',     icon: '📖' },
   { href: '/admin/con-history',  label: 'CON 사용 이력',   icon: '⭐' },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
   { href: '/admin/inquiries',    label: '문의하기',        icon: '💬' },
