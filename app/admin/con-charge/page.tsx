@@ -109,8 +109,8 @@ export default function ConChargePage() {
           <p className="text-xs font-black text-yellow-700 dark:text-yellow-400">입금 시 꼭 확인해주세요</p>
           <ul className="text-xs font-bold text-yellow-600 dark:text-yellow-500 space-y-1">
             <li>• 입금자명을 <span className="font-black">학원명</span>으로 입력해주세요.</li>
-            <li>• 입금 확인 후 영업일 기준 <span className="font-black">1~2일 이내</span> CON이 지급됩니다.</li>
-            <li>• 충전 문의: <span className="font-black">031-903-8205</span></li>
+            <li>• 입금 확인 후 <span className="font-black">1시간 이내</span> CON이 지급됩니다.</li>
+            <li>• 충전 관련 문의는 <a href="/admin/inquiries" className="underline font-black">문의하기</a>를 이용해주세요.</li>
           </ul>
         </div>
 
