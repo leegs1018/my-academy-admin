@@ -78,6 +78,7 @@ export default function CompleteProfilePage() {
 
     // 추천인 코드 검증
     let points = baseBonus;
+    let referrerFound = false;
     const enteredCode = form.referralCode?.trim().toUpperCase();
     if (enteredCode) {
       const { data: referrer } = await supabase
@@ -85,7 +86,7 @@ export default function CompleteProfilePage() {
         .select('user_id')
         .eq('own_referral_code', enteredCode)
         .single();
-      if (referrer) points = referralBonus;
+      if (referrer) { points = referralBonus; referrerFound = true; }
     }
 
     let kioskCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -116,11 +117,23 @@ export default function CompleteProfilePage() {
       return;
     }
 
+    // 추천인 보상 지급 (비동기, 실패해도 무관)
+    if (referrerFound && enteredCode) {
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      if (newSession?.access_token) {
+        fetch('/api/referral-reward', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newSession.access_token}` },
+          body: JSON.stringify({ referral_code: enteredCode }),
+        }).catch(() => {});
+      }
+    }
+
     await supabase.auth.updateUser({
       data: { role: 'ai_only', academy_name: form.academyName },
     });
 
-    const bonusMsg = points === 700 ? '추천인 코드 적용! 총 700C' : '가입 기념 300C';
+    const bonusMsg = referrerFound ? `추천인 코드 적용! 총 ${points}C` : `가입 기념 ${points}C`;
     alert(`환영합니다! ${bonusMsg}가 지급되었습니다.`);
     router.replace('/admin/pdf-editor');
   };

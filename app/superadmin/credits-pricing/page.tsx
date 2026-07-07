@@ -49,9 +49,9 @@ const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type
 const SECTIONS: SectionConfig[] = [
   {
     key: 'signup', label: '가입 CON', color: 'text-yellow-400',
-    keys: ['signup_bonus', 'signup_bonus_referral'],
+    keys: ['signup_bonus', 'signup_bonus_referral', 'referral_reward'],
     noToggle: true,
-    note: '추천인 코드 없이 가입 시 기본 CON · 유효 코드 입력 시 두 항목 합산 지급',
+    note: '추천인 코드 없이 가입 시 기본 CON · 신규회원은 두 항목 합산 · 추천인은 referral_reward 적립',
   },
   {
     key: 'sms', label: 'SMS 문자 발송', color: 'text-violet-400',

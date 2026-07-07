@@ -76,6 +76,7 @@ export default function RegisterContent() {
 
         // 추천인 코드 검증
         let initialPoints = baseBonus;
+        let referrerFound = false;
         const enteredCode = formData.referralCode?.trim().toUpperCase();
         if (enteredCode) {
           const { data: referrer } = await supabase
@@ -83,7 +84,7 @@ export default function RegisterContent() {
             .select('user_id')
             .eq('own_referral_code', enteredCode)
             .single();
-          if (referrer) initialPoints = referralBonus;
+          if (referrer) { initialPoints = referralBonus; referrerFound = true; }
         }
 
         const generateKioskCode = () => Math.floor(100000 + Math.random() * 900000).toString();
@@ -115,8 +116,19 @@ export default function RegisterContent() {
           console.error('DB 저장 실패:', dbError);
           alert('가입은 완료되었으나 학원 정보 설정 중 오류가 발생했습니다. 고객센터로 문의해주세요.');
         } else {
+          // 추천인 보상 지급 (비동기, 실패해도 가입에 영향 없음)
+          if (referrerFound && enteredCode) {
+            const { data: { session: newSession } } = await supabase.auth.getSession();
+            if (newSession?.access_token) {
+              fetch('/api/referral-reward', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newSession.access_token}` },
+                body: JSON.stringify({ referral_code: enteredCode }),
+              }).catch(() => {});
+            }
+          }
           await supabase.auth.signOut();
-          const bonusMsg = initialPoints === 700 ? '추천인 코드 적용! 총 700C' : '가입 기념 300C';
+          const bonusMsg = referrerFound ? `추천인 코드 적용! 총 ${initialPoints}C` : `가입 기념 ${initialPoints}C`;
           alert(`축하합니다! ${bonusMsg}가 지급되었습니다.\n방금 가입하신 정보로 로그인을 진행해주세요!`);
           router.replace('/login');
         }

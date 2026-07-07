@@ -39,6 +39,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [kioskCode, setKioskCode] = useState('');
   const [ownReferralCode, setOwnReferralCode] = useState('');
   const [copiedReferral, setCopiedReferral] = useState(false);
+  const [referralRewardCon, setReferralRewardCon] = useState<number | null>(null);
   const [points, setPoints] = useState<number>(0);
   const [userRole, setUserRole] = useState<string>('');
   const [isDark, setIsDark] = useState(false);
@@ -91,6 +92,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             .update({ own_referral_code: newCode })
             .eq('user_id', session.user.id);
         }
+        // 추천인 보상 단가 조회
+        fetch('/api/credits/pricing')
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            const item = (d?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'referral_reward');
+            if (item) setReferralRewardCon(item.cost_per_use);
+          })
+          .catch(() => {});
       }
     };
     getAcademyInfo();
@@ -342,7 +351,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                             {copiedReferral ? '복사됨!' : '복사'}
                           </button>
                         </div>
-                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">신규 가입 시 입력 → 총 700C 지급</p>
+                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">
+                          내 코드로 가입 시 나에게{referralRewardCon !== null ? ` ${referralRewardCon}C` : ''} 보상 적립
+                        </p>
                       </div>
                     )}
                   </div>
