@@ -752,6 +752,7 @@ export default function AiQuestionsPage() {
   const [userId, setUserId] = useState('');
   const [aiPrice, setAiPrice] = useState<number | null>(null);
   const [typePricing, setTypePricing] = useState<Record<string, number>>({});
+  const [pricingLoaded, setPricingLoaded] = useState(false);
   const [conModal, setConModal] = useState<{ required: number; balance: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDate, setSearchDate] = useState('');
@@ -797,8 +798,9 @@ export default function AiQuestionsPage() {
         const ai = items.find(p => p.feature_key === 'ai_question_per_type');
         if (ai) setAiPrice(ai.cost_per_use);
         else if (activeTypeKeys.size === 0) setAiPrice(20);
+        setPricingLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => { setPricingLoaded(true); });
   }, []);
 
   // ── 이력 조회 ──
@@ -1714,20 +1716,24 @@ export default function AiQuestionsPage() {
             </div>
 
             {/* 카드 목록 */}
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2">
-                  {typeConfigs.map(cfg => (
-                    <SortableTypeCard
-                      key={cfg.id}
-                      cfg={cfg}
-                      onUpdate={updateConfig}
-                      onRemove={removeConfig}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+            {!pricingLoaded ? (
+              <div className="py-6 text-center text-sm text-gray-400 font-bold">유형 불러오는 중...</div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {typeConfigs.map(cfg => (
+                      <SortableTypeCard
+                        key={cfg.id}
+                        cfg={cfg}
+                        onUpdate={updateConfig}
+                        onRemove={removeConfig}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
 
           </div>
 
@@ -2201,15 +2207,19 @@ export default function AiQuestionsPage() {
               <button onClick={applyBulk}
                 className="px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg hover:bg-indigo-200 transition-all">적용</button>
             </div>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2">
-                  {typeConfigs.map(cfg => (
-                    <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+            {!pricingLoaded ? (
+              <div className="py-6 text-center text-sm text-gray-400 font-bold">유형 불러오는 중...</div>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {typeConfigs.map(cfg => (
+                      <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
             <p className="mt-2 text-[11px] text-gray-400">
               체크된 유형 {validConfigs.length}개 · 지문당 {validConfigs.reduce((s, c) => s + c.count, 0)}문제 생성 예정
             </p>
