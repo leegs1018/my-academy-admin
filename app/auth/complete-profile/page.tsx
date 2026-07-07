@@ -61,8 +61,23 @@ export default function CompleteProfilePage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
+    // DB에서 가입 CON 단가 조회 (fallback: 300 / 700)
+    let baseBonus = 300;
+    let referralBonus = 700;
+    try {
+      const res = await fetch('/api/credits/pricing');
+      if (res.ok) {
+        const pricingData = await res.json();
+        const items: { feature_key: string; cost_per_use: number }[] = pricingData.pricing ?? [];
+        const base = items.find(p => p.feature_key === 'signup_bonus');
+        const extra = items.find(p => p.feature_key === 'signup_bonus_referral');
+        if (base) baseBonus = base.cost_per_use;
+        if (base && extra) referralBonus = base.cost_per_use + extra.cost_per_use;
+      }
+    } catch {}
+
     // 추천인 코드 검증
-    let points = 300;
+    let points = baseBonus;
     const enteredCode = form.referralCode?.trim().toUpperCase();
     if (enteredCode) {
       const { data: referrer } = await supabase
@@ -70,7 +85,7 @@ export default function CompleteProfilePage() {
         .select('user_id')
         .eq('own_referral_code', enteredCode)
         .single();
-      if (referrer) points = 700;
+      if (referrer) points = referralBonus;
     }
 
     let kioskCode = Math.floor(100000 + Math.random() * 900000).toString();
