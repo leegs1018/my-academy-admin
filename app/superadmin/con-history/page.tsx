@@ -90,7 +90,7 @@ export default function ConHistoryPage() {
       const data = await res.json();
       setTransactions(data.transactions || []);
       setTotal(data.total || 0);
-      setSummary(data.summary || { total_charge: 0, total_deduct: 0, by_feature: {} });
+      setSummary(data.summary ? { by_feature: {}, ...data.summary } : { total_charge: 0, total_deduct: 0, by_feature: {} });
       setPage(p);
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : '조회 중 오류가 발생했습니다.');
@@ -132,7 +132,7 @@ export default function ConHistoryPage() {
             <label className="block text-xs font-black text-slate-400 mb-1.5">학원 검색</label>
             <input
               type="text"
-              placeholder="학원명 또는 이메일"
+              placeholder="학원명으로 검색"
               value={academySearch}
               onChange={e => setAcademySearch(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && fetchData(1)}

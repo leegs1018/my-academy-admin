@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
     const safe = academySearch.replace(/[%_\\]/g, c => `\\${c}`);
     const { data: academyRows } = await db
       .from('academy_config')
-      .select('user_id, academy_name, email')
-      .or(`academy_name.ilike.%${safe}%,email.ilike.%${safe}%`);
+      .select('user_id, academy_name')
+      .ilike('academy_name', `%${safe}%`);
     academyIds = (academyRows ?? []).map((r: { user_id: string }) => r.user_id);
     if (academyIds.length === 0) {
-      return NextResponse.json({ transactions: [], total: 0, page, pageSize, summary: { total_charge: 0, total_deduct: 0 } });
+      return NextResponse.json({ transactions: [], total: 0, page, pageSize, summary: { total_charge: 0, total_deduct: 0, by_feature: {} } });
     }
   }
 
@@ -98,10 +98,10 @@ export async function GET(request: NextRequest) {
   if (uniqueAcademyIds.length > 0) {
     const { data: academyRows } = await db
       .from('academy_config')
-      .select('user_id, academy_name, email')
+      .select('user_id, academy_name')
       .in('user_id', uniqueAcademyIds);
     for (const a of academyRows ?? []) {
-      academyMap[a.user_id] = a.academy_name || a.email || a.user_id;
+      academyMap[a.user_id] = a.academy_name || a.user_id;
     }
   }
 
