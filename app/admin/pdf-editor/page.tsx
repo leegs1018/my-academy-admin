@@ -353,9 +353,10 @@ export default function PdfEditorPage() {
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         const pricing = data?.pricing ?? [];
-        const inputItem = pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
-        if (inputItem) setPdfAnalysisPrice(inputItem.cost_per_use);
-        const mockItem = pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'mock_workbook')
+        const directItem = pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis_direct')
+          ?? pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
+        if (directItem) setPdfAnalysisPrice(directItem.cost_per_use);
+        const mockItem = pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis_mock')
           ?? pricing.find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'pdf_analysis');
         if (mockItem) setMockWorkbookPrice(mockItem.cost_per_use);
       })
@@ -1067,8 +1068,8 @@ export default function PdfEditorPage() {
             </div>
 
             {pdfAnalysisPrice !== null && pdfAnalysisPrice > 0 && (
-              <p className="mt-4 text-center text-sm font-bold text-slate-400">
-                분석 1회당 <span className="text-yellow-500 font-black">{pdfAnalysisPrice} CON</span> 사용
+              <p className="mt-4 mb-1 text-center text-sm font-black text-amber-600">
+                <span className="text-yellow-500">{pdfAnalysisPrice} CON</span> 차감 예정
               </p>
             )}
             <button onClick={handleGenerate} disabled={!canGenerate}
@@ -1553,9 +1554,11 @@ export default function PdfEditorPage() {
               </div>
             </div>
             {mockWorkbookPrice !== null && mockWorkbookPrice > 0 && (
-              <p className="text-center text-sm font-bold text-slate-400 mb-3">
-                지문 1개당 <span className="text-yellow-500 font-black">{mockWorkbookPrice} CON</span> 사용
-                {mockSelectedNumbers.length > 1 && <span className="text-slate-500"> × {mockSelectedNumbers.length}개 = <span className="text-yellow-500 font-black">{mockWorkbookPrice * mockSelectedNumbers.length} CON</span></span>}
+              <p className="text-center text-sm font-black text-amber-600 mb-3">
+                {mockSelectedNumbers.length > 1
+                  ? <><span className="text-yellow-500">{mockWorkbookPrice} CON</span> × {mockSelectedNumbers.length}지문 = 총 <span className="text-yellow-500">{mockWorkbookPrice * mockSelectedNumbers.length} CON</span> 차감 예정</>
+                  : <><span className="text-yellow-500">{mockWorkbookPrice} CON</span> 차감 예정</>
+                }
               </p>
             )}
             {mockError && <div className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl"><p className="text-rose-600 font-black">⚠️ {mockError}</p></div>}

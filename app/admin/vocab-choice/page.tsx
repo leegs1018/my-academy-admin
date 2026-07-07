@@ -1225,6 +1225,8 @@ export default function WorkbookPage() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [showKorean, setShowKorean] = useState(false);
   const [pricePerUse, setPricePerUse] = useState(20);
+  const [wbDirectPricing, setWbDirectPricing] = useState<Record<string, number>>({});
+  const [wbMockPricing, setWbMockPricing] = useState<Record<string, number>>({});
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingAnswerPdf, setDownloadingAnswerPdf] = useState(false);
   const [savingHistory, setSavingHistory] = useState(false);
@@ -1244,8 +1246,16 @@ export default function WorkbookPage() {
 
   useEffect(() => {
     fetch('/api/credits/pricing').then(r => r.ok ? r.json() : null).then(data => {
-      const item = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'vocab_choice');
-      if (item) setPricePerUse(item.cost_per_use);
+      const items: { feature_key: string; cost_per_use: number }[] = data?.pricing ?? [];
+      const directP: Record<string, number> = {};
+      const mockP: Record<string, number> = {};
+      items.forEach(p => {
+        if (p.feature_key.startsWith('wb_direct_')) directP[p.feature_key.replace('wb_direct_', '')] = p.cost_per_use;
+        else if (p.feature_key.startsWith('wb_mock_')) mockP[p.feature_key.replace('wb_mock_', '')] = p.cost_per_use;
+        else if (p.feature_key === 'vocab_choice') setPricePerUse(p.cost_per_use);
+      });
+      if (Object.keys(directP).length > 0) setWbDirectPricing(directP);
+      if (Object.keys(mockP).length > 0) setWbMockPricing(mockP);
     }).catch(() => {});
   }, []);
 
@@ -1547,7 +1557,10 @@ export default function WorkbookPage() {
   const validMockPassages = sortedSelectedNumbers.filter(n => passageMap[n]);
   const passageCount = activeTab === 'input' ? validInputPassages.length : validMockPassages.length;
   const typeCount = selectedTypes.size;
-  const totalCost = pricePerUse * Math.max(passageCount, 1) * Math.max(typeCount, 1);
+  const currentPricing = activeTab === 'input' ? wbDirectPricing : wbMockPricing;
+  const totalCost = selectedTypes.size > 0
+    ? [...selectedTypes].reduce((sum, key) => sum + (currentPricing[key] ?? pricePerUse) * Math.max(passageCount, 1), 0)
+    : 0;
   const canGenerate = !generating && selectedTypes.size > 0 && (
     activeTab === 'input' ? validInputPassages.length > 0 :
     validMockPassages.length > 0 && loadingNumbers.size === 0
@@ -1791,17 +1804,23 @@ export default function WorkbookPage() {
                   <div className="flex flex-wrap gap-2">
                     {cat.types.map(t => {
                       const isSelected = selectedTypes.has(t.key);
+                      const typePrice = currentPricing[t.key] ?? pricePerUse;
                       return (
                         <button key={t.key} onClick={() => toggleType(t.key)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
+                          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
                             isSelected
                               ? 'bg-slate-900 border-slate-900 text-white shadow-sm'
                               : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                           }`}>
-                          <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] flex-shrink-0 ${
-                            isSelected ? 'bg-white border-white text-slate-900' : 'border-slate-300'
-                          }`}>{isSelected && '✓'}</span>
-                          {t.label}
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] flex-shrink-0 ${
+                              isSelected ? 'bg-white border-white text-slate-900' : 'border-slate-300'
+                            }`}>{isSelected && '✓'}</span>
+                            {t.label}
+                          </div>
+                          {typePrice > 0 && (
+                            <span className={`text-[10px] font-black ${isSelected ? 'text-amber-300' : 'text-amber-500'}`}>{typePrice}C</span>
+                          )}
                         </button>
                       );
                     })}
@@ -1828,9 +1847,7 @@ export default function WorkbookPage() {
             {/* Cost info */}
             <p className="text-center text-sm font-bold text-slate-400">
               지문 {Math.max(passageCount, 1)}개
-              {typeCount > 0 && <> × 유형 <span className="text-slate-600 font-black">{typeCount}개</span></>}
-              {' × '}<span className="text-yellow-500 font-black">{pricePerUse}C</span>
-              {' = '}<span className="text-yellow-500 font-black">{totalCost}C</span>
+              {typeCount > 0 && <> × 유형 <span className="text-slate-600 font-black">{typeCount}개</span> = <span className="text-yellow-500 font-black">{totalCost}C</span> 차감 예정</>}
             </p>
 
             <button onClick={handleGenerate} disabled={!canGenerate}

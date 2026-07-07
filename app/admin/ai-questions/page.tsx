@@ -106,10 +106,12 @@ function SortableTypeCard({
   cfg,
   onUpdate,
   onRemove,
+  cost,
 }: {
   cfg: TypeConfig;
   onUpdate: (id: string, patch: Partial<TypeConfig>) => void;
   onRemove: (id: string) => void;
+  cost?: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: cfg.id });
@@ -159,9 +161,14 @@ function SortableTypeCard({
             ))}
           </select>
         ) : (
-          <span className={`inline-block text-xs font-black px-2.5 py-1 rounded-lg border ${TYPE_COLOR_MAP[cfg.type] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-            {TYPE_LABEL_MAP[cfg.type] ?? cfg.type}
-          </span>
+          <div className="flex flex-col gap-0.5">
+            <span className={`inline-block text-xs font-black px-2.5 py-1 rounded-lg border ${TYPE_COLOR_MAP[cfg.type] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+              {TYPE_LABEL_MAP[cfg.type] ?? cfg.type}
+            </span>
+            {cost !== undefined && cost > 0 && (
+              <span className="text-[10px] font-black text-amber-500 pl-1">{cost}C/회</span>
+            )}
+          </div>
         )}
       </div>
 
@@ -752,6 +759,7 @@ export default function AiQuestionsPage() {
   const [userId, setUserId] = useState('');
   const [aiPrice, setAiPrice] = useState<number | null>(null);
   const [typePricing, setTypePricing] = useState<Record<string, number>>({});
+  const [mockTypePricing, setMockTypePricing] = useState<Record<string, number>>({});
   const [pricingLoaded, setPricingLoaded] = useState(false);
   const [conModal, setConModal] = useState<{ required: number; balance: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -790,6 +798,14 @@ export default function AiQuestionsPage() {
           }
         });
         setTypePricing(prices);
+        // 모의고사 유형별 단가 파싱
+        const mockPrices: Record<string, number> = {};
+        items.forEach(p => {
+          if (p.feature_key.startsWith('mock_ai_type_')) {
+            mockPrices[p.feature_key.replace('mock_ai_type_', '')] = p.cost_per_use;
+          }
+        });
+        setMockTypePricing(mockPrices);
         // 비활성 유형 필터링 (슈퍼어드민이 OFF한 유형 숨김)
         if (activeTypeKeys.size > 0) {
           setTypeConfigs(prev => prev.filter(c => c.isCustom || activeTypeKeys.has(c.type)));
@@ -1728,6 +1744,7 @@ export default function AiQuestionsPage() {
                         cfg={cfg}
                         onUpdate={updateConfig}
                         onRemove={removeConfig}
+                        cost={typePricing[cfg.type]}
                       />
                     ))}
                   </div>
@@ -2214,7 +2231,7 @@ export default function AiQuestionsPage() {
                 <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-2">
                     {typeConfigs.map(cfg => (
-                      <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} />
+                      <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} cost={mockTypePricing[cfg.type] ?? typePricing[cfg.type]} />
                     ))}
                   </div>
                 </SortableContext>
@@ -2414,12 +2431,18 @@ export default function AiQuestionsPage() {
 
           {/* CON 안내 + 생성 버튼 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            {aiPrice !== null && aiPrice > 0 && (
-              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 font-bold text-center space-y-1">
-                <p>문제당 {aiPrice}콘 차감</p>
-                <p>총 {mockSortedSelectedNumbers.length || 0}지문 × 총 {validConfigs.reduce((s, c) => s + c.count, 0)}유형 = {mockSortedSelectedNumbers.length * validConfigs.reduce((s, c) => s + c.count, 0)}문제 생성 시 <span className="font-black text-amber-900">{(mockSortedSelectedNumbers.length * validConfigs.reduce((s, c) => s + c.count, 0) * (aiPrice ?? 0)).toLocaleString()} CON</span> 차감 예정</p>
-              </div>
-            )}
+            {(() => {
+              const defaultPrice = aiPrice ?? 20;
+              const conPerPassage = validConfigs.reduce((s, c) => s + (mockTypePricing[c.type] ?? typePricing[c.type] ?? defaultPrice) * c.count, 0);
+              const pCount = mockSortedSelectedNumbers.length || 0;
+              if (conPerPassage <= 0 || pCount === 0) return null;
+              return (
+                <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 font-bold text-center space-y-1">
+                  <p>지문당 {conPerPassage} CON · {pCount}지문</p>
+                  <p>총 <span className="font-black text-amber-900">{(conPerPassage * pCount).toLocaleString()} CON</span> 차감 예정</p>
+                </div>
+              );
+            })()}
             <button onClick={handleMockGenerate} disabled={mockGenerating || !mockAllPassagesReady || validConfigs.length === 0}
               className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               {mockGenerating ? '⏳ 생성 중...' : 'AI 문제 생성하기'}
