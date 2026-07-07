@@ -3,12 +3,25 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const FIELDS = [
-  { key: 'company_name',           label: '법인명' },
-  { key: 'company_address',        label: '사업장 소재지' },
-  { key: 'privacy_manager_name',   label: '개인정보 보호 책임자' },
-  { key: 'privacy_manager_phone',  label: '책임자 연락처' },
-  { key: 'privacy_manager_email',  label: '책임자 이메일' },
+const SECTIONS = [
+  {
+    title: '개인정보 보호책임자 / 문의처',
+    fields: [
+      { key: 'company_name',           label: '법인명' },
+      { key: 'company_address',        label: '사업장 소재지' },
+      { key: 'privacy_manager_name',   label: '개인정보 보호 책임자' },
+      { key: 'privacy_manager_phone',  label: '책임자 연락처' },
+      { key: 'privacy_manager_email',  label: '책임자 이메일' },
+    ],
+  },
+  {
+    title: '무통장 입금 계좌 정보',
+    fields: [
+      { key: 'bank_name',     label: '은행명' },
+      { key: 'bank_account',  label: '계좌번호' },
+      { key: 'bank_holder',   label: '예금주' },
+    ],
+  },
 ];
 
 export default function SiteSettingsPage() {
@@ -48,39 +61,42 @@ export default function SiteSettingsPage() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <div className="mb-8">
+    <div className="max-w-2xl space-y-6">
+      <div className="mb-2">
         <h1 className="text-2xl font-black text-white mb-1">사이트 설정</h1>
-        <p className="text-slate-400 font-medium text-sm">개인정보처리방침에 표시될 책임자 정보를 관리합니다.</p>
+        <p className="text-slate-400 font-medium text-sm">개인정보처리방침 및 CON 충전 안내에 표시될 정보를 관리합니다.</p>
       </div>
 
-      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-800">
-          <h2 className="text-base font-black text-white">개인정보 보호책임자 / 문의처</h2>
+      {SECTIONS.map(section => (
+        <div key={section.title} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800">
+            <h2 className="text-base font-black text-white">{section.title}</h2>
+          </div>
+          <div className="p-6 space-y-5">
+            {section.fields.map(f => (
+              <div key={f.key}>
+                <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">{f.label}</label>
+                <input
+                  type="text"
+                  value={values[f.key] ?? ''}
+                  onChange={e => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500 placeholder-slate-600"
+                />
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="p-6 space-y-5">
-          {FIELDS.map(f => (
-            <div key={f.key}>
-              <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">{f.label}</label>
-              <input
-                type="text"
-                value={values[f.key] ?? ''}
-                onChange={e => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500 placeholder-slate-600"
-              />
-            </div>
-          ))}
-        </div>
-        <div className="px-6 py-4 border-t border-slate-800 flex items-center gap-4">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl transition-all disabled:opacity-50"
-          >
-            {saving ? '저장 중...' : '저장'}
-          </button>
-          {saved && <p className="text-sm font-bold text-green-400">✅ 저장되었습니다</p>}
-        </div>
+      ))}
+
+      <div className="flex items-center gap-4 pt-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl transition-all disabled:opacity-50"
+        >
+          {saving ? '저장 중...' : '저장'}
+        </button>
+        {saved && <p className="text-sm font-bold text-green-400">✅ 저장되었습니다</p>}
       </div>
     </div>
   );
