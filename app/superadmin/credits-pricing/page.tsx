@@ -12,20 +12,75 @@ interface PricingItem {
   updated_at: string;
 }
 
-const AI_TYPE_KEYS = [
+interface SubSection {
+  label: string;
+  keys: string[];
+}
+
+interface SectionConfig {
+  key: string;
+  label: string;
+  color: string;
+  subsections?: SubSection[];
+  keys?: string[];
+  noToggle?: boolean;
+  note?: string;
+}
+
+const WB_DIRECT_KEYS = [
+  'wb_direct_vocab_choice', 'wb_direct_vocab_fill',
+  'wb_direct_grammar_choice', 'wb_direct_grammar_correct', 'wb_direct_grammar_correct_adv',
+  'wb_direct_translation', 'wb_direct_word_order', 'wb_direct_english_writing',
+  'wb_direct_passage_translation', 'wb_direct_paragraph_order', 'wb_direct_sentence_insertion',
+  'wb_direct_suneung_vocab_right', 'wb_direct_suneung_vocab_wrong',
+  'wb_direct_suneung_grammar_right', 'wb_direct_suneung_grammar_wrong',
+  'wb_direct_combo_vocab_grammar', 'wb_direct_combo_vocab_fill',
+  'wb_direct_combo_grammar_order', 'wb_direct_combo_grammar_insert',
+];
+const WB_MOCK_KEYS = WB_DIRECT_KEYS.map(k => k.replace('wb_direct_', 'wb_mock_'));
+
+const AI_DIRECT_KEYS = [
   'ai_type_topic_title', 'ai_type_grammar', 'ai_type_vocab_paraphrase',
   'ai_type_vocab_blank', 'ai_type_fill_blank', 'ai_type_summary',
   'ai_type_flow', 'ai_type_phrase_meaning', 'ai_type_sentence_order',
 ];
+const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type_'));
 
-const SECTION_ORDER: { key: string; label: string; color: string; keys: string[]; noToggle?: boolean }[] = [
-  { key: 'signup',     label: '가입 CON',             color: 'text-yellow-400',  keys: ['signup_bonus', 'signup_bonus_referral'], noToggle: true },
-  { key: 'exam_types', label: '실전 변형 문제 유형별', color: 'text-blue-400',    keys: AI_TYPE_KEYS },
-  { key: 'workbook',   label: '워크북',               color: 'text-rose-400',    keys: ['vocab_choice'] },
-  { key: 'pdf',        label: '지문분석',             color: 'text-teal-400',    keys: ['pdf_analysis'] },
-  { key: 'mock_q',     label: '모의고사 변형 문제',    color: 'text-indigo-400',  keys: ['mock_exam_question_per_type'] },
-  { key: 'mock_wb',    label: '모의고사 워크북',       color: 'text-emerald-400', keys: ['mock_workbook'] },
-  { key: 'sms',        label: 'SMS 문자 발송',        color: 'text-violet-400',  keys: ['sms', 'lms'], noToggle: true },
+const SECTIONS: SectionConfig[] = [
+  {
+    key: 'signup', label: '가입 CON', color: 'text-yellow-400',
+    keys: ['signup_bonus', 'signup_bonus_referral'],
+    noToggle: true,
+    note: '추천인 코드 없이 가입 시 기본 CON · 유효 코드 입력 시 두 항목 합산 지급',
+  },
+  {
+    key: 'sms', label: 'SMS 문자 발송', color: 'text-violet-400',
+    keys: ['sms', 'lms'],
+    noToggle: true,
+    note: '90바이트 이하 SMS · 초과 시 LMS 자동 적용',
+  },
+  {
+    key: 'pdf', label: '지문분석', color: 'text-teal-400',
+    subsections: [
+      { label: '직접 입력', keys: ['pdf_analysis_direct'] },
+      { label: '모의고사',  keys: ['pdf_analysis_mock'] },
+    ],
+  },
+  {
+    key: 'workbook', label: '워크북', color: 'text-rose-400',
+    subsections: [
+      { label: '직접 입력', keys: WB_DIRECT_KEYS },
+      { label: '모의고사',  keys: WB_MOCK_KEYS },
+    ],
+  },
+  {
+    key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
+    keys: AI_DIRECT_KEYS,
+  },
+  {
+    key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
+    keys: AI_MOCK_KEYS,
+  },
 ];
 
 export default function ConPricingPage() {
@@ -39,149 +94,172 @@ export default function ConPricingPage() {
   useEffect(() => {
     fetch('/api/superadmin/credits/pricing')
       .then(r => r.json())
-      .then(d => {
-        setPricing(d.pricing || []);
-        setLoading(false);
-      })
+      .then(d => { setPricing(d.pricing || []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
   const pricingMap = Object.fromEntries(pricing.map(p => [p.feature_key, p]));
 
-  const startEdit = (featureKey: string, current: number) => {
-    setEditing(prev => ({ ...prev, [featureKey]: String(current) }));
+  const startEdit = (key: string, cur: number) =>
+    setEditing(prev => ({ ...prev, [key]: String(cur) }));
+
+  const cancelEdit = (key: string) => {
+    setEditing(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setSaveMsg(prev => { const n = { ...prev }; delete n[key]; return n; });
   };
 
-  const cancelEdit = (featureKey: string) => {
-    setEditing(prev => { const n = { ...prev }; delete n[featureKey]; return n; });
-    setSaveMsg(prev => { const n = { ...prev }; delete n[featureKey]; return n; });
-  };
-
-  const handleSave = async (featureKey: string) => {
-    const newCost = parseInt(editing[featureKey] ?? '', 10);
-    if (isNaN(newCost) || newCost < 0) return;
-    setSaving(featureKey);
+  const handleSave = async (key: string) => {
+    const v = parseInt(editing[key] ?? '', 10);
+    if (isNaN(v) || v < 0) return;
+    setSaving(key);
     try {
       const res = await fetch('/api/superadmin/credits/pricing', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature_key: featureKey, cost_per_use: newCost }),
+        body: JSON.stringify({ feature_key: key, cost_per_use: v }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setPricing(prev => prev.map(p => p.feature_key === featureKey ? { ...p, cost_per_use: newCost } : p));
-        cancelEdit(featureKey);
-        setSaveMsg(prev => ({ ...prev, [featureKey]: '저장됨' }));
-        setTimeout(() => setSaveMsg(prev => { const n = { ...prev }; delete n[featureKey]; return n; }), 2000);
+      const d = await res.json();
+      if (d.success) {
+        setPricing(prev => prev.map(p => p.feature_key === key ? { ...p, cost_per_use: v } : p));
+        cancelEdit(key);
+        setSaveMsg(prev => ({ ...prev, [key]: '저장됨' }));
+        setTimeout(() => setSaveMsg(prev => { const n = { ...prev }; delete n[key]; return n; }), 2000);
       } else {
-        setSaveMsg(prev => ({ ...prev, [featureKey]: `오류: ${data.error}` }));
+        setSaveMsg(prev => ({ ...prev, [key]: `오류: ${d.error}` }));
       }
     } catch {
-      setSaveMsg(prev => ({ ...prev, [featureKey]: '서버 오류' }));
-    } finally {
-      setSaving(null);
-    }
+      setSaveMsg(prev => ({ ...prev, [key]: '서버 오류' }));
+    } finally { setSaving(null); }
   };
 
-  const handleToggle = useCallback(async (featureKey: string, current: boolean) => {
-    setToggling(featureKey);
+  const handleToggle = useCallback(async (key: string, cur: boolean) => {
+    setToggling(key);
     try {
       const res = await fetch('/api/superadmin/credits/pricing', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feature_key: featureKey, is_active: !current }),
+        body: JSON.stringify({ feature_key: key, is_active: !cur }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setPricing(prev => prev.map(p => p.feature_key === featureKey ? { ...p, is_active: !current } : p));
-      }
-    } finally {
-      setToggling(null);
-    }
+      const d = await res.json();
+      if (d.success) setPricing(prev => prev.map(p => p.feature_key === key ? { ...p, is_active: !cur } : p));
+    } finally { setToggling(null); }
   }, []);
 
-  const renderRow = (item: PricingItem, showToggle = true) => {
-    const editValue = editing[item.feature_key];
-    const isSavingThis = saving === item.feature_key;
-    const isTogglingThis = toggling === item.feature_key;
+  const renderRow = (item: PricingItem, showToggle: boolean) => {
+    const ev = editing[item.feature_key];
+    const isSaving = saving === item.feature_key;
+    const isToggling = toggling === item.feature_key;
     const msg = saveMsg[item.feature_key];
     return (
-      <tr key={item.id} className={`border-t border-slate-800 transition-colors ${item.is_active ? 'hover:bg-slate-800/20' : 'opacity-50 hover:bg-slate-800/10'}`}>
-        <td className="py-4 px-6">
-          <p className="font-black text-white">{item.feature_name}</p>
-          <p className="text-xs text-slate-500 font-bold mt-0.5">{item.feature_key}</p>
+      <tr key={item.id} className={`border-t border-slate-800 transition-colors ${item.is_active ? 'hover:bg-slate-800/20' : 'opacity-40 hover:bg-slate-800/10'}`}>
+        <td className="py-3 px-5">
+          <p className="font-black text-white text-sm">{item.feature_name}</p>
+          <p className="text-[10px] text-slate-600 font-bold mt-0.5">{item.feature_key}</p>
         </td>
-        <td className="py-4 px-6 text-slate-400 font-bold text-sm">{item.unit_description}</td>
-        <td className="py-4 px-6 text-center">
-          {editValue !== undefined ? (
-            <input
-              type="number"
-              min="0"
-              value={editValue}
+        <td className="py-3 px-5 text-slate-400 font-bold text-xs">{item.unit_description}</td>
+        <td className="py-3 px-5 text-center">
+          {ev !== undefined ? (
+            <input type="number" min="0" value={ev}
               onChange={e => setEditing(prev => ({ ...prev, [item.feature_key]: e.target.value }))}
-              className="w-24 text-center px-3 py-2 bg-slate-800 border-2 border-yellow-500 rounded-lg text-white font-black focus:outline-none text-sm"
-              autoFocus
-            />
+              className="w-20 text-center px-2 py-1.5 bg-slate-800 border-2 border-yellow-500 rounded-lg text-white font-black focus:outline-none text-sm"
+              autoFocus />
           ) : (
-            <span className="font-black text-yellow-400 text-base">{item.cost_per_use} C</span>
+            <span className="font-black text-yellow-400">{item.cost_per_use} C</span>
           )}
-          {msg && (
-            <p className={`text-xs font-bold mt-1 ${msg.startsWith('오류') || msg === '서버 오류' ? 'text-red-400' : 'text-green-400'}`}>
-              {msg}
-            </p>
-          )}
+          {msg && <p className={`text-[10px] font-bold mt-0.5 ${msg.startsWith('오류') || msg === '서버 오류' ? 'text-red-400' : 'text-green-400'}`}>{msg}</p>}
         </td>
         {showToggle && (
-          <td className="py-4 px-6 text-center">
-            <button
-              onClick={() => handleToggle(item.feature_key, item.is_active)}
-              disabled={isTogglingThis}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${item.is_active ? 'bg-emerald-500' : 'bg-slate-600'}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${item.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+          <td className="py-3 px-5 text-center">
+            <button onClick={() => handleToggle(item.feature_key, item.is_active)} disabled={isToggling}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${item.is_active ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${item.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </button>
-            <p className={`text-xs font-bold mt-1 ${item.is_active ? 'text-emerald-400' : 'text-slate-500'}`}>
-              {item.is_active ? 'ON' : 'OFF'}
-            </p>
           </td>
         )}
-        <td className="py-4 px-6 text-center">
-          {editValue !== undefined ? (
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => handleSave(item.feature_key)}
-                disabled={isSavingThis}
-                className="px-4 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all disabled:opacity-50"
-              >
-                {isSavingThis ? '저장 중...' : '저장'}
+        <td className="py-3 px-5 text-center">
+          {ev !== undefined ? (
+            <div className="flex items-center justify-center gap-1.5">
+              <button onClick={() => handleSave(item.feature_key)} disabled={isSaving}
+                className="px-3 py-1 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all disabled:opacity-50">
+                {isSaving ? '…' : '저장'}
               </button>
-              <button
-                onClick={() => cancelEdit(item.feature_key)}
-                className="px-4 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
-              >
+              <button onClick={() => cancelEdit(item.feature_key)}
+                className="px-3 py-1 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all">
                 취소
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => startEdit(item.feature_key, item.cost_per_use)}
-              className="px-4 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all"
-            >
+            <button onClick={() => startEdit(item.feature_key, item.cost_per_use)}
+              className="px-3 py-1 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all">
               수정
             </button>
           )}
         </td>
-        <td className="py-4 px-6 text-right text-xs text-slate-500 font-bold">
+        <td className="py-3 px-5 text-right text-[10px] text-slate-500 font-bold">
           {new Date(item.updated_at).toLocaleDateString('ko-KR')}
         </td>
       </tr>
     );
   };
 
-  const activeExamTypes = AI_TYPE_KEYS.filter(k => pricingMap[k]?.is_active).length;
+  const renderTable = (keys: string[], showToggle: boolean) => {
+    const items = keys.map(k => pricingMap[k]).filter(Boolean);
+    if (items.length === 0) return <tr><td colSpan={showToggle ? 6 : 5} className="py-4 px-5 text-xs text-slate-500 font-bold text-center">DB에 항목 없음 — SQL 마이그레이션을 실행해주세요</td></tr>;
+    return <>{items.map(item => renderRow(item, showToggle))}</>;
+  };
+
+  const renderSectionCard = (section: SectionConfig) => {
+    const showToggle = !section.noToggle;
+    const colCount = showToggle ? 6 : 5;
+    const hasItems = section.subsections
+      ? section.subsections.some(sub => sub.keys.some(k => pricingMap[k]))
+      : (section.keys ?? []).some(k => pricingMap[k]);
+
+    return (
+      <div key={section.key} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+        <div className="px-6 py-3 bg-slate-800/60 flex items-center justify-between">
+          <h2 className={`text-sm font-black ${section.color}`}>{section.label}</h2>
+          {section.note && <span className="text-xs font-bold text-slate-400">{section.note}</span>}
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-800/30">
+            <tr>
+              <th className="py-2 px-5 text-left text-xs font-black text-slate-500">기능</th>
+              <th className="py-2 px-5 text-left text-xs font-black text-slate-500">단위</th>
+              <th className="py-2 px-5 text-center text-xs font-black text-slate-500">단가 (C)</th>
+              {showToggle && <th className="py-2 px-5 text-center text-xs font-black text-slate-500">활성</th>}
+              <th className="py-2 px-5 text-center text-xs font-black text-slate-500">수정</th>
+              <th className="py-2 px-5 text-right text-xs font-black text-slate-500">수정일</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.subsections ? (
+              section.subsections.map((sub, si) => (
+                <>
+                  <tr key={`sub-${si}`} className="bg-slate-800/40 border-t border-slate-700">
+                    <td colSpan={colCount} className="px-5 py-2">
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">└ {sub.label}</span>
+                    </td>
+                  </tr>
+                  {renderTable(sub.keys, showToggle)}
+                </>
+              ))
+            ) : (
+              renderTable(section.keys ?? [], showToggle)
+            )}
+            {!hasItems && (
+              <tr><td colSpan={colCount} className="py-4 px-5 text-xs text-slate-500 font-bold text-center">
+                DB에 항목 없음 — SQL 마이그레이션을 실행해주세요
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
         <h1 className="text-3xl font-black text-white">⭐ CON 관리</h1>
         <p className="text-sm text-slate-500 mt-1 font-bold">기능별 CON 단가 및 활성 여부를 설정합니다</p>
@@ -189,7 +267,8 @@ export default function ConPricingPage() {
 
       <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3">
         <p className="text-xs font-bold text-slate-400">
-          💡 단가 변경은 즉시 적용됩니다. 실전 변형 문제 유형을 OFF하면 원장님 화면에서 해당 유형이 숨겨집니다.
+          💡 단가 변경은 즉시 적용됩니다. 유형 OFF 시 원장님 화면에서 숨겨집니다.
+          신규 항목이 보이지 않으면 <code className="text-yellow-400">supabase-con-pricing-v2-migration.sql</code>을 실행해주세요.
         </p>
       </div>
 
@@ -197,89 +276,21 @@ export default function ConPricingPage() {
         <div className="text-center py-16 text-slate-400 font-bold">불러오는 중...</div>
       ) : (
         <div className="space-y-4">
-          {SECTION_ORDER.map(section => {
-            const items = section.keys.map(k => pricingMap[k]).filter(Boolean);
-            if (items.length === 0) return null;
-            const showToggle = !section.noToggle;
-            const colCount = showToggle ? 6 : 5;
-            return (
-              <div key={section.key} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-                <div className="px-6 py-3 bg-slate-800/60 flex items-center justify-between">
-                  <h2 className={`text-sm font-black ${section.color}`}>{section.label}</h2>
-                  {section.key === 'exam_types' && (
-                    <span className="text-xs font-bold text-slate-400">
-                      활성 유형 <span className="text-blue-400 font-black">{activeExamTypes}</span> / {AI_TYPE_KEYS.length}개
-                    </span>
-                  )}
-                  {section.key === 'sms' && (
-                    <span className="text-xs font-bold text-slate-400">
-                      90바이트 이하 SMS · 초과 시 LMS 자동 적용
-                    </span>
-                  )}
-                  {section.key === 'signup' && (
-                    <span className="text-xs font-bold text-slate-400">
-                      추천인 코드 없이 가입 시 기본 CON · 유효 코드 입력 시 두 항목 합산 지급
-                    </span>
-                  )}
-                </div>
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-800/30">
-                    <tr>
-                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">기능</th>
-                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">단위</th>
-                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">현재 단가 (CON)</th>
-                      {showToggle && <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">활성</th>}
-                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">수정</th>
-                      <th className="py-2.5 px-6 text-right text-xs font-black text-slate-500">마지막 수정</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map(item => renderRow(item, showToggle))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
-
-          {/* 미분류 활성 항목 */}
-          {(() => {
-            const knownKeys = new Set(SECTION_ORDER.flatMap(s => s.keys));
-            const others = pricing.filter(p => !knownKeys.has(p.feature_key) && p.is_active);
-            if (others.length === 0) return null;
-            return (
-              <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-                <div className="px-6 py-3 bg-slate-800/60">
-                  <h2 className="text-sm font-black text-slate-400">기타</h2>
-                </div>
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-800/30">
-                    <tr>
-                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">기능</th>
-                      <th className="py-2.5 px-6 text-left text-xs font-black text-slate-500">단위</th>
-                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">현재 단가 (CON)</th>
-                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">활성</th>
-                      <th className="py-2.5 px-6 text-center text-xs font-black text-slate-500">수정</th>
-                      <th className="py-2.5 px-6 text-right text-xs font-black text-slate-500">마지막 수정</th>
-                    </tr>
-                  </thead>
-                  <tbody>{others.map(item => renderRow(item, true))}</tbody>
-                </table>
-              </div>
-            );
-          })()}
+          {SECTIONS.map(renderSectionCard)}
         </div>
       )}
 
+      {/* CON 패키지 안내 */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
         <h3 className="text-sm font-black text-white">📦 CON 패키지 안내</h3>
         <div className="grid grid-cols-3 gap-3">
           {[
-            { amount: 100, price: '10,000원' },
-            { amount: 300, price: '30,000원' },
-            { amount: 500, price: '50,000원' },
+            { amount: 1000, price: '10,000원' },
+            { amount: 3000, price: '30,000원' },
+            { amount: 5000, price: '50,000원' },
           ].map(pkg => (
             <div key={pkg.amount} className="bg-slate-800 rounded-xl px-4 py-3 text-center">
-              <p className="text-xl font-black text-yellow-400">{pkg.amount} C</p>
+              <p className="text-xl font-black text-yellow-400">{pkg.amount.toLocaleString()} C</p>
               <p className="text-xs font-bold text-slate-400 mt-1">{pkg.price}</p>
             </div>
           ))}
