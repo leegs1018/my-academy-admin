@@ -117,16 +117,24 @@ export default function CompleteProfilePage() {
       return;
     }
 
+    const { data: { session: newSession } } = await supabase.auth.getSession();
+    const token = newSession?.access_token ?? session.access_token;
+    // 가입 보너스 CON 이력 기록 (비동기, 실패해도 무관)
+    if (token) {
+      const referralExtra = referrerFound ? (points - baseBonus) : 0;
+      fetch('/api/signup-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ base_amount: baseBonus, referral_amount: referralExtra }),
+      }).catch(() => {});
+    }
     // 추천인 보상 지급 (비동기, 실패해도 무관)
-    if (referrerFound && enteredCode) {
-      const { data: { session: newSession } } = await supabase.auth.getSession();
-      if (newSession?.access_token) {
-        fetch('/api/referral-reward', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${newSession.access_token}` },
-          body: JSON.stringify({ referral_code: enteredCode }),
-        }).catch(() => {});
-      }
+    if (referrerFound && enteredCode && token) {
+      fetch('/api/referral-reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ referral_code: enteredCode }),
+      }).catch(() => {});
     }
 
     await supabase.auth.updateUser({
