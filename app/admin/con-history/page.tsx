@@ -44,9 +44,11 @@ const FEATURE_OPTIONS = [
   { value: 'lms',      label: 'LMS 문자' },
 ];
 
-const FREE_KEYWORDS = ['무료', '가입 기념', '추천인', '무료지급'];
+const FREE_KEYWORDS = ['무료', '가입 기념', '추천인', '무료지급', '신규 가입'];
+const FREE_FEATURE_KEYS = new Set(['signup_bonus', 'signup_bonus_referral', 'referral_reward']);
 
-function isFreeCharge(description: string | null): boolean {
+function isFreeCharge(description: string | null, featureKey?: string | null): boolean {
+  if (featureKey && FREE_FEATURE_KEYS.has(featureKey)) return true;
   if (!description) return false;
   return FREE_KEYWORDS.some(k => description.includes(k));
 }
@@ -279,7 +281,7 @@ export default function ConHistoryPage() {
                 {transactions.map(tx => {
                   const fl = featureLabel(tx.feature_key);
                   const isCharge = tx.type === 'charge';
-                  const free = isCharge && isFreeCharge(tx.description);
+                  const free = isCharge && isFreeCharge(tx.description, tx.feature_key);
                   return (
                     <tr key={tx.id} className="border-t border-gray-100 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="py-3 px-4 text-xs font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
