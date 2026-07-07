@@ -23,7 +23,7 @@ const menuItems: MenuItem[] = [
     icon: '🤖',
     children: [
       { href: '/admin/pdf-editor',    label: '지문분석',     icon: '📝' },
-      { href: '/admin/vocab-choice',  label: '워크북 (개발중)', icon: '📌' },
+      { href: '/admin/vocab-choice',  label: '워크북 (오픈예정)', icon: '📌' },
       { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
     ],
   },
