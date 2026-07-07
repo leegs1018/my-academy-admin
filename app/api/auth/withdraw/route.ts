@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-// 무료 CON으로 간주할 description 패턴
-const FREE_CON_PATTERNS = ['가입 기념', '추천인', '환불', '어드민', '지급', 'superadmin', '슈퍼어드민'];
+const FREE_CON_PATTERNS = ['가입 기념', '추천인', '환불', '어드민', '지급', 'superadmin', '슈퍼어드민', '신규 가입'];
+const FREE_FEATURE_KEYS = new Set(['signup_bonus', 'signup_bonus_referral', 'referral_reward']);
 
-function isFreeCharge(description: string): boolean {
+function isFreeCharge(description: string, featureKey?: string | null): boolean {
+  if (featureKey && FREE_FEATURE_KEYS.has(featureKey)) return true;
   return FREE_CON_PATTERNS.some(p => description.toLowerCase().includes(p.toLowerCase()));
 }
 
@@ -32,12 +33,12 @@ export async function POST(request: NextRequest) {
   // 유료 CON 여부 확인
   const { data: transactions } = await admin
     .from('con_transactions')
-    .select('amount, description, type')
+    .select('amount, description, type, feature_key')
     .eq('academy_id', user.id)
     .eq('type', 'charge');
 
   const hasPaidCon = (transactions ?? []).some(
-    tx => tx.amount > 0 && !isFreeCharge(tx.description ?? '')
+    tx => tx.amount > 0 && !isFreeCharge(tx.description ?? '', tx.feature_key)
   );
 
   if (hasPaidCon) {
