@@ -6,8 +6,9 @@ export async function GET(request: NextRequest) {
   const authError = await requireSuperAdmin(request);
   if (authError) return authError;
 
+  try {
   const { searchParams } = new URL(request.url);
-  const academySearch = searchParams.get('academy_search') || '';
+  const academySearch = (searchParams.get('academy_search') || '').trim();
   const startDate = searchParams.get('start_date') || '';
   const endDate = searchParams.get('end_date') || '';
   const typeFilter = searchParams.get('type') || 'all';
@@ -20,10 +21,12 @@ export async function GET(request: NextRequest) {
   // 학원 검색 — academy_config에서 id 목록 조회
   let academyIds: string[] | null = null;
   if (academySearch) {
+    // PostgREST ilike에서 문제가 될 수 있는 특수문자 이스케이프
+    const safe = academySearch.replace(/[%_\\]/g, c => `\\${c}`);
     const { data: academyRows } = await db
       .from('academy_config')
       .select('user_id, academy_name, email')
-      .or(`academy_name.ilike.%${academySearch}%,email.ilike.%${academySearch}%`);
+      .or(`academy_name.ilike.%${safe}%,email.ilike.%${safe}%`);
     academyIds = (academyRows ?? []).map((r: { user_id: string }) => r.user_id);
     if (academyIds.length === 0) {
       return NextResponse.json({ transactions: [], total: 0, page, pageSize, summary: { total_charge: 0, total_deduct: 0 } });
@@ -104,8 +107,12 @@ export async function GET(request: NextRequest) {
 
   const enriched = (transactions ?? []).map((t: Record<string, unknown>) => ({
     ...t,
-    academy_name: academyMap[t.academy_id as string] || String(t.academy_id),
+    academy_name: academyMap[t.academy_id as string] || '(삭제된 학원)',
   }));
 
   return NextResponse.json({ transactions: enriched, total: count ?? 0, page, pageSize, summary });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

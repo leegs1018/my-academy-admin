@@ -23,7 +23,7 @@ const menuItems: MenuItem[] = [
     icon: '🤖',
     children: [
       { href: '/admin/pdf-editor',    label: '지문분석',     icon: '📝' },
-      { href: '/admin/vocab-choice',  label: '워크북',       icon: '📌' },
+      { href: '/admin/vocab-choice',  label: '워크북 (개발중)', icon: '📌' },
       { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
     ],
   },
@@ -36,6 +36,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [academyName, setAcademyName] = useState('');
   const [kioskCode, setKioskCode] = useState('');
+  const [ownReferralCode, setOwnReferralCode] = useState('');
+  const [copiedReferral, setCopiedReferral] = useState(false);
   const [points, setPoints] = useState<number>(0);
   const [userRole, setUserRole] = useState<string>('');
   const [isDark, setIsDark] = useState(false);
@@ -71,13 +73,23 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code, points, role')
+          .select('academy_name, kiosk_code, points, role, own_referral_code')
           .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
         if (data?.points !== undefined) setPoints(data.points);
         setUserRole(data?.role ?? 'ai_only');
+        if (data?.own_referral_code) {
+          setOwnReferralCode(data.own_referral_code);
+        } else {
+          // 코드가 없으면 생성 후 저장
+          const newCode = Math.random().toString(36).slice(2, 10).toUpperCase();
+          setOwnReferralCode(newCode);
+          await supabase.from('academy_config')
+            .update({ own_referral_code: newCode })
+            .eq('user_id', session.user.id);
+        }
       }
     };
     getAcademyInfo();
@@ -311,6 +323,25 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       <div className="mt-2">
                         <p className="text-[10px] text-gray-400 font-bold">출결 키오스크 코드</p>
                         <p className="text-xl font-black text-gray-900 tracking-[0.2em] mt-0.5">{kioskCode}</p>
+                      </div>
+                    )}
+                    {ownReferralCode && (
+                      <div className="mt-2">
+                        <p className="text-[10px] text-gray-400 font-bold">내 추천인 코드</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-base font-black text-indigo-700 tracking-[0.15em]">{ownReferralCode}</p>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(ownReferralCode);
+                              setCopiedReferral(true);
+                              setTimeout(() => setCopiedReferral(false), 2000);
+                            }}
+                            className="text-[10px] font-black px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600 hover:bg-indigo-200 transition-colors"
+                          >
+                            {copiedReferral ? '복사됨!' : '복사'}
+                          </button>
+                        </div>
+                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">신규 가입 시 입력 → 총 700C 지급</p>
                       </div>
                     )}
                   </div>

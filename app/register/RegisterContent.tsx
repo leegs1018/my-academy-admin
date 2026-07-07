@@ -59,10 +59,21 @@ export default function RegisterContent() {
       if (authError) throw authError;
 
       if (data.user) {
-        const initialPoints = formData.referralCode ? 2000 : 1000;
+        // 추천인 코드 검증
+        let initialPoints = 300;
+        const enteredCode = formData.referralCode?.trim().toUpperCase();
+        if (enteredCode) {
+          const { data: referrer } = await supabase
+            .from('academy_config')
+            .select('user_id')
+            .eq('own_referral_code', enteredCode)
+            .single();
+          if (referrer) initialPoints = 700;
+        }
 
         const generateKioskCode = () => Math.floor(100000 + Math.random() * 900000).toString();
         let kioskCode = generateKioskCode();
+        const ownReferralCode = Math.random().toString(36).slice(2, 10).toUpperCase();
 
         let dbError = null;
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -74,9 +85,10 @@ export default function RegisterContent() {
                 academy_name: formData.academyName,
                 academy_phone: formData.academyPhone,
                 mobile: formData.mobile,
-                referral_code: formData.referralCode,
+                referral_code: enteredCode || null,
                 points: initialPoints,
                 kiosk_code: kioskCode,
+                own_referral_code: ownReferralCode,
               }
             ]);
           if (!error) { dbError = null; break; }
@@ -89,7 +101,8 @@ export default function RegisterContent() {
           alert('가입은 완료되었으나 학원 정보 설정 중 오류가 발생했습니다. 고객센터로 문의해주세요.');
         } else {
           await supabase.auth.signOut();
-          alert(`축하합니다! 가입 기념 ${initialPoints.toLocaleString()}포인트가 지급되었습니다.\n방금 가입하신 정보로 로그인을 진행해주세요!`);
+          const bonusMsg = initialPoints === 700 ? '추천인 코드 적용! 총 700C' : '가입 기념 300C';
+          alert(`축하합니다! ${bonusMsg}가 지급되었습니다.\n방금 가입하신 정보로 로그인을 진행해주세요!`);
           router.replace('/login');
         }
       }
@@ -139,7 +152,7 @@ export default function RegisterContent() {
           <Input label="비밀번호 확인" name="confirmPassword" type="password" placeholder="••••••••" value={formData.confirmPassword} onChange={handleChange} required />
 
           <div className="md:col-span-2">
-            <Input label="추천인 코드 (입력 시 2,000P)" name="referralCode" placeholder="추천인 코드가 있다면 입력해주세요" value={formData.referralCode} onChange={handleChange} />
+            <Input label="추천인 코드 (유효 시 총 700C)" name="referralCode" placeholder="추천인 코드가 있다면 입력해주세요" value={formData.referralCode} onChange={handleChange} />
           </div>
 
           <div className="md:col-span-2 space-y-3 mt-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">

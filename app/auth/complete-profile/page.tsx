@@ -61,8 +61,20 @@ export default function CompleteProfilePage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
-    const points = form.referralCode ? 400 : 300;
+    // 추천인 코드 검증
+    let points = 300;
+    const enteredCode = form.referralCode?.trim().toUpperCase();
+    if (enteredCode) {
+      const { data: referrer } = await supabase
+        .from('academy_config')
+        .select('user_id')
+        .eq('own_referral_code', enteredCode)
+        .single();
+      if (referrer) points = 700;
+    }
+
     let kioskCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const ownReferralCode = Math.random().toString(36).slice(2, 10).toUpperCase();
 
     let saved = false;
     for (let i = 0; i < 3; i++) {
@@ -71,9 +83,10 @@ export default function CompleteProfilePage() {
         academy_name: form.academyName,
         academy_phone: form.academyPhone,
         mobile: form.mobile,
-        referral_code: form.referralCode,
+        referral_code: enteredCode || null,
         points,
         kiosk_code: kioskCode,
+        own_referral_code: ownReferralCode,
       });
       if (!error) { saved = true; break; }
       if (error.code === '23505') { kioskCode = Math.floor(100000 + Math.random() * 900000).toString(); continue; }
@@ -92,7 +105,8 @@ export default function CompleteProfilePage() {
       data: { role: 'ai_only', academy_name: form.academyName },
     });
 
-    alert(`환영합니다! 가입 기념 ${points.toLocaleString()} CON이 지급되었습니다.`);
+    const bonusMsg = points === 700 ? '추천인 코드 적용! 총 700C' : '가입 기념 300C';
+    alert(`환영합니다! ${bonusMsg}가 지급되었습니다.`);
     router.replace('/admin/pdf-editor');
   };
 
@@ -132,7 +146,7 @@ export default function CompleteProfilePage() {
           <Field label="휴대폰 번호" name="mobile" placeholder="010-1234-5678" value={form.mobile} onChange={change} required />
 
           <div className="md:col-span-2">
-            <Field label="추천인 코드 (입력 시 2,000 CON)" name="referralCode" placeholder="추천인 코드가 있다면 입력해주세요" value={form.referralCode} onChange={change} />
+            <Field label="추천인 코드 (유효 시 총 700C)" name="referralCode" placeholder="추천인 코드가 있다면 입력해주세요" value={form.referralCode} onChange={change} />
           </div>
 
           <div className="md:col-span-2 space-y-3 mt-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">

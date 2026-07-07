@@ -54,6 +54,7 @@ export default function ConHistoryPage() {
   const { start: defaultStart, end: defaultEnd } = getThisMonthRange();
 
   const [academySearch, setAcademySearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
   const [typeFilter, setTypeFilter] = useState('all');
@@ -64,11 +65,19 @@ export default function ConHistoryPage() {
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<Summary>({ total_charge: 0, total_deduct: 0, by_feature: {} });
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+
+  // 300ms 디바운스
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(academySearch), 300);
+    return () => clearTimeout(t);
+  }, [academySearch]);
 
   const fetchData = useCallback(async (p = 1) => {
     setLoading(true);
+    setSearchError('');
     const params = new URLSearchParams({
-      academy_search: academySearch,
+      academy_search: debouncedSearch,
       start_date: startDate,
       end_date: endDate,
       type: typeFilter,
@@ -77,15 +86,20 @@ export default function ConHistoryPage() {
     });
     try {
       const res = await fetch(`/api/superadmin/con-history?${params}`);
+      if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
       const data = await res.json();
       setTransactions(data.transactions || []);
       setTotal(data.total || 0);
       setSummary(data.summary || { total_charge: 0, total_deduct: 0, by_feature: {} });
       setPage(p);
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : '조회 중 오류가 발생했습니다.');
+      setTransactions([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [academySearch, startDate, endDate, typeFilter, featureFilter]);
+  }, [debouncedSearch, startDate, endDate, typeFilter, featureFilter]);
 
   useEffect(() => {
     fetchData(1);
@@ -180,6 +194,12 @@ export default function ConHistoryPage() {
           </div>
         </div>
       </div>
+
+      {searchError && (
+        <div className="bg-red-950 border border-red-800 rounded-2xl p-4 text-sm font-bold text-red-300">
+          ⚠️ {searchError}
+        </div>
+      )}
 
       {/* 집계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

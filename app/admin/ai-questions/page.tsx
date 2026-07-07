@@ -751,6 +751,7 @@ export default function AiQuestionsPage() {
 
   const [userId, setUserId] = useState('');
   const [aiPrice, setAiPrice] = useState<number | null>(null);
+  const [typePricing, setTypePricing] = useState<Record<string, number>>({});
   const [conModal, setConModal] = useState<{ required: number; balance: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDate, setSearchDate] = useState('');
@@ -776,8 +777,26 @@ export default function AiQuestionsPage() {
     fetch('/api/credits/pricing')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const ai = (data?.pricing ?? []).find((p: { feature_key: string; cost_per_use: number }) => p.feature_key === 'ai_question_per_type');
+        const items: { feature_key: string; cost_per_use: number }[] = data?.pricing ?? [];
+        // 유형별 단가 파싱 (ai_type_grammar → grammar: 20)
+        const prices: Record<string, number> = {};
+        const activeTypeKeys = new Set<string>();
+        items.forEach(p => {
+          if (p.feature_key.startsWith('ai_type_')) {
+            const typeKey = p.feature_key.replace('ai_type_', '');
+            prices[typeKey] = p.cost_per_use;
+            activeTypeKeys.add(typeKey);
+          }
+        });
+        setTypePricing(prices);
+        // 비활성 유형 필터링 (슈퍼어드민이 OFF한 유형 숨김)
+        if (activeTypeKeys.size > 0) {
+          setTypeConfigs(prev => prev.filter(c => c.isCustom || activeTypeKeys.has(c.type)));
+        }
+        // fallback: 구형 ai_question_per_type 단가
+        const ai = items.find(p => p.feature_key === 'ai_question_per_type');
         if (ai) setAiPrice(ai.cost_per_use);
+        else if (activeTypeKeys.size === 0) setAiPrice(20);
       })
       .catch(() => {});
   }, []);
@@ -1733,14 +1752,14 @@ export default function AiQuestionsPage() {
           </div>
 
           {/* CON 차감 안내 */}
-          {aiPrice !== null && aiPrice > 0 && (() => {
+          {(() => {
             const passageCount = 1 + extraPassages.length;
-            const typeTotal = validConfigs.reduce((s, c) => s + c.count, 0);
-            const totalQ = passageCount * typeTotal;
+            const defaultPrice = aiPrice ?? 20;
+            const totalCon = passageCount * validConfigs.reduce((s, c) => s + (typePricing[c.type] ?? defaultPrice) * c.count, 0);
+            if (totalCon <= 0 || validConfigs.length === 0) return null;
             return (
               <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800 font-bold text-center space-y-1">
-                <p>문제당 {aiPrice}콘 차감</p>
-                <p>총 {passageCount}지문 × 총 {typeTotal}유형 = {totalQ}문제 생성 시 <span className="font-black text-amber-900">{(aiPrice * totalQ).toLocaleString()} CON</span> 차감 예정</p>
+                <p>총 {passageCount}지문 × {validConfigs.length}유형 → <span className="font-black text-amber-900">{totalCon.toLocaleString()} CON</span> 차감 예정</p>
                 <p className="text-xs text-amber-600 font-medium">생성되는 유형이 많을수록 시간이 더 소요됩니다.</p>
               </div>
             );
@@ -2197,25 +2216,21 @@ export default function AiQuestionsPage() {
           </div>
 
           {/* CON 안내 */}
-          {aiPrice !== null && aiPrice > 0 && (() => {
-            const perPassage = validConfigs.reduce((s, c) => s + c.count, 0);
+          {(() => {
+            const defaultPrice = aiPrice ?? 20;
+            const conPerPassage = validConfigs.reduce((s, c) => s + (typePricing[c.type] ?? defaultPrice) * c.count, 0);
             const validBulkCount = bulkTexts.filter(t => t.trim().length >= 50).length;
-            const totalQ = perPassage * validBulkCount;
+            if (conPerPassage <= 0 || validBulkCount === 0) return null;
             return (
               <div className="px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm">⭐</span>
-                  <span className="text-xs font-black text-yellow-700">문제당 {aiPrice} CON 차감</span>
+                  <span className="text-xs font-black text-yellow-700">지문당 {conPerPassage} CON · {validBulkCount}개 지문</span>
                 </div>
-                {totalQ > 0 && (
-                  <>
-                    <p className="text-xs font-black text-yellow-800 ml-6">
-                      지문당 {perPassage}문제 × {validBulkCount}개 지문 →{' '}
-                      <span className="text-yellow-900">총 {(aiPrice * totalQ).toLocaleString()} CON</span> 차감 예정
-                    </p>
-                    <p className="text-[11px] text-yellow-600 ml-6">⏱ 지문 수에 비례해 시간이 소요됩니다 (순차 생성)</p>
-                  </>
-                )}
+                <p className="text-xs font-black text-yellow-800 ml-6">
+                  <span className="text-yellow-900">총 {(conPerPassage * validBulkCount).toLocaleString()} CON</span> 차감 예정
+                </p>
+                <p className="text-[11px] text-yellow-600 ml-6">⏱ 지문 수에 비례해 시간이 소요됩니다 (순차 생성)</p>
               </div>
             );
           })()}
