@@ -11,6 +11,7 @@ interface Academy {
   points: number;
   kiosk_code: string;
   referral_code: string;
+  own_referral_code: string | null;
   created_at: string;
   student_count: number;
   sms_count: number;
@@ -52,7 +53,8 @@ export default function AcademiesPage() {
     academies.filter(a =>
       a.academy_name?.includes(search) ||
       a.email?.includes(search) ||
-      a.academy_phone?.includes(search)
+      a.academy_phone?.includes(search) ||
+      a.own_referral_code?.includes(search.toUpperCase())
     ),
     [academies, search]
   );
@@ -163,6 +165,7 @@ export default function AcademiesPage() {
                 <th className="py-3 px-4 text-left text-xs font-black text-slate-500">이메일</th>
                 <th className="py-3 px-4 text-left text-xs font-black text-slate-500 hidden md:table-cell">전화번호</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">키오스크</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">추천인코드</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">잔여 콘</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">학생수</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS</th>
@@ -196,6 +199,11 @@ export default function AcademiesPage() {
                     </td>
                     <td className="py-3 px-4 text-center font-black text-slate-300 tracking-widest">
                       {a.kiosk_code || '-'}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {a.own_referral_code
+                        ? <span className="font-black text-indigo-300 tracking-widest text-xs">{a.own_referral_code}</span>
+                        : <span className="text-slate-600 text-xs">-</span>}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className="font-black text-yellow-400">{(a.points || 0).toLocaleString()}</span>
@@ -240,7 +248,7 @@ export default function AcademiesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={11} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={12} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>
