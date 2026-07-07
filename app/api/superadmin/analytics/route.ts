@@ -14,16 +14,15 @@ export async function GET(request: NextRequest) {
   const superAdminUser = usersData?.users?.find((u: any) => u.email === superAdminEmail);
   const superAdminId = superAdminUser?.id;
 
+  // auth.users 기준 전체 유저 목록 (슈퍼어드민 제외) — 프로필 미완성 포함
+  const allNonAdminUsers = (usersData?.users || []).filter((u: any) => u.id !== superAdminId);
+  const totalAcademies = allNonAdminUsers.length;
+
   const [
-    academyCountRes,
     studentCountRes,
     smsCountRes,
-    monthlyRes,
     topStudentRes,
   ] = await Promise.all([
-    superAdminId
-      ? db.from('academy_config').select('*', { count: 'exact', head: true }).neq('user_id', superAdminId)
-      : db.from('academy_config').select('*', { count: 'exact', head: true }),
     superAdminId
       ? db.from('students').select('*', { count: 'exact', head: true }).neq('academy_id', superAdminId)
       : db.from('students').select('*', { count: 'exact', head: true }),
@@ -31,19 +30,16 @@ export async function GET(request: NextRequest) {
       ? db.from('sms_logs').select('total_count').neq('academy_id', superAdminId)
       : db.from('sms_logs').select('total_count'),
     superAdminId
-      ? db.from('academy_config').select('created_at').neq('user_id', superAdminId).order('created_at', { ascending: false })
-      : db.from('academy_config').select('created_at').order('created_at', { ascending: false }),
-    superAdminId
       ? db.from('students').select('academy_id').neq('academy_id', superAdminId)
       : db.from('students').select('academy_id'),
   ]);
 
   const totalSms = (smsCountRes.data || []).reduce((sum: number, r: any) => sum + (r.total_count || 0), 0);
 
-  // 월별 가입 수 계산
+  // 월별 가입 수 계산 (auth.users.created_at 기준, 프로필 미완성 포함)
   const monthlyCounts: Record<string, number> = {};
-  (monthlyRes.data || []).forEach((r: any) => {
-    const month = r.created_at.slice(0, 7);
+  allNonAdminUsers.forEach((u: any) => {
+    const month = (u.created_at as string).slice(0, 7);
     monthlyCounts[month] = (monthlyCounts[month] || 0) + 1;
   });
   const monthlyData = Object.entries(monthlyCounts)
@@ -75,7 +71,7 @@ export async function GET(request: NextRequest) {
   }));
 
   return NextResponse.json({
-    totalAcademies: academyCountRes.count || 0,
+    totalAcademies,
     totalStudents: studentCountRes.count || 0,
     totalSms,
     thisMonthNewAcademies: thisMonthCount,

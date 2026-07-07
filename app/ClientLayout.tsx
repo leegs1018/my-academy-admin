@@ -171,7 +171,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             {(userRole === 'admin'
               ? menuItems
               : menuItems.filter(item =>
-                  item.label === 'AI 문제 생성' || item.label === 'CON 사용 이력' || item.label === '공지사항' || item.label === '문의하기'
+                  item.label === 'AI 문제 생성' || item.label === '이용 가이드' || item.label === 'CON 사용 이력' || item.label === '공지사항' || item.label === '문의하기'
                 )
             ).map((item) => {
               if (item.children) {
