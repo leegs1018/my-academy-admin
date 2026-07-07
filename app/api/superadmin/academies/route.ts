@@ -20,24 +20,9 @@ export async function GET(request: NextRequest) {
   const superAdminUser = allUsers.find((u: any) => u.email === superAdminEmail);
   const superAdminId = superAdminUser?.id;
 
-  const academiesQuery = db.from('academy_config').select('*').order('created_at', { ascending: false });
-  const academiesRes = superAdminId
-    ? await academiesQuery.neq('user_id', superAdminId)
-    : await academiesQuery;
-
-  const emailMap: Record<string, string> = {};
-  const roleMap: Record<string, string> = {};
-  const providerMap: Record<string, string> = {};
-  allUsers.forEach((u: any) => {
-    emailMap[u.id] = u.email || '';
-    roleMap[u.id] = u.user_metadata?.role ?? 'ai_only';
-    // Naver: user_metadata.provider에 수동 저장
-    // Google/Kakao: app_metadata.provider에 자동 저장
-    // 기존 이메일 계정에 SNS 연결 시 identities 배열에서 확인
-    const SNS = ['google', 'kakao', 'naver'];
-    const snsIdentity = (u.identities ?? []).find((i: { provider: string }) => SNS.includes(i.provider));
-    providerMap[u.id] = u.user_metadata?.provider || snsIdentity?.provider || u.app_metadata?.provider || 'email';
-  });
+  const academiesRes = await db.from('academy_config').select('*');
+  const configMap: Record<string, any> = {};
+  (academiesRes.data || []).forEach((a: any) => { configMap[a.user_id] = a; });
 
   const studentCount: Record<string, number> = {};
   (studentsRes.data || []).forEach((r: any) => {
@@ -49,14 +34,34 @@ export async function GET(request: NextRequest) {
     smsCount[r.academy_id] = (smsCount[r.academy_id] || 0) + (r.total_count || 0);
   });
 
-  const academies = (academiesRes.data || []).map((a: any) => ({
-    ...a,
-    email: emailMap[a.user_id] || '',
-    role: roleMap[a.user_id] ?? 'ai_only',
-    provider: providerMap[a.user_id] ?? 'email',
-    student_count: studentCount[a.user_id] || 0,
-    sms_count: smsCount[a.user_id] || 0,
-  }));
+  const SNS = ['google', 'kakao', 'naver'];
+
+  // auth.users 기준으로 전체 목록 생성 (academy_config 미완성 유저도 포함)
+  const academies = allUsers
+    .filter((u: any) => u.id !== superAdminId)
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .map((u: any) => {
+      const config = configMap[u.id] ?? {};
+      const snsIdentity = (u.identities ?? []).find((i: { provider: string }) => SNS.includes(i.provider));
+      const provider = u.user_metadata?.provider || snsIdentity?.provider || u.app_metadata?.provider || 'email';
+      return {
+        user_id: u.id,
+        academy_name: config.academy_name || '',
+        email: u.email || '',
+        academy_phone: config.academy_phone || '',
+        mobile: config.mobile || '',
+        points: config.points || 0,
+        kiosk_code: config.kiosk_code || '',
+        referral_code: config.referral_code || '',
+        own_referral_code: config.own_referral_code || null,
+        created_at: u.created_at,
+        role: u.user_metadata?.role ?? 'ai_only',
+        provider,
+        student_count: studentCount[u.id] || 0,
+        sms_count: smsCount[u.id] || 0,
+        profile_completed: !!configMap[u.id],
+      };
+    });
 
   return NextResponse.json({ academies });
 }

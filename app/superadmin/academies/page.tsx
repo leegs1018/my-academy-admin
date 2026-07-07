@@ -17,6 +17,7 @@ interface Academy {
   sms_count: number;
   role: 'ai_only' | 'admin';
   provider: string;
+  profile_completed: boolean;
 }
 
 const PROVIDER_BADGE: Record<string, { label: string; className: string }> = {
@@ -182,6 +183,9 @@ export default function AcademiesPage() {
                   <tr key={a.user_id} className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-black text-white">{a.academy_name || '(미설정)'}</span>
+                      {!a.profile_completed && (
+                        <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-800">프로필 미완성</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {(() => {
