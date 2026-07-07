@@ -13,14 +13,25 @@ interface ConTx {
 }
 
 const FEATURE_LABELS: Record<string, { label: string; color: string }> = {
-  pdf_analysis:                  { label: '워크북',    color: 'text-blue-500 dark:text-blue-400' },
-  mock_workbook:                 { label: '워크북',    color: 'text-blue-500 dark:text-blue-400' },
-  ai_question_per_type:          { label: '실전변형',  color: 'text-purple-500 dark:text-purple-400' },
-  mock_exam_question_per_type:   { label: '실전변형',  color: 'text-purple-500 dark:text-purple-400' },
-  vocab_choice:                  { label: '어휘선택',  color: 'text-pink-500 dark:text-pink-400' },
-  sms:                           { label: 'SMS',       color: 'text-green-600 dark:text-green-400' },
-  lms:                           { label: 'LMS',       color: 'text-teal-600 dark:text-teal-400' },
-  kiosk:                         { label: '키오스크',  color: 'text-orange-500 dark:text-orange-400' },
+  // 지문분석
+  pdf_analysis:                  { label: '지문분석',       color: 'text-teal-500 dark:text-teal-400' },
+  pdf_analysis_direct:           { label: '지문분석',       color: 'text-teal-500 dark:text-teal-400' },
+  pdf_analysis_mock:             { label: '지문분석(모의)',  color: 'text-teal-500 dark:text-teal-400' },
+  // 실전변형 문제
+  ai_question_per_type:          { label: '실전변형',       color: 'text-purple-500 dark:text-purple-400' },
+  mock_exam_question_per_type:   { label: '실전변형',       color: 'text-purple-500 dark:text-purple-400' },
+  // 워크북
+  mock_workbook:                 { label: '워크북',         color: 'text-blue-500 dark:text-blue-400' },
+  vocab_choice:                  { label: '워크북',         color: 'text-blue-500 dark:text-blue-400' },
+  // 가입/추천 보너스
+  signup_bonus:                  { label: '가입 보너스',    color: 'text-yellow-500 dark:text-yellow-400' },
+  signup_bonus_referral:         { label: '추천인 입력',    color: 'text-amber-500 dark:text-amber-400' },
+  referral_reward:               { label: '추천인 보상',    color: 'text-amber-500 dark:text-amber-400' },
+  // 문자
+  sms:                           { label: 'SMS',            color: 'text-green-600 dark:text-green-400' },
+  lms:                           { label: 'LMS',            color: 'text-teal-600 dark:text-teal-400' },
+  // 키오스크
+  kiosk:                         { label: '키오스크',       color: 'text-orange-500 dark:text-orange-400' },
 };
 
 const FEATURE_OPTIONS = [
@@ -42,7 +53,14 @@ function isFreeCharge(description: string | null): boolean {
 
 function featureLabel(key: string | null) {
   if (!key) return null;
-  return FEATURE_LABELS[key] ?? { label: key, color: 'text-slate-400' };
+  if (FEATURE_LABELS[key]) return FEATURE_LABELS[key];
+  if (key.startsWith('ai_type_') || key.startsWith('mock_ai_type_'))
+    return { label: '실전변형', color: 'text-purple-500 dark:text-purple-400' };
+  if (key.startsWith('wb_direct_'))
+    return { label: '워크북', color: 'text-blue-500 dark:text-blue-400' };
+  if (key.startsWith('wb_mock_'))
+    return { label: '워크북(모의)', color: 'text-blue-500 dark:text-blue-400' };
+  return { label: key, color: 'text-slate-400' };
 }
 
 function formatDate(iso: string) {
