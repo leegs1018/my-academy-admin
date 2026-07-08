@@ -25,6 +25,7 @@ interface SectionConfig {
   keys?: string[];
   noToggle?: boolean;
   note?: string;
+  model?: string;
 }
 
 const WB_DIRECT_KEYS = [
@@ -61,6 +62,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'pdf', label: '지문분석', color: 'text-teal-400',
+    model: 'gpt-4.1-mini',
     subsections: [
       { label: '직접 입력', keys: ['pdf_analysis_direct'] },
       { label: '모의고사',  keys: ['pdf_analysis_mock'] },
@@ -68,6 +70,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'workbook', label: '워크북', color: 'text-rose-400',
+    model: 'gpt-4.1-mini',
     subsections: [
       { label: '직접 입력', keys: WB_DIRECT_KEYS },
       { label: '모의고사',  keys: WB_MOCK_KEYS },
@@ -75,10 +78,12 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
+    model: 'gpt-5.1 (어법: gpt-5.4)',
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
+    model: 'gpt-5.1 (어법: gpt-5.4)',
     keys: AI_MOCK_KEYS,
   },
 ];
@@ -217,9 +222,16 @@ export default function ConPricingPage() {
 
     return (
       <div key={section.key} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-        <div className="px-6 py-3 bg-slate-800/60 flex items-center justify-between">
-          <h2 className={`text-sm font-black ${section.color}`}>{section.label}</h2>
-          {section.note && <span className="text-xs font-bold text-slate-400">{section.note}</span>}
+        <div className="px-6 py-3 bg-slate-800/60 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h2 className={`text-sm font-black ${section.color} whitespace-nowrap`}>{section.label}</h2>
+            {section.model && (
+              <span className="px-2 py-0.5 text-[10px] font-black bg-slate-700 text-slate-300 rounded-md border border-slate-600 whitespace-nowrap">
+                🤖 {section.model}
+              </span>
+            )}
+          </div>
+          {section.note && <span className="text-xs font-bold text-slate-400 text-right">{section.note}</span>}
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-800/30">
