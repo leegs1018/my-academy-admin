@@ -489,23 +489,37 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 
     // ── 1지문 2유형: 어법+문장삽입 ─────────────────────────────────────────
     case 'combo_grammar_insert':
-      return header('아래 영어 지문으로 어법 선택 문제와 문장 삽입 문제를 동시에 생성하세요.') +
-`섹션1 (어법 선택): 12~15개 어법 포인트에 번호[형태A/형태B] 삽입.
-섹션2 (문장 삽입): 적절한 문장 1개 제거 → ①②③④⑤ 삽입 위치 표시.
+      return header('아래 영어 지문으로 "어법 수정 + 문장 삽입" 1지문 2문항 문제를 생성하세요.') +
+`지문 형식 (두 종류 표시를 하나의 지문에 혼합):
+- 문장 삽입 위치 5곳: (A) (B) (C) (D) (E) 를 문장 경계에 삽입 (단독 마커, 공백 사이)
+- 어법 항목 5개: ①word ②word 형식으로 인라인 삽입 (번호+단어 공백 없이)
+  → ①~⑤ 중 정확히 3개만 어법 오류, 나머지 2개는 올바른 표현
+  → 어법 오류 3개의 번호를 grammar_wrong에 기록
 
-원본 지문을 절대 변형하지 마세요.
+문제 1 (어법 수정): "밑줄 친 ②③⑤를 어법에 맞게 바꾸어 쓰시오"
+- grammar_wrong: 어법 오류인 3개의 번호 목록 (예: ["②","③","⑤"])
+- grammar_answers: 각 오류의 틀린 형태와 바른 형태
+
+문제 2 (문장 삽입): "(A)~(E) 중 주어진 문장이 들어가기에 가장 적절한 곳"
+- insert_sentence: 삽입할 문장 (지문에서 제거한 원문 문장)
+- insert_answer: 정답 위치 (예: "(C)")
+
+⚠️ 규칙:
+- (A)~(E) 마커와 ①~⑤ 항목은 겹치지 않게 배치
+- 번호+단어 사이 공백 금지: ①caring (O) / ① caring (X)
+- 원문 나머지 절대 변경 금지
 
 출력 형식 (순수 JSON만):
 {
-  "section1": {
-    "passage": "어법 선택지 삽입 지문",
-    "answer_key": "1. 정답  2. 정답 ..."
-  },
-  "section2": {
-    "insert_sentence": "삽입할 문장",
-    "passage": "①~⑤ 표시 지문",
-    "answer_key": "정답: ②"
-  }
+  "passage": "...was locked up in a tower. (A) Every day...take good ②caring of you.' (B) One day...Rapunzel ③making up her mind... she ⑤using her hair... (C)...(D)...(E)...",
+  "insert_sentence": "This was different from what the witch told her, so she didn't believe him.",
+  "insert_answer": "(C)",
+  "grammar_wrong": ["②", "③", "⑤"],
+  "grammar_answers": [
+    {"num": "②", "wrong": "caring", "correct": "care"},
+    {"num": "③", "wrong": "making", "correct": "made"},
+    {"num": "⑤", "wrong": "using", "correct": "used"}
+  ]
 }`;
 
     default:

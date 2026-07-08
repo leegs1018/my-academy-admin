@@ -719,6 +719,70 @@ function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult;
   );
 }
 
+function RenderComboGrammarInsert({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const passage = result.passage as string ?? '';
+  const insertSentence = result.insert_sentence as string ?? '';
+  const insertAnswer = result.insert_answer as string ?? '';
+  const grammarWrong = (result.grammar_wrong as string[]) || [];
+  const grammarAnswers = (result.grammar_answers as Array<{num:string;wrong:string;correct:string}>) || [];
+  const parts = passage.split(/(\([A-E]\)|[①②③④⑤][a-zA-Z''\-]+)/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const ins = part.match(/^\(([A-E])\)$/);
+    if (ins) return (
+      <span key={i} className="font-black text-violet-700 mx-0.5 text-xs align-middle">({ins[1]})</span>
+    );
+    const gm = part.match(/^([①②③④⑤])(.+)$/);
+    if (gm) {
+      const wrong = grammarWrong.includes(gm[1]);
+      return (
+        <span key={i}>
+          <span className="font-black">{gm[1]}</span>
+          <span className={`font-bold underline${wrong && showAnswer ? ' text-rose-600' : ''}`}>{gm[2]}</span>
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+  const choiceNums = ['①','②','③','④','⑤'];
+  const choiceLabels = ['A','B','C','D','E'];
+  return (
+    <div className="text-sm leading-loose">
+      <p className="mb-4">{renderPassage()}</p>
+      <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">
+          1. 위 글의 밑줄 친 {grammarWrong.join(', ')}를 어법에 맞게 바꾸어 쓰시오.
+        </p>
+        <div className="space-y-1">
+          {grammarWrong.map((num, i) => {
+            const ans = grammarAnswers.find(a => a.num === num);
+            return (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="font-black w-5 shrink-0">{num}</span>
+                {showAnswer && ans
+                  ? <span className="font-bold text-emerald-600">{ans.correct}</span>
+                  : <span className="border-b border-slate-400 inline-block min-w-[180px]">&nbsp;</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">
+          2. 위 글의 흐름상 (A)~(E) 중 주어진 문장이 들어가기에 가장 적절한 곳은 어디인가?
+        </p>
+        <div className="bg-white border border-slate-200 rounded p-2 mb-3 text-sm text-slate-700 italic">{insertSentence}</div>
+        <div className="flex flex-wrap gap-5 text-sm">
+          {choiceLabels.map((l, i) => {
+            const hit = showAnswer && insertAnswer === `(${l})`;
+            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{choiceNums[i]} {l}</span>;
+          })}
+        </div>
+        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {insertAnswer}</p>}
+      </div>
+    </div>
+  );
+}
+
 function RenderComboGrammarOrder({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
   const paragraphs = (result.paragraphs as Array<{label:string;text:string}>) || [];
   const orderAnswer = result.order_answer as string ?? '';
@@ -878,6 +942,7 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
   if (type === 'combo_vocab_grammar') return <RenderComboVocabGrammar result={result} showAnswer={showAnswer} />;
   if (type === 'combo_vocab_fill') return <RenderComboVocabFill result={result} showAnswer={showAnswer} />;
   if (type === 'combo_grammar_order') return <RenderComboGrammarOrder result={result} showAnswer={showAnswer} />;
+  if (type === 'combo_grammar_insert') return <RenderComboGrammarInsert result={result} showAnswer={showAnswer} />;
 
   const isCombo = type.startsWith('combo_');
   if (isCombo) {
@@ -1424,6 +1489,71 @@ function PdfSimple({ result, isAnswer, title, id }: { result: WorkbookResult; is
           {result.answer_key as string}
         </div>
       )}
+    </div>
+  );
+}
+
+function PdfComboGrammarInsert({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const passage = result.passage as string ?? '';
+  const insertSentence = result.insert_sentence as string ?? '';
+  const insertAnswer = result.insert_answer as string ?? '';
+  const grammarWrong = (result.grammar_wrong as string[]) || [];
+  const grammarAnswers = (result.grammar_answers as Array<{num:string;wrong:string;correct:string}>) || [];
+  const parts = passage.split(/(\([A-E]\)|[①②③④⑤][a-zA-Z''\-]+)/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const ins = part.match(/^\(([A-E])\)$/);
+    if (ins) return (
+      <span key={i} style={{ fontWeight: 900, color: '#6D28D9', margin: '0 2px', fontSize: 11 }}>({ins[1]})</span>
+    );
+    const gm = part.match(/^([①②③④⑤])(.+)$/);
+    if (gm) return (
+      <span key={i}>
+        <span style={{ fontWeight: 900 }}>{gm[1]}</span>
+        <span style={{ fontWeight: 700, textDecoration: 'underline' }}>{gm[2]}</span>
+      </span>
+    );
+    return <span key={i}>{part}</span>;
+  });
+  const choiceNums = ['①','②','③','④','⑤'];
+  const choiceLabels = ['A','B','C','D','E'];
+  return (
+    <div id={id} style={PDF_BASE}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+        Q. 다음 글을 읽고 물음에 답하시오.
+      </p>
+      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <p style={PDF_P}>{renderPassage()}</p>
+      <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          1. 위 글의 밑줄 친 {grammarWrong.join(', ')}를 어법에 맞게 바꾸어 쓰시오.
+        </p>
+        {grammarWrong.map((num, i) => {
+          const ans = grammarAnswers.find(a => a.num === num);
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontWeight: 900, fontSize: 12, width: 20, flexShrink: 0 }}>{num}</span>
+              {isAnswer && ans
+                ? <span style={{ fontWeight: 700, color: '#059669', fontSize: 12 }}>{ans.correct}</span>
+                : <span style={{ borderBottom: '1px solid #94A3B8', display: 'inline-block', minWidth: 180 }}>&nbsp;</span>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          2. 위 글의 흐름상 (A)~(E) 중 주어진 문장이 들어가기에 가장 적절한 곳은 어디인가?
+        </p>
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 4, padding: '6px 10px', marginBottom: 10, fontSize: 12, fontStyle: 'italic', color: '#374151' }}>
+          {insertSentence}
+        </div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+          {choiceLabels.map((l, i) => {
+            const hit = isAnswer && insertAnswer === `(${l})`;
+            return <span key={i} style={{ fontWeight: hit ? 900 : 400, color: hit ? '#DC2626' : '#1E293B', textDecoration: hit ? 'underline' : undefined }}>{choiceNums[i]} {l}</span>;
+          })}
+        </div>
+        {isAnswer && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#92400E' }}>정답: {insertAnswer}</div>}
+      </div>
     </div>
   );
 }
@@ -2579,6 +2709,14 @@ export default function WorkbookPage() {
                 <React.Fragment key={key}>
                   <PdfComboGrammarOrder result={result} isAnswer={false} title={fullTitle} id={problemId} />
                   <PdfComboGrammarOrder result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                </React.Fragment>
+              );
+            }
+            if (type === 'combo_grammar_insert') {
+              return (
+                <React.Fragment key={key}>
+                  <PdfComboGrammarInsert result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                  <PdfComboGrammarInsert result={result} isAnswer={true} title={fullTitle} id={answerId} />
                 </React.Fragment>
               );
             }
