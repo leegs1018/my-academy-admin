@@ -1368,30 +1368,35 @@ export default function WorkbookPage() {
     setActiveResultTab(0);
     setShowAnswer(false);
 
-    const newAllResults: TypeResult[] = [];
+    const resultSlots = new Array<TypeResult | null>(typesArray.length).fill(null);
     try {
-      for (let ti = 0; ti < typesArray.length; ti++) {
-        const type = typesArray[ti];
-        const res = await fetch('/api/generate-workbook', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ passages: passageTexts, type, difficulty, academy_id: session.user.id }),
-        });
-        const json = await res.json() as { success?: boolean; results?: WorkbookResult[]; error?: string; required?: number; balance?: number };
-        if (!res.ok || !json.success) {
-          if (json.error === 'INSUFFICIENT_CON') {
-            throw new Error(`CON이 부족합니다. (필요: ${json.required}C, 보유: ${json.balance}C)`);
+      const settled = await Promise.allSettled(
+        typesArray.map(async (type, ti) => {
+          const res = await fetch('/api/generate-workbook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ passages: passageTexts, type, tab: activeTab, difficulty, academy_id: session.user.id }),
+          });
+          const json = await res.json() as { success?: boolean; results?: WorkbookResult[]; error?: string; required?: number; balance?: number };
+          if (!res.ok || !json.success) {
+            if (json.error === 'INSUFFICIENT_CON') {
+              throw new Error(`CON이 부족합니다. (필요: ${json.required}C, 보유: ${json.balance}C)`);
+            }
+            throw new Error(json.error || '생성 실패');
           }
-          throw new Error(json.error || '생성 실패');
-        }
-        newAllResults.push({ type, results: json.results ?? [] });
-        setAllResults([...newAllResults]);
+          resultSlots[ti] = { type, results: json.results ?? [] };
+          setAllResults(resultSlots.filter((r): r is TypeResult => r !== null));
+        })
+      );
+      const firstFailed = settled.find(r => r.status === 'rejected');
+      if (firstFailed) {
+        setGenerateError((firstFailed as PromiseRejectedResult).reason?.message || '일부 유형 생성에 실패했습니다.');
       }
-      // Auto-save for vocab_choice type (backward compat)
+      // Auto-save for vocab_choice type
       const vcIdx = typesArray.indexOf('vocab_choice');
-      if (vcIdx >= 0 && newAllResults[vcIdx]?.results.length > 0) {
+      if (vcIdx >= 0 && resultSlots[vcIdx]?.results && resultSlots[vcIdx]!.results.length > 0) {
         const title = activeTab === 'input' ? inputTitle : mockTitle;
-        setTimeout(() => autoSaveVocabChoice(newAllResults[vcIdx].results, passageTexts, title, vcIdx), 1500);
+        setTimeout(() => autoSaveVocabChoice(resultSlots[vcIdx]!.results, passageTexts, title, vcIdx), 1500);
       }
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');

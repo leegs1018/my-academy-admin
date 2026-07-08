@@ -480,12 +480,14 @@ function redistributeVocabAnswers(passage: string, answerKey: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { passages, type, difficulty, academy_id } = await request.json() as {
+    const { passages, type, tab, difficulty, academy_id } = await request.json() as {
       passages: string[];
       type: WorkbookType;
+      tab?: 'input' | 'mock';
       difficulty?: string;
       academy_id?: string;
     };
+    const featureKey = `${(tab ?? 'input') === 'input' ? 'wb_direct' : 'wb_mock'}_${type}`;
 
     if (!passages || passages.length === 0) {
       return NextResponse.json({ error: '지문을 입력해주세요.' }, { status: 400 });
@@ -497,7 +499,7 @@ export async function POST(request: Request) {
 
     // CON 차감: 지문 수 × 단가
     if (academy_id) {
-      const price = await getFeaturePrice('vocab_choice');
+      const price = await getFeaturePrice(featureKey);
       const totalCost = price * validPassages.length;
       if (totalCost > 0) {
         const balance = await getConBalance(academy_id);
@@ -508,7 +510,7 @@ export async function POST(request: Request) {
         const { error: deductError } = await db.rpc('deduct_con', {
           p_academy_id: academy_id,
           p_amount: totalCost,
-          p_feature_key: 'vocab_choice',
+          p_feature_key: featureKey,
           p_description: `워크북 생성 (${type} × ${validPassages.length}지문)`,
         });
         if (deductError) {

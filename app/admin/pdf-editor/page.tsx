@@ -653,21 +653,31 @@ export default function PdfEditorPage() {
     if (sortedNums.length === 0 || mockLoading || !session) return;
     setMockLoading(true); setMockError(null); setMockResults([]); setActiveMockResultTab(0);
     setMockSaveStatusMap({}); setMockSavedSet(new Set()); setMockEditModeIdx(null); setMockEditedResults({});
+    const validNums = sortedNums.filter(n => mockPassageMap[n]);
+    type MockResult = { number: string; passageText: string; materials: GeneratedMaterials };
+    const resultSlots = new Array<MockResult | null>(validNums.length).fill(null);
+    let completedCount = 0;
+    setMockLoadingMsg(`0/${validNums.length}개 지문 생성 중...`);
     try {
-      for (let i = 0; i < sortedNums.length; i++) {
-        const num = sortedNums[i];
-        const text = mockPassageMap[num];
-        if (!text) continue;
-        setMockLoadingMsg(`${num}번 지문 워크북 생성 중... (${i + 1}/${sortedNums.length})`);
-        const res = await fetch('/api/process-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook' }),
-        });
-        const json = JSON.parse(await res.text()) as { data?: GeneratedMaterials; error?: string };
-        if (!res.ok) throw new Error(json.error || `${num}번 생성 오류`);
-        setMockResults(prev => [...prev, { number: num, passageText: text, materials: json.data as GeneratedMaterials }]);
-        setActiveMockResultTab(i);
+      const settled = await Promise.allSettled(
+        validNums.map(async (num, i) => {
+          const text = mockPassageMap[num];
+          const res = await fetch('/api/process-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook' }),
+          });
+          const json = JSON.parse(await res.text()) as { data?: GeneratedMaterials; error?: string };
+          if (!res.ok) throw new Error(json.error || `${num}번 생성 오류`);
+          resultSlots[i] = { number: num, passageText: text, materials: json.data as GeneratedMaterials };
+          completedCount++;
+          setMockLoadingMsg(`${completedCount}/${validNums.length}개 지문 생성 완료...`);
+          setMockResults(resultSlots.filter((r): r is MockResult => r !== null));
+        })
+      );
+      const firstFailed = settled.find(r => r.status === 'rejected');
+      if (firstFailed) {
+        setMockError((firstFailed as PromiseRejectedResult).reason?.message || '일부 지문 생성에 실패했습니다.');
       }
     } catch (e) { setMockError(e instanceof Error ? e.message : '오류가 발생했습니다.'); }
     finally { setMockLoading(false); }

@@ -1082,28 +1082,34 @@ export default function AiQuestionsPage() {
   const handleMockGenerate = async () => {
     if (!mockAllPassagesReady || validConfigs.length === 0 || !mockSession) return;
     setMockGenerating(true); setMockQuestions([]); setMockRevealedAnswers(new Set()); setMockAutoSaveStatus('idle');
-    const allQuestions: ExamQuestion[] = [];
-    for (const num of mockSortedSelectedNumbers) {
-      const text = mockPassageMap[num];
-      if (!text) continue;
-      setMockProgress(`${num}번 지문 문제 생성 중...`);
-      try {
+    const validNums = mockSortedSelectedNumbers.filter(n => mockPassageMap[n]);
+    let completedCount = 0;
+    setMockProgress(`0/${validNums.length}개 지문 생성 중...`);
+    const questionSlots = new Array<ExamQuestion[]>(validNums.length).fill([]);
+    const settled = await Promise.allSettled(
+      validNums.map(async (num, i) => {
+        const text = mockPassageMap[num];
         const res = await fetch('/api/generate-exam-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mockSession.access_token}` },
           body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })), feature_key: 'mock_exam_question_per_type' }),
         });
         const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
-        if (json.error === 'INSUFFICIENT_CON') { setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 }); setMockGenerating(false); return; }
+        if (json.error === 'INSUFFICIENT_CON') { setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 }); throw new Error('INSUFFICIENT_CON'); }
         if (!res.ok) throw new Error(json.error || '생성 실패');
-        const tagged = (json.questions ?? []).map(q => ({ ...q, _passageText: text, _passageNumber: parseInt(num) }));
-        allQuestions.push(...tagged);
-      } catch (e) {
-        setMockProgress(e instanceof Error ? e.message : '생성 오류');
-        setMockGenerating(false);
-        return;
-      }
+        questionSlots[i] = (json.questions ?? []).map(q => ({ ...q, _passageText: text, _passageNumber: parseInt(num) }));
+        completedCount++;
+        setMockProgress(`${completedCount}/${validNums.length}개 지문 생성 완료...`);
+      })
+    );
+    const firstFailed = settled.find(r => r.status === 'rejected');
+    if (firstFailed) {
+      const msg = (firstFailed as PromiseRejectedResult).reason?.message;
+      if (msg !== 'INSUFFICIENT_CON') setMockProgress(msg || '생성 오류');
+      setMockGenerating(false);
+      return;
     }
+    const allQuestions = questionSlots.flat();
     setMockQuestions(allQuestions);
     setMockProgress(`${allQuestions.length}개 문제 생성 완료`);
     setMockGenerating(false);
@@ -1376,28 +1382,34 @@ export default function AiQuestionsPage() {
     msgIntervalRef.current = setInterval(() => { msgIdx = (msgIdx + 1) % msgs.length; setLoadingMsg(msgs[msgIdx]); }, 8000);
 
     try {
-      const allQuestions: ExamQuestion[] = [];
-      for (let pi = 0; pi < allPassageTexts.length; pi++) {
-        const passageText = allPassageTexts[pi];
-        if (allPassageTexts.length > 1) setLoadingMsg(`${pi + 1}번 지문 문제 생성 중...`);
-        const res = await fetch('/api/generate-exam-questions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: passageText,
-            typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })),
-            academy_id: userId || undefined,
-          }),
-        });
-        const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
-        if (json.error === 'INSUFFICIENT_CON') {
-          setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 });
-          return;
-        }
-        if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
-        const tagged = (json.questions ?? []).map(q => ({ ...q, _passageText: passageText, _passageNumber: pi + 1 }));
-        allQuestions.push(...tagged);
+      const questionSlots = new Array<ExamQuestion[]>(allPassageTexts.length).fill([]);
+      let completedCount = 0;
+      if (allPassageTexts.length > 1) setLoadingMsg(`0/${allPassageTexts.length}개 지문 생성 중...`);
+      const settled = await Promise.allSettled(
+        allPassageTexts.map(async (passageText, pi) => {
+          const res = await fetch('/api/generate-exam-questions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: passageText,
+              typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })),
+              academy_id: userId || undefined,
+            }),
+          });
+          const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
+          if (json.error === 'INSUFFICIENT_CON') { setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 }); throw new Error('INSUFFICIENT_CON'); }
+          if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
+          questionSlots[pi] = (json.questions ?? []).map(q => ({ ...q, _passageText: passageText, _passageNumber: pi + 1 }));
+          if (allPassageTexts.length > 1) { completedCount++; setLoadingMsg(`${completedCount}/${allPassageTexts.length}개 지문 생성 완료...`); }
+        })
+      );
+      const firstFailed = settled.find(r => r.status === 'rejected');
+      if (firstFailed) {
+        const msg = (firstFailed as PromiseRejectedResult).reason?.message;
+        if (msg !== 'INSUFFICIENT_CON') throw new Error(msg || '오류가 발생했습니다.');
+        return;
       }
+      const allQuestions = questionSlots.flat();
 
       setOriginalPassageText(allPassageTexts[0]);
       setQuestions(allQuestions);
