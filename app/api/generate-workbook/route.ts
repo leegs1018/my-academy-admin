@@ -320,18 +320,28 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 
     // ── 맞는 어법 (수능형) ──────────────────────────────────────────────────
     case 'suneung_grammar_right':
-      return header('아래 영어 지문으로 수능형 "어법상 적절한 것을 고르시오 (A)(B)(C)" 문제를 생성하세요.') +
+      return header('아래 영어 지문으로 수능형 "(A)(B)(C)의 각 [ ] 안에서 어법에 맞는 표현으로 가장 적절한 것을 고르시오" 문제를 생성하세요.') +
 `생성 규칙:
-1. 3개 위치에 (A)(B)(C)를 표시하고 각각 두 어법 선택지를 제공합니다.
-2. 선택지 예: (A) [ to go / going ], (B) [ which / what ], (C) [ is / are ]
-3. 원본 지문의 어법에 맞는 형태가 정답이어야 합니다.
-4. 오답은 어법적으로 명확히 틀린 형태를 사용합니다.
-5. 나머지 문장은 원본 그대로 유지합니다.
+1. 지문에서 어법 판단이 필요한 위치 정확히 3곳을 선정하여 (A)(B)(C)로 표시합니다.
+2. 각 위치에 (A)[표현1 / 표현2] 형식으로 두 어법 선택지를 삽입합니다.
+   - 정답: 어법상 맞는 표현  /  오답: 어법상 명확히 틀린 표현
+   - 예: (A)[replying / replied], (B)[telling / tell], (C)[to come / coming]
+3. ①~⑤ 보기 5개를 (A)(B)(C) 조합으로 구성합니다.
+   - 정답 조합이 반드시 1개 포함되어야 합니다.
+   - 나머지 4개는 (A)(B)(C) 중 하나 이상 오답이 섞인 조합입니다.
+4. 원문 문장은 선택지 삽입 위치 외에 절대 변경하지 않습니다.
 
 출력 형식 (순수 JSON만):
 {
-  "passage": "(A)[ to go / going ] 형식이 삽입된 지문",
-  "answer_key": "(A) to go, (B) which, (C) are"
+  "passage": "지문 — (A)[replying / replied] 형식으로 삽입.",
+  "choices": [
+    {"label": "①", "A": "word_a1", "B": "word_b1", "C": "word_c1"},
+    {"label": "②", "A": "word_a2", "B": "word_b2", "C": "word_c2"},
+    {"label": "③", "A": "word_a3", "B": "word_b3", "C": "word_c3"},
+    {"label": "④", "A": "word_a4", "B": "word_b4", "C": "word_c4"},
+    {"label": "⑤", "A": "word_a5", "B": "word_b5", "C": "word_c5"}
+  ],
+  "answer_key": "③"
 }`;
 
     // ── 틀린 어법 (수능형) ──────────────────────────────────────────────────

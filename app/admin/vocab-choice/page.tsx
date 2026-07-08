@@ -771,6 +771,7 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
     case 'suneung_vocab_wrong':
       return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} />;
     case 'suneung_grammar_right':
+      return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_grammar_wrong':
       return <RenderSuneungPassage passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
     default:
@@ -1205,7 +1206,7 @@ function PdfSuneungVocabWrong({ result, isAnswer, title, id }: { result: Workboo
   );
 }
 
-function PdfSuneungVocabABC({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+function PdfSuneungVocabABC({ result, isAnswer, title, id, questionText }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string; questionText?: string }) {
   const passage = result.passage as string ?? '';
   const choices = (result.choices as Array<{label: string; A: string; B: string; C: string}>) || [];
   const answerKey = result.answer_key as string ?? '';
@@ -1223,7 +1224,7 @@ function PdfSuneungVocabABC({ result, isAnswer, title, id }: { result: WorkbookR
   return (
     <div id={id} style={PDF_BASE}>
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
-        Q. (A), (B), (C)의 각 [ ] 안에서 문맥에 맞는 어휘로 가장 적절한 것을 고르시오.
+        {questionText ?? 'Q. (A), (B), (C)의 각 [ ] 안에서 문맥에 맞는 어휘로 가장 적절한 것을 고르시오.'}
       </p>
       <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
       <p style={PDF_P}>{renderPassage()}</p>
@@ -2300,6 +2301,13 @@ export default function WorkbookPage() {
                   <React.Fragment key={key}>
                     <PdfSuneungVocabABC result={result} isAnswer={false} title={fullTitle} id={problemId} />
                     <PdfSuneungVocabABC result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'suneung_grammar_right':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSuneungVocabABC result={result} isAnswer={false} title={fullTitle} id={problemId} questionText="Q. (A), (B), (C)의 각 [ ] 안에서 어법에 맞는 표현으로 가장 적절한 것을 고르시오." />
+                    <PdfSuneungVocabABC result={result} isAnswer={true} title={fullTitle} id={answerId} questionText="Q. (A), (B), (C)의 각 [ ] 안에서 어법에 맞는 표현으로 가장 적절한 것을 고르시오." />
                   </React.Fragment>
                 );
               case 'passage_translation':
