@@ -407,23 +407,47 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 
     // ── 1지문 2유형: 어휘+문장완성 ─────────────────────────────────────────
     case 'combo_vocab_fill':
-      return header('아래 영어 지문으로 어휘 선택 문제와 어휘 완성(빈칸) 문제를 동시에 생성하세요.') +
-`섹션1 (어휘 선택): 12~15개 어휘 선택지 (번호[A/B/C] 형식).
-섹션2 (어휘 완성): 10~13개 빈칸 (_(번호)_ 형식) + 보기 단어 박스.
+      return header('아래 영어 지문으로 "어휘 빈칸 + 문장 완성" 1지문 2문항 문제를 생성하세요.') +
+`지문 형식 (두 종류 빈칸을 지문에 혼합 삽입):
+- 짧은 빈칸 4개: (A)[____], (B)[____], (C)[____], (D)[____] 형식 — 단어 1개
+- 긴 빈칸 2개: (가)[________________________], (나)[________________________] 형식 — 완전한 문장 1개
+  (긴 빈칸은 반드시 문장 경계에 위치, 문장 전체를 대체)
 
-원본 지문을 절대 변형하지 마세요.
+문제 1 (어휘): 빈칸 (A)~(D)에 들어갈 수 없는 단어 하나
+- 5개 선택지 형식: {"label":"①","word":"locked"}
+- 4개는 문맥에 적절(각 빈칸의 정답 단어), 1개는 부적절한 단어(디스트랙터)
+- q1_answer: 들어갈 수 없는 선택지 번호 (예: "③")
+
+문제 2 (문장완성): (가),(나)에 들어갈 말을 보기 단어로 완성
+- 각 긴 빈칸마다 보기 단어 목록 제공 (12~16개)
+- 조건: 보기 단어를 모두 한 번씩 사용, 필요시 어형 변형 및 단어 추가 가능
+- q2_items: [{blank, words[], answer}]
+
+⚠️ 규칙: (A)~(D) 각 빈칸은 반드시 문맥상 맞는 품사/의미의 단어. 원문 나머지 절대 변경 금지.
 
 출력 형식 (순수 JSON만):
 {
-  "section1": {
-    "passage": "어휘 선택지 삽입 지문",
-    "answer_key": "1. 정답  2. 정답 ..."
-  },
-  "section2": {
-    "passage": "빈칸 삽입 지문 (_(1)_ 형식)",
-    "word_bank": ["word1", "word2", ...],
-    "answer_key": "1. word  2. word ..."
-  }
+  "passage": "...girl who was (A)[____] up in a tower... (가)[________________________]. After she...",
+  "q1_choices": [
+    {"label": "①", "word": "locked"},
+    {"label": "②", "word": "scared"},
+    {"label": "③", "word": "replied"},
+    {"label": "④", "word": "decided"},
+    {"label": "⑤", "word": "happy"}
+  ],
+  "q1_answer": "③",
+  "q2_items": [
+    {
+      "blank": "(가)",
+      "words": ["the", "was", "she", "didn't", "this", "tell", "what", "different", "her", "believe", "witch", "from", "so", "him"],
+      "answer": "This was different from what the witch told her, so she didn't believe him."
+    },
+    {
+      "blank": "(나)",
+      "words": ["the", "world", "was", "full", "of", "happiness", "and", "hope", "wonderful", "place"],
+      "answer": "The world was full of happiness and hope."
+    }
+  ]
 }`;
 
     // ── 1지문 2유형: 어법+문장배열 ─────────────────────────────────────────

@@ -719,6 +719,55 @@ function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult;
   );
 }
 
+function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const passage = result.passage as string ?? '';
+  const q1Choices = (result.q1_choices as Array<{label:string;word:string}>) || [];
+  const q1Answer = result.q1_answer as string ?? '';
+  const q2Items = (result.q2_items as Array<{blank:string;words:string[];answer:string}>) || [];
+  const parts = passage.split(/(\([A-D가나]\)\[_+\])/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const m = part.match(/^\(([A-D가나])\)(\[_+\])$/);
+    if (!m) return <span key={i}>{part}</span>;
+    const isLong = /[가나]/.test(m[1]);
+    return (
+      <span key={i}>
+        <span className={`font-black ${isLong ? 'text-violet-700' : 'text-amber-700'}`}>({m[1]})</span>
+        <span className={`border-b-2 border-slate-700 inline-block ${isLong ? 'min-w-[200px]' : 'min-w-[52px]'}`}>&nbsp;</span>
+      </span>
+    );
+  });
+  return (
+    <div className="text-sm leading-loose">
+      <p className="mb-4">{renderPassage()}</p>
+      <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">1. 문맥상 위 글의 빈칸 (A)~(D)에 들어갈 수 없는 단어 하나는?</p>
+        <div className="flex flex-wrap gap-5 text-sm">
+          {q1Choices.map((c, i) => {
+            const hit = showAnswer && c.label === q1Answer;
+            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{c.label} {c.word}</span>;
+          })}
+        </div>
+        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {q1Answer}</p>}
+      </div>
+      <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-1">2. 위 글의 빈칸 (가),(나)에 들어갈 말을 &lt;조건&gt;에 맞게 쓰시오.</p>
+        <div className="text-xs text-slate-600 bg-white rounded p-2 border mb-3">
+          <p className="font-bold mb-0.5">&lt;조건&gt;</p>
+          <p>1. &lt;보기&gt;에 주어진 단어를 모두 한 번씩만 사용할 것.</p>
+          <p>2. 필요시 &lt;보기&gt; 이외의 단어 추가 및 어형 변형 가능.</p>
+        </div>
+        {q2Items.map((item, i) => (
+          <div key={i} className="mb-3 last:mb-0">
+            <p className="text-xs font-black text-violet-700 mb-1">{item.blank} &lt;보기&gt;</p>
+            <p className="text-xs text-slate-700 bg-white rounded p-2 border leading-relaxed">{item.words.join(' / ')}</p>
+            {showAnswer && <p className="mt-1 text-xs font-bold text-amber-700">정답: {item.answer}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
   const passage = result.passage as string ?? '';
   const q1Choices = (result.q1_choices as Array<{label:string;blank:string;word:string}>) || [];
@@ -774,14 +823,14 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
   if (result.error) return <p className="text-rose-500 font-bold text-sm">{result.error as string}</p>;
 
   if (type === 'combo_vocab_grammar') return <RenderComboVocabGrammar result={result} showAnswer={showAnswer} />;
+  if (type === 'combo_vocab_fill') return <RenderComboVocabFill result={result} showAnswer={showAnswer} />;
 
   const isCombo = type.startsWith('combo_');
   if (isCombo) {
     const s1 = (result.section1 ?? {}) as WorkbookResult;
     const s2 = (result.section2 ?? {}) as WorkbookResult;
-    const [t1, t2] = type === 'combo_vocab_fill'    ? ['vocab_choice', 'vocab_fill']
-      : type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
-      :                                  ['grammar_choice', 'sentence_insertion'];
+    const [t1, t2] = type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
+      :                                               ['grammar_choice', 'sentence_insertion'];
     return (
       <div className="space-y-6">
         <div>
@@ -1326,6 +1375,65 @@ function PdfSimple({ result, isAnswer, title, id }: { result: WorkbookResult; is
   );
 }
 
+function PdfComboVocabFill({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const passage = result.passage as string ?? '';
+  const q1Choices = (result.q1_choices as Array<{label:string;word:string}>) || [];
+  const q1Answer = result.q1_answer as string ?? '';
+  const q2Items = (result.q2_items as Array<{blank:string;words:string[];answer:string}>) || [];
+  const parts = passage.split(/(\([A-D가나]\)\[_+\])/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const m = part.match(/^\(([A-D가나])\)(\[_+\])$/);
+    if (!m) return <span key={i}>{part}</span>;
+    const isLong = /[가나]/.test(m[1]);
+    return (
+      <span key={i}>
+        <span style={{ fontWeight: 900, color: isLong ? '#6D28D9' : '#B45309' }}>({m[1]})</span>
+        <span style={{ borderBottom: '1.5px solid #374151', display: 'inline-block', minWidth: isLong ? 180 : 48 }}>&nbsp;</span>
+      </span>
+    );
+  });
+  return (
+    <div id={id} style={PDF_BASE}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+        Q. 다음 글을 읽고 물음에 답하시오.
+      </p>
+      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <p style={PDF_P}>{renderPassage()}</p>
+      <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          1. 문맥상 위 글의 빈칸 (A)~(D)에 들어갈 수 없는 단어 하나는?
+        </p>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+          {q1Choices.map((c, i) => {
+            const hit = isAnswer && c.label === q1Answer;
+            return <span key={i} style={{ fontWeight: hit ? 900 : 400, color: hit ? '#DC2626' : '#1E293B', textDecoration: hit ? 'underline' : undefined }}>{c.label} {c.word}</span>;
+          })}
+        </div>
+        {isAnswer && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#92400E' }}>정답: {q1Answer}</div>}
+      </div>
+      <div style={{ marginTop: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          2. 위 글의 빈칸 (가),(나)에 들어갈 말을 &lt;조건&gt;에 맞게 쓰시오.
+        </p>
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 4, padding: '6px 10px', marginBottom: 10, fontSize: 11, color: '#475569' }}>
+          <p style={{ margin: '0 0 2px', fontWeight: 900 }}>&lt;조건&gt;</p>
+          <p style={{ margin: '0 0 2px' }}>1. &lt;보기&gt;에 주어진 단어를 모두 한 번씩만 사용할 것.</p>
+          <p style={{ margin: 0 }}>2. 필요시 &lt;보기&gt; 이외의 단어 추가 및 어형 변형 가능.</p>
+        </div>
+        {q2Items.map((item, i) => (
+          <div key={i} style={{ marginBottom: i < q2Items.length - 1 ? 12 : 0 }}>
+            <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 900, color: '#6D28D9' }}>{item.blank} &lt;보기&gt;</p>
+            <p style={{ margin: '0 0 4px', fontSize: 11, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 4, padding: '4px 8px', lineHeight: 1.7 }}>
+              {item.words.join(' / ')}
+            </p>
+            {isAnswer && <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>정답: {item.answer}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PdfComboVocabGrammar({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const passage = result.passage as string ?? '';
   const q1Choices = (result.q1_choices as Array<{label:string;blank:string;word:string}>) || [];
@@ -1388,9 +1496,7 @@ function PdfComboVocabGrammar({ result, isAnswer, title, id }: { result: Workboo
 function PdfCombo({ result, type, isAnswer, title, id }: { result: WorkbookResult; type: WorkbookType; isAnswer: boolean; title: string; id: string }) {
   const s1 = (result.section1 ?? {}) as WorkbookResult;
   const s2 = (result.section2 ?? {}) as WorkbookResult;
-  const [t1, t2] = type === 'combo_vocab_grammar' ? ['vocab_choice', 'grammar_choice']
-    : type === 'combo_vocab_fill'    ? ['vocab_choice', 'vocab_fill']
-    : type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
+  const [t1, t2] = type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
     :                                  ['grammar_choice', 'sentence_insertion'];
   return (
     <div id={id} style={PDF_BASE}>
@@ -2346,6 +2452,14 @@ export default function WorkbookPage() {
                 <React.Fragment key={key}>
                   <PdfComboVocabGrammar result={result} isAnswer={false} title={fullTitle} id={problemId} />
                   <PdfComboVocabGrammar result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                </React.Fragment>
+              );
+            }
+            if (type === 'combo_vocab_fill') {
+              return (
+                <React.Fragment key={key}>
+                  <PdfComboVocabFill result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                  <PdfComboVocabFill result={result} isAnswer={true} title={fullTitle} id={answerId} />
                 </React.Fragment>
               );
             }
