@@ -43,10 +43,14 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     // ── 어휘 선택 ────────────────────────────────────────────────────────────
     case 'vocab_choice':
       return header('아래 영어 지문으로 어휘 선택 문제를 생성하세요.') +
-`생성 규칙:
-1. 지문의 모든 문장에서 각 문장당 2~3개의 어휘/표현을 선택합니다.
-   - 문장이 10개이면 총 20~30개의 선택 위치가 나옵니다.
-   - 짧은 문장(단어 5개 이하)은 1개, 긴 문장은 3개까지 허용합니다.
+`[핵심 규칙] 각 문장마다 반드시 정확히 3개의 어휘 선택지를 삽입해야 합니다.
+문장이 10개이면 선택지는 반드시 총 30개입니다. 이 규칙을 절대 어기지 마세요.
+
+생성 규칙:
+1. 지문의 모든 문장에서 각 문장마다 정확히 3개의 어휘/표현을 선택합니다.
+   - 단어 수가 적은 짧은 문장도 반드시 3개를 선택해야 합니다.
+   - 관사(a/an/the), 접속사(and/but/or), be동사(is/are/was)는 가급적 제외합니다.
+   - 대신 명사, 동사, 형용사, 부사, 전치사를 우선 선택합니다.
 2. 각 위치에 번호[어휘A / 어휘B] 형식으로 선택지 2개만 만듭니다. (정답 1개 + 오답 1개)
 3. 오답은 반드시 정답과 품사가 동일해야 하며, 문맥상 어울리지 않는 단어를 사용합니다.
    - 명사 ↔ 명사, 동사 ↔ 동사, 형용사 ↔ 형용사, 부사 ↔ 부사, 전치사 ↔ 전치사
@@ -58,8 +62,8 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 중요: 선택지는 반드시 영어 단어로만 작성합니다. 한국어 번역 절대 금지.
 출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
 {
-  "passage": "Video gaming is one of the 1[most / least] studied 2[topics / methods] ...",
-  "answer_key": "1. most  2. topics ..."
+  "passage": "Video gaming is 1[one / none] of the 2[most / least] studied 3[topics / methods] in the field. It 4[has / lacks] attracted ...",
+  "answer_key": "1. one  2. most  3. topics  4. has ..."
 }`;
 
     // ── 어휘 완성 ────────────────────────────────────────────────────────────
