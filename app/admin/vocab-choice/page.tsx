@@ -719,15 +719,67 @@ function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult;
   );
 }
 
+function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const passage = result.passage as string ?? '';
+  const q1Choices = (result.q1_choices as Array<{label:string;blank:string;word:string}>) || [];
+  const q1Answer = result.q1_answer as string ?? '';
+  const q2Choices = (result.q2_choices as Array<{label:string;pair:string}>) || [];
+  const q2Answer = result.q2_answer as string ?? '';
+  const parts = passage.split(/(\([A-E]\)_{3,}|[①②③④⑤][a-zA-Z''\-]+)/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const bm = part.match(/^\(([A-E])\)(_{3,})$/);
+    if (bm) return (
+      <span key={i}>
+        <span className="font-black text-amber-700">({bm[1]})</span>
+        <span className="border-b-2 border-slate-700 inline-block" style={{minWidth:52}}>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </span>
+    );
+    const gm = part.match(/^([①②③④⑤])(.+)$/);
+    if (gm) return (
+      <span key={i}>
+        <span className="font-black">{gm[1]}</span>
+        <span className="font-bold underline">{gm[2]}</span>
+      </span>
+    );
+    return <span key={i}>{part}</span>;
+  });
+  return (
+    <div className="text-sm leading-loose">
+      <p className="mb-4">{renderPassage()}</p>
+      <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">1. 위 글의 빈칸 (A)~(E)에 들어갈 말로 적절하지 않은 것은?</p>
+        <div className="flex flex-wrap gap-5 text-sm">
+          {q1Choices.map((c, i) => {
+            const hit = showAnswer && c.label === q1Answer;
+            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{c.label} {c.blank} {c.word}</span>;
+          })}
+        </div>
+        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {q1Answer}</p>}
+      </div>
+      <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">2. 위 글의 ①~⑤ 중 어법상 어색한 것만 고른 것은?</p>
+        <div className="flex flex-wrap gap-5 text-sm">
+          {q2Choices.map((c, i) => {
+            const hit = showAnswer && c.label === q2Answer;
+            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{c.label} {c.pair}</span>;
+          })}
+        </div>
+        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {q2Answer}</p>}
+      </div>
+    </div>
+  );
+}
+
 function RenderResultContent({ result, type, showAnswer, showKorean }: { result: WorkbookResult; type: WorkbookType; showAnswer: boolean; showKorean?: boolean }) {
   if (result.error) return <p className="text-rose-500 font-bold text-sm">{result.error as string}</p>;
+
+  if (type === 'combo_vocab_grammar') return <RenderComboVocabGrammar result={result} showAnswer={showAnswer} />;
 
   const isCombo = type.startsWith('combo_');
   if (isCombo) {
     const s1 = (result.section1 ?? {}) as WorkbookResult;
     const s2 = (result.section2 ?? {}) as WorkbookResult;
-    const [t1, t2] = type === 'combo_vocab_grammar' ? ['vocab_choice', 'grammar_choice']
-      : type === 'combo_vocab_fill'    ? ['vocab_choice', 'vocab_fill']
+    const [t1, t2] = type === 'combo_vocab_fill'    ? ['vocab_choice', 'vocab_fill']
       : type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
       :                                  ['grammar_choice', 'sentence_insertion'];
     return (
@@ -1270,6 +1322,65 @@ function PdfSimple({ result, isAnswer, title, id }: { result: WorkbookResult; is
           {result.answer_key as string}
         </div>
       )}
+    </div>
+  );
+}
+
+function PdfComboVocabGrammar({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const passage = result.passage as string ?? '';
+  const q1Choices = (result.q1_choices as Array<{label:string;blank:string;word:string}>) || [];
+  const q1Answer = result.q1_answer as string ?? '';
+  const q2Choices = (result.q2_choices as Array<{label:string;pair:string}>) || [];
+  const q2Answer = result.q2_answer as string ?? '';
+  const parts = passage.split(/(\([A-E]\)_{3,}|[①②③④⑤][a-zA-Z''\-]+)/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const bm = part.match(/^\(([A-E])\)(_{3,})$/);
+    if (bm) return (
+      <span key={i}>
+        <span style={{ fontWeight: 900, color: '#B45309' }}>({bm[1]})</span>
+        <span style={{ borderBottom: '1.5px solid #374151', display: 'inline-block', minWidth: 48 }}>&nbsp;&nbsp;&nbsp;</span>
+      </span>
+    );
+    const gm = part.match(/^([①②③④⑤])(.+)$/);
+    if (gm) return (
+      <span key={i}>
+        <span style={{ fontWeight: 900 }}>{gm[1]}</span>
+        <span style={{ fontWeight: 700, textDecoration: 'underline' }}>{gm[2]}</span>
+      </span>
+    );
+    return <span key={i}>{part}</span>;
+  });
+  return (
+    <div id={id} style={PDF_BASE}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+        Q. 다음 글을 읽고 물음에 답하시오.
+      </p>
+      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <p style={PDF_P}>{renderPassage()}</p>
+      <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          1. 위 글의 빈칸 (A)~(E)에 들어갈 말로 적절하지 않은 것은?
+        </p>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+          {q1Choices.map((c, i) => {
+            const hit = isAnswer && c.label === q1Answer;
+            return <span key={i} style={{ fontWeight: hit ? 900 : 400, color: hit ? '#DC2626' : '#1E293B', textDecoration: hit ? 'underline' : undefined }}>{c.label} {c.blank} {c.word}</span>;
+          })}
+        </div>
+        {isAnswer && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#92400E' }}>정답: {q1Answer}</div>}
+      </div>
+      <div style={{ marginTop: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          2. 위 글의 ①~⑤ 중 어법상 어색한 것만 고른 것은?
+        </p>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+          {q2Choices.map((c, i) => {
+            const hit = isAnswer && c.label === q2Answer;
+            return <span key={i} style={{ fontWeight: hit ? 900 : 400, color: hit ? '#DC2626' : '#1E293B', textDecoration: hit ? 'underline' : undefined }}>{c.label} {c.pair}</span>;
+          })}
+        </div>
+        {isAnswer && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#92400E' }}>정답: {q2Answer}</div>}
+      </div>
     </div>
   );
 }
@@ -2230,6 +2341,14 @@ export default function WorkbookPage() {
             const answerId = `wb-pdf-answer-${ti}-${pi}`;
             const key = `${ti}-${pi}`;
 
+            if (type === 'combo_vocab_grammar') {
+              return (
+                <React.Fragment key={key}>
+                  <PdfComboVocabGrammar result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                  <PdfComboVocabGrammar result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                </React.Fragment>
+              );
+            }
             if (type.startsWith('combo_')) {
               return (
                 <React.Fragment key={key}>
