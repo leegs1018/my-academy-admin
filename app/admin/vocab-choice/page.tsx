@@ -711,7 +711,7 @@ const PDF_P: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'br
 
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const chunks = parseVocabPassage(result.passage as string, result.answer_key as string);
-  const choiceBase: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 4px', margin: '0 1px' };
+  const choiceBase: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 5px', margin: '0 1px', border: '1px solid #D97706', fontWeight: 600 };
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}</h2>
@@ -772,8 +772,10 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
                         return <span key={i} style={{ background: '#FFF9C4', borderRadius: 3, padding: '0 4px', fontWeight: 900 }}>{ans}</span>;
                       }
                       return (
-                        <span key={i} style={{ display: 'inline-block', minWidth: 60, borderBottom: '1.5px solid #333', textAlign: 'center', fontSize: 11, color: '#555' }}>
-                          {num}[{letter}____]
+                        <span key={i} style={{ whiteSpace: 'nowrap', margin: '0 2px' }}>
+                          <span style={{ fontWeight: 700, fontSize: 12 }}>{num}.</span>
+                          <span style={{ fontSize: 12, fontWeight: 600 }}>{letter}</span>
+                          <span style={{ display: 'inline-block', minWidth: 55, borderBottom: '1.5px solid #333', verticalAlign: 'bottom', marginLeft: 1 }} />
                         </span>
                       );
                     }
@@ -935,7 +937,7 @@ function PdfWordOrder({ result, isAnswer, title, id, showKorean }: { result: Wor
             {showKorean && (
               <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 700, color: '#DC2626' }}>{s.ko}</p>
             )}
-            <p style={{ margin: '0 0 4px', fontSize: 11, color: '#475569' }}>
+            <p style={{ margin: '0 0 4px', fontSize: 13, color: '#475569' }}>
               ({(s.scrambled || []).join(' / ')})
             </p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
@@ -958,7 +960,7 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#3730A3', lineHeight: 1.7 }}>{s.ko}</p>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#000', lineHeight: 1.7 }}>{s.ko}</p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
               {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.answer}</span>}
@@ -996,14 +998,21 @@ function PdfPassageTranslation({ result, id }: { result: WorkbookResult; id: str
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>본문 해석지</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {(sentences || []).map((s, i) => (
-          <div key={i} style={{ paddingBottom: 6, borderBottom: '1px solid #F1F5F9' }}>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7 }}>{renderHighlighted(s.en, s.key_words || [])}</p>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#3730A3', fontWeight: 700, lineHeight: 1.6 }}>{s.ko}</p>
-          </div>
-        ))}
-      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
+        <tbody>
+          {(sentences || []).map((s, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+              <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.7, verticalAlign: 'top' }}>
+                {renderHighlighted(s.en, s.key_words || [])}
+              </td>
+              <td style={{ padding: '4px 0 4px 8px', fontSize: 12, color: '#3730A3', fontWeight: 700, lineHeight: 1.6, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
+                {s.ko}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {vocabTable.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 900, color: '#374151' }}>지문의 주요 어휘와 뜻</p>
