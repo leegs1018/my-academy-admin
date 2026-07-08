@@ -452,23 +452,39 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 
     // ── 1지문 2유형: 어법+문장배열 ─────────────────────────────────────────
     case 'combo_grammar_order':
-      return header('아래 영어 지문으로 어법 수정 문제와 낱말 배열 문제를 동시에 생성하세요.') +
-`섹션1 (어법 수정): 5~7개 어법 오류 삽입 (①[틀린단어] 형식).
-섹션2 (낱말 배열): 8~10문장 선택 → 단어 순서 섞기.
+      return header('아래 영어 지문으로 "문단 순서 배열 + 어법 수정" 1지문 2문항 문제를 생성하세요.') +
+`지문 분할 방식:
+- 원본 지문을 내용 흐름에 따라 5개 문단으로 나누어 (A)~(E)로 표시
+- (A): 반드시 지문의 첫 문단(도입부) — 학생에게 먼저 주어지는 부분
+- (B)~(E): 나머지 4개 문단을 섞인 순서(스크램블)로 배치 — 학생이 순서를 맞춰야 함
+- paragraphs 배열에는 섞인 순서 그대로 저장 (A는 첫 번째, 나머지는 섞여서)
 
-원본 지문을 절대 변형하지 마세요.
+문제 1 (문단 순서 배열): "(A)에 이어질 내용을 순서에 맞게 배열하시오"
+- order_answer: 올바른 논리적 순서 (예: "(A) - (D) - (B) - (C) - (E)")
+
+문제 2 (어법 수정): "어법상 어색한 부분 3개를 찾아 각각 바르게 고치시오"
+- 전체 지문에 어법 오류 정확히 3개 삽입 (단어/구 수준)
+- 오류 유형: 동사형태, 관계사, 시제, 수 일치, 분사 형태 등
+- grammar_errors: [{label:"(1)", wrong:"...", correct:"..."}] 3개
+- 오류는 서로 다른 문단에 분산 배치
+
+⚠️ 규칙: 원문 내용은 어법 오류 3곳 외 절대 변경 금지. 각 문단은 최소 2문장 이상.
 
 출력 형식 (순수 JSON만):
 {
-  "section1": {
-    "passage": "오류 삽입 지문 (①[틀린단어] 형식)",
-    "answer_key": "① 틀린 → 바른\\n② 틀린 → 바른 ..."
-  },
-  "section2": {
-    "sentences": [
-      { "num": 1, "ko": "한국어 뜻", "scrambled": ["w3","w1","w2"], "answer": "w1 w2 w3" }
-    ]
-  }
+  "paragraphs": [
+    {"label": "(A)", "text": "도입 문단 — 첫 번째 고정"},
+    {"label": "(B)", "text": "스크램블된 문단"},
+    {"label": "(C)", "text": "스크램블된 문단"},
+    {"label": "(D)", "text": "스크램블된 문단"},
+    {"label": "(E)", "text": "스크램블된 문단"}
+  ],
+  "order_answer": "(A) - (D) - (B) - (C) - (E)",
+  "grammar_errors": [
+    {"label": "(1)", "wrong": "heard Rapunzel to sing", "correct": "heard Rapunzel singing"},
+    {"label": "(2)", "wrong": "full with thoughts", "correct": "full of thoughts"},
+    {"label": "(3)", "wrong": "made up his mind", "correct": "made up her mind"}
+  ]
 }`;
 
     // ── 1지문 2유형: 어법+문장삽입 ─────────────────────────────────────────

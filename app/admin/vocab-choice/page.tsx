@@ -719,6 +719,59 @@ function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult;
   );
 }
 
+function RenderComboGrammarOrder({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const paragraphs = (result.paragraphs as Array<{label:string;text:string}>) || [];
+  const orderAnswer = result.order_answer as string ?? '';
+  const grammarErrors = (result.grammar_errors as Array<{label:string;wrong:string;correct:string}>) || [];
+  return (
+    <div className="text-sm leading-loose">
+      <div className="space-y-3 mb-4">
+        {paragraphs.map((p, i) => (
+          <div key={i} className="flex gap-2 items-start">
+            <span className="font-black text-amber-700 shrink-0 mt-0.5">{p.label}</span>
+            <p className="text-slate-800">{p.text}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">1. 주어진 글 (A)에 이어질 내용을 순서에 맞게 배열하시오.</p>
+        <p className="text-sm text-slate-500">정답: (A) - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
+        {showAnswer && <p className="mt-1 text-xs font-bold text-amber-700">정답: {orderAnswer}</p>}
+      </div>
+      <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-black text-slate-700 mb-2">2. 위 글에서 어법상 어색한 부분을 모두 찾아 각각 바르게 고치시오. (3개)</p>
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="py-1 px-2 border border-slate-300 w-8 text-center"></th>
+              <th className="py-1 px-2 border border-slate-300 text-center font-black text-slate-600">어색한 부분</th>
+              <th className="py-1 px-2 border border-slate-300 w-8"></th>
+              <th className="py-1 px-2 border border-slate-300 text-center font-black text-slate-600">고친 부분</th>
+            </tr>
+          </thead>
+          <tbody>
+            {showAnswer ? grammarErrors.map((e, i) => (
+              <tr key={i}>
+                <td className="py-2 px-2 border border-slate-200 font-bold text-slate-500 text-center">{e.label}</td>
+                <td className="py-2 px-2 border border-slate-200 font-bold text-rose-600 text-center">{e.wrong}</td>
+                <td className="py-2 px-2 border border-slate-200 text-slate-400 text-center">→</td>
+                <td className="py-2 px-2 border border-slate-200 font-bold text-emerald-600 text-center">{e.correct}</td>
+              </tr>
+            )) : [1,2,3].map((n, i) => (
+              <tr key={i}>
+                <td className="py-2 px-2 border border-slate-200 font-bold text-slate-500 text-center">({n})</td>
+                <td className="py-4 px-2 border border-slate-200"></td>
+                <td className="py-2 px-2 border border-slate-200 text-slate-400 text-center">→</td>
+                <td className="py-4 px-2 border border-slate-200"></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
   const passage = result.passage as string ?? '';
   const q1Choices = (result.q1_choices as Array<{label:string;word:string}>) || [];
@@ -824,13 +877,13 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
 
   if (type === 'combo_vocab_grammar') return <RenderComboVocabGrammar result={result} showAnswer={showAnswer} />;
   if (type === 'combo_vocab_fill') return <RenderComboVocabFill result={result} showAnswer={showAnswer} />;
+  if (type === 'combo_grammar_order') return <RenderComboGrammarOrder result={result} showAnswer={showAnswer} />;
 
   const isCombo = type.startsWith('combo_');
   if (isCombo) {
     const s1 = (result.section1 ?? {}) as WorkbookResult;
     const s2 = (result.section2 ?? {}) as WorkbookResult;
-    const [t1, t2] = type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
-      :                                               ['grammar_choice', 'sentence_insertion'];
+    const [t1, t2] = ['grammar_choice', 'sentence_insertion'];
     return (
       <div className="space-y-6">
         <div>
@@ -1375,6 +1428,65 @@ function PdfSimple({ result, isAnswer, title, id }: { result: WorkbookResult; is
   );
 }
 
+function PdfComboGrammarOrder({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const paragraphs = (result.paragraphs as Array<{label:string;text:string}>) || [];
+  const orderAnswer = result.order_answer as string ?? '';
+  const grammarErrors = (result.grammar_errors as Array<{label:string;wrong:string;correct:string}>) || [];
+  return (
+    <div id={id} style={PDF_BASE}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+        Q. 다음 글을 읽고 물음에 답하시오.
+      </p>
+      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      {paragraphs.map((p, i) => (
+        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'flex-start' }}>
+          <span style={{ fontWeight: 900, color: '#B45309', flexShrink: 0, fontSize: 13 }}>{p.label}</span>
+          <p style={{ ...PDF_P, margin: 0 }}>{p.text}</p>
+        </div>
+      ))}
+      <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          1. 주어진 글 (A)에 이어질 내용을 순서에 맞게 배열하시오.
+        </p>
+        <p style={{ fontSize: 12, color: '#64748B', margin: '0 0 4px' }}>정답: (A) -</p>
+        {isAnswer && <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginTop: 6 }}>정답: {orderAnswer}</div>}
+      </div>
+      <div style={{ marginTop: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+        <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+          2. 위 글에서 어법상 어색한 부분을 모두 찾아 각각 바르게 고치시오. (3개)
+        </p>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead>
+            <tr style={{ background: '#F1F5F9' }}>
+              <th style={{ padding: '5px 8px', width: 32, border: '1px solid #CBD5E1', textAlign: 'center' }}></th>
+              <th style={{ padding: '5px 8px', border: '1px solid #CBD5E1', textAlign: 'center', fontWeight: 900, color: '#374151' }}>어색한 부분</th>
+              <th style={{ padding: '5px 8px', width: 24, border: '1px solid #CBD5E1', textAlign: 'center' }}></th>
+              <th style={{ padding: '5px 8px', border: '1px solid #CBD5E1', textAlign: 'center', fontWeight: 900, color: '#374151' }}>고친 부분</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isAnswer ? grammarErrors.map((e, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                <td style={{ padding: '6px 8px', border: '1px solid #E2E8F0', fontWeight: 700, color: '#64748B', textAlign: 'center' }}>{e.label}</td>
+                <td style={{ padding: '6px 8px', border: '1px solid #E2E8F0', fontWeight: 700, color: '#DC2626', textAlign: 'center' }}>{e.wrong}</td>
+                <td style={{ padding: '6px 8px', border: '1px solid #E2E8F0', color: '#94A3B8', textAlign: 'center' }}>→</td>
+                <td style={{ padding: '6px 8px', border: '1px solid #E2E8F0', fontWeight: 700, color: '#059669', textAlign: 'center' }}>{e.correct}</td>
+              </tr>
+            )) : [1,2,3].map((n, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                <td style={{ padding: '6px 8px', border: '1px solid #E2E8F0', fontWeight: 700, color: '#64748B', textAlign: 'center' }}>({n})</td>
+                <td style={{ padding: '22px 8px', border: '1px solid #E2E8F0' }}></td>
+                <td style={{ padding: '6px 8px', border: '1px solid #E2E8F0', color: '#94A3B8', textAlign: 'center' }}>→</td>
+                <td style={{ padding: '22px 8px', border: '1px solid #E2E8F0' }}></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function PdfComboVocabFill({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const passage = result.passage as string ?? '';
   const q1Choices = (result.q1_choices as Array<{label:string;word:string}>) || [];
@@ -1496,8 +1608,7 @@ function PdfComboVocabGrammar({ result, isAnswer, title, id }: { result: Workboo
 function PdfCombo({ result, type, isAnswer, title, id }: { result: WorkbookResult; type: WorkbookType; isAnswer: boolean; title: string; id: string }) {
   const s1 = (result.section1 ?? {}) as WorkbookResult;
   const s2 = (result.section2 ?? {}) as WorkbookResult;
-  const [t1, t2] = type === 'combo_grammar_order' ? ['grammar_correct', 'word_order']
-    :                                  ['grammar_choice', 'sentence_insertion'];
+  const [t1, t2] = ['grammar_choice', 'sentence_insertion'];
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title} — {TYPE_LABELS[type]}{isAnswer ? ' (정답)' : ''}</h2>
@@ -2460,6 +2571,14 @@ export default function WorkbookPage() {
                 <React.Fragment key={key}>
                   <PdfComboVocabFill result={result} isAnswer={false} title={fullTitle} id={problemId} />
                   <PdfComboVocabFill result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                </React.Fragment>
+              );
+            }
+            if (type === 'combo_grammar_order') {
+              return (
+                <React.Fragment key={key}>
+                  <PdfComboGrammarOrder result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                  <PdfComboGrammarOrder result={result} isAnswer={true} title={fullTitle} id={answerId} />
                 </React.Fragment>
               );
             }
