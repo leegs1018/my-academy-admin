@@ -711,7 +711,7 @@ const PDF_P: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'br
 
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const chunks = parseVocabPassage(result.passage as string, result.answer_key as string);
-  const choiceBase: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 5px', margin: '0 1px', border: '1px solid #D97706', fontWeight: 600 };
+  const choiceBase: React.CSSProperties = { background: '#FEF3C7', borderRadius: 4, padding: '2px 6px', margin: '0 2px', border: '2px solid #D97706', fontWeight: 700, fontSize: 13 };
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}</h2>

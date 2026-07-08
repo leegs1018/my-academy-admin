@@ -97,34 +97,38 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 1. 각 문장마다 2~3개의 어법 포인트를 선택하여 선택지로 만듭니다. 전체 20~30개.
    포인트 유형: to부정사/동명사, 능동/수동, 주어-동사 수 일치, 관계사(who/whose/which/that),
    접속사, 형용사/부사, 시제, 전치사, 현재분사/과거분사 등
-2. 각 위치에 번호[형태A / 형태B] 형식으로 표시합니다. 반드시 선택지는 2개입니다.
+2. 각 위치에 반드시 숫자[형태A / 형태B] 형식으로 표시합니다. 선택지는 2개입니다.
+   ⚠️ 반드시 숫자가 먼저, 대괄호가 그 뒤에 옵니다: 1[who / whose] ← 올바름
+   ⚠️ [1. who / whose] 형식은 절대 금지입니다.
 3. 오답은 어법적으로 명확히 틀린 형태여야 합니다.
 4. 정답이 1번째 선택지인 경우와 2번째 선택지인 경우를 50:50으로 균등 배분합니다.
 5. 원문 문장의 단어는 선택지 삽입 부분 외에 절대 변경하지 않습니다.
 
 중요: 선택지는 반드시 영어 단어/형태로만 작성합니다. 한국어 절대 금지.
-출력 형식 (순수 JSON만):
+출력 형식 (순수 JSON만, 반드시 1[opt / opt] 형식 준수):
 {
-  "passage": "어법 선택지가 삽입된 지문 (1[who / whose] 형식, 문장별 2~3개 선택지)",
-  "answer_key": "1. who  2. locked ..."
+  "passage": "어법 선택지가 삽입된 지문 — 형식 예시: ...he 1[who / whose] runs... 2[is / are] known...",
+  "answer_key": "1. who  2. is ..."
 }`;
 
     // ── 어법 수정 ────────────────────────────────────────────────────────────
     case 'grammar_correct':
       return header('아래 영어 지문으로 어법 수정 문제를 만드세요.') +
 `생성 규칙:
-1. 각 문장에서 어법 포인트 단어 정확히 3개를 선택하여 의도적으로 틀린 형태로 바꿉니다. 전체 25~35개.
+1. 각 문장에서 어법 오류를 정확히 3개 삽입합니다. 전체 25~35개.
    오류 유형: 동사 형태(능동↔수동, 현재분사↔과거분사), to부정사↔동명사, 관계사(who/whose/which/that),
    형용사↔부사, 수 일치, 시제, 전치사 등
-2. 틀린 단어는 반드시 번호[틀린단어] 형식으로 표시합니다. (예: 1[whose], 2[locking])
-3. 번호[틀린단어]로 표시된 단어는 모두 틀린 어법입니다. 학생은 전부 올바른 형태로 수정합니다.
+2. 틀린 단어는 반드시 번호[틀린단어] 형식으로 표시합니다.
+   ⚠️ 반드시 단어 1개만 대괄호 안에 넣습니다. (예: 1[whose], 2[locking], 3[has])
+   ⚠️ 구(phrase)나 여러 단어를 괄호 안에 넣는 것은 절대 금지입니다. (예: 1[to the purpose] ← 금지)
+3. 번호[단어]로 표시된 단어는 모두 틀린 어법입니다. 학생은 전부 올바른 형태로 수정합니다.
 4. 번호[단어] 외의 나머지 원문 단어는 절대 변경하지 않습니다.
 5. 오류 위치가 지문 전체에 고르게 분산되어야 합니다.
-6. 반드시 문장당 정확히 3개 오류를 삽입하세요. 2개 또는 4개 삽입 금지.
+6. 문장당 반드시 3개 — 2개나 4개 삽입 금지.
 
 출력 형식 (순수 JSON만):
 {
-  "passage": "문장마다 정확히 3개 오류 삽입 (1[틀린단어] 형식, 전체 25~35개)",
+  "passage": "문장마다 단어 1개씩, 정확히 3개 오류 삽입 (1[단어] 형식, 전체 25~35개)",
   "answer_key": "1. 틀린단어 → 바른단어  2. 틀린단어 → 바른단어 ..."
 }`;
 
@@ -549,8 +553,12 @@ export async function POST(request: Request) {
       if (type === 'vocab_choice' && parsed.passage && parsed.answer_key) {
         parsed.passage = redistributeVocabAnswers(parsed.passage as string, parsed.answer_key as string);
       }
-      if (type === 'grammar_choice' && parsed.passage && parsed.answer_key) {
-        parsed.passage = redistributeVocabAnswers(parsed.passage as string, parsed.answer_key as string);
+      if (type === 'grammar_choice' && parsed.passage) {
+        // AI가 [1. opt / opt] 포맷으로 생성할 때 → 1[opt / opt] 로 정규화
+        parsed.passage = (parsed.passage as string).replace(/\[(\d+)\.\s*([^\]]+)\]/g, '$1[$2]');
+        if (parsed.answer_key) {
+          parsed.passage = redistributeVocabAnswers(parsed.passage as string, parsed.answer_key as string);
+        }
       }
       if (type === 'combo_vocab_grammar') {
         const s1 = parsed.section1 as Record<string, unknown>;
