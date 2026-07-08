@@ -305,16 +305,17 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     case 'suneung_vocab_wrong':
       return header('아래 영어 지문으로 수능형 "밑줄 친 단어 중 문맥상 낱말의 쓰임이 적절하지 않은 것" 문제를 생성하세요.') +
 `생성 규칙:
-1. 5개의 단어 위치를 선정하여 ①②③④⑤로 표시합니다.
-2. 4개는 원문의 적절한 단어 그대로 유지, 1개만 문맥상 부적절한 단어로 교체합니다.
-3. 교체 시 반의어, 혼동어(예: increase↔decrease, accept↔reject)를 사용합니다.
-4. 오류 위치는 ①~⑤ 고르게 분산합니다.
-5. 나머지 문장은 원본 그대로 유지합니다.
+1. 지문에서 단어 5개를 선정하여 ①②③④⑤ 번호를 단어 바로 앞에 붙입니다. (예: ①unlocked, ②heard)
+2. 4개는 원문의 문맥에 적절한 단어 그대로 유지합니다.
+3. 1개만 문맥상 부적절한 단어(반의어 또는 혼동어)로 교체합니다. (예: increase→decrease, accept→reject)
+4. 오류 위치는 ①~⑤ 중 고르게 분산합니다. (항상 ①이나 ⑤로 고정 금지)
+5. 번호+단어 사이에 공백 없이 붙입니다: ①unlocked (O)  / ① unlocked (X)
+6. 나머지 문장은 원본 그대로 유지합니다.
 
 출력 형식 (순수 JSON만):
 {
-  "passage": "①~⑤ 표시가 있는 지문. 부적절한 단어 1개 포함.",
-  "answer_key": "정답: ③ (틀린단어 → 적절한단어로 수정)"
+  "passage": "지문 (예: ...who was ①unlocked up in a tower...②heard...③scared...④more...⑤life...)",
+  "answer_key": "③ (scared → pleased)"
 }`;
 
     // ── 맞는 어법 (수능형) ──────────────────────────────────────────────────

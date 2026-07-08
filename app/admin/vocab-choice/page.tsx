@@ -642,6 +642,34 @@ function RenderSuneungPassage({ passage, answerKey, showAnswer }: { passage: str
   );
 }
 
+function RenderSuneungVocabWrong({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const passage = result.passage as string ?? '';
+  const answerKey = result.answer_key as string ?? '';
+  const parts = passage.split(/([①②③④⑤][a-zA-Z''\-]+)/g);
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium leading-8 text-slate-800">
+        {parts.map((part, i) => {
+          const m = part.match(/^([①②③④⑤])(.+)$/);
+          if (m) return (
+            <span key={i}>
+              <span className="font-black text-slate-700">{m[1]}</span>
+              <span className="underline font-semibold">{m[2]}</span>
+            </span>
+          );
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+      {showAnswer && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+          <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
+          <p className="text-sm font-bold text-slate-700">{answerKey}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
   const passage = result.passage as string ?? '';
   const choices = (result.choices as Array<{label: string; A: string; B: string; C: string}>) || [];
@@ -741,6 +769,7 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
     case 'suneung_vocab_right':
       return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_vocab_wrong':
+      return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} />;
     case 'suneung_grammar_right':
     case 'suneung_grammar_wrong':
       return <RenderSuneungPassage passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
@@ -1139,6 +1168,37 @@ function PdfSentenceInsertion({ result, isAnswer, title, id }: { result: Workboo
       {isAnswer && (
         <div style={{ background: '#FFF9C4', borderRadius: 6, padding: '10px 14px', marginTop: 10, fontSize: 13, fontWeight: 700 }}>
           {data.answer_key}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfSuneungVocabWrong({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const passage = result.passage as string ?? '';
+  const answerKey = result.answer_key as string ?? '';
+  const parts = passage.split(/([①②③④⑤][a-zA-Z''\-]+)/g);
+  return (
+    <div id={id} style={PDF_BASE}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+        Q. 다음 글의 밑줄 친 부분 중, 문맥상 어휘의 쓰임이 적절하지 않은 것을 고르시오.
+      </p>
+      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <p style={PDF_P}>
+        {parts.map((part, i) => {
+          const m = part.match(/^([①②③④⑤])(.+)$/);
+          if (m) return (
+            <span key={i}>
+              <span style={{ fontWeight: 900 }}>{m[1]}</span>
+              <span style={{ textDecoration: 'underline', fontWeight: 700 }}>{m[2]}</span>
+            </span>
+          );
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+      {isAnswer && (
+        <div style={{ marginTop: 14, padding: '8px 14px', background: '#FEF9C3', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
+          정답: {answerKey}
         </div>
       )}
     </div>
@@ -2226,6 +2286,13 @@ export default function WorkbookPage() {
                   <React.Fragment key={key}>
                     <PdfEnglishWriting result={result} isAnswer={false} title={fullTitle} id={problemId} />
                     <PdfEnglishWriting result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'suneung_vocab_wrong':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSuneungVocabWrong result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfSuneungVocabWrong result={result} isAnswer={true} title={fullTitle} id={answerId} />
                   </React.Fragment>
                 );
               case 'suneung_vocab_right':
