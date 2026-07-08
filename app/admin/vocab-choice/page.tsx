@@ -773,7 +773,7 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
     case 'suneung_grammar_right':
       return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_grammar_wrong':
-      return <RenderSuneungPassage passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
+      return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} />;
     default:
       return <pre className="text-xs text-slate-600 whitespace-pre-wrap">{JSON.stringify(result, null, 2)}</pre>;
   }
@@ -1175,14 +1175,14 @@ function PdfSentenceInsertion({ result, isAnswer, title, id }: { result: Workboo
   );
 }
 
-function PdfSuneungVocabWrong({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+function PdfSuneungVocabWrong({ result, isAnswer, title, id, questionText }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string; questionText?: string }) {
   const passage = result.passage as string ?? '';
   const answerKey = result.answer_key as string ?? '';
   const parts = passage.split(/([①②③④⑤][a-zA-Z''\-]+)/g);
   return (
     <div id={id} style={PDF_BASE}>
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
-        Q. 다음 글의 밑줄 친 부분 중, 문맥상 어휘의 쓰임이 적절하지 않은 것을 고르시오.
+        {questionText ?? 'Q. 다음 글의 밑줄 친 부분 중, 문맥상 어휘의 쓰임이 적절하지 않은 것을 고르시오.'}
       </p>
       <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
       <p style={PDF_P}>
@@ -2294,6 +2294,13 @@ export default function WorkbookPage() {
                   <React.Fragment key={key}>
                     <PdfSuneungVocabWrong result={result} isAnswer={false} title={fullTitle} id={problemId} />
                     <PdfSuneungVocabWrong result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'suneung_grammar_wrong':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSuneungVocabWrong result={result} isAnswer={false} title={fullTitle} id={problemId} questionText="Q. 다음 글의 밑줄 친 부분 중, 어법상 틀린 것을 고르시오." />
+                    <PdfSuneungVocabWrong result={result} isAnswer={true} title={fullTitle} id={answerId} questionText="Q. 다음 글의 밑줄 친 부분 중, 어법상 틀린 것을 고르시오." />
                   </React.Fragment>
                 );
               case 'suneung_vocab_right':
