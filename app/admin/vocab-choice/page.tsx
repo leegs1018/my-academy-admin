@@ -642,6 +642,55 @@ function RenderSuneungPassage({ passage, answerKey, showAnswer }: { passage: str
   );
 }
 
+function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const passage = result.passage as string ?? '';
+  const choices = (result.choices as Array<{label: string; A: string; B: string; C: string}>) || [];
+  const answerKey = result.answer_key as string ?? '';
+  const parts = passage.split(/(\([ABC]\)\[[^\]]+\])/g);
+  return (
+    <div className="space-y-4">
+      <p className="text-sm font-medium leading-8 text-slate-800">
+        {parts.map((part, i) => {
+          const m = part.match(/\(([ABC])\)\[([^\]]+)\]/);
+          if (m) return (
+            <span key={i} className="inline-flex items-baseline gap-0.5">
+              <span className="font-black text-violet-600">({m[1]})</span>
+              <span className="bg-amber-100 border-2 border-amber-400 rounded px-1.5 font-bold text-sm">[{m[2]}]</span>
+            </span>
+          );
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+      <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-100 border-b border-slate-200">
+              <th className="py-2 px-3 w-8 text-left"></th>
+              <th className="py-2 px-6 text-center font-black text-slate-600">(A)</th>
+              <th className="py-2 px-6 text-center font-black text-slate-600">(B)</th>
+              <th className="py-2 px-6 text-center font-black text-slate-600">(C)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {choices.map((c, i) => {
+              const correct = showAnswer && c.label === answerKey;
+              return (
+                <tr key={i} className={`border-t border-slate-100 ${correct ? 'bg-yellow-50' : ''}`}>
+                  <td className="py-2 px-3 font-black text-slate-400">{c.label}</td>
+                  <td className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>{c.A}</td>
+                  <td className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>{c.B}</td>
+                  <td className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>{c.C}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {showAnswer && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3"><p className="text-xs font-black text-yellow-700 mb-0.5">정답</p><p className="text-sm font-bold text-slate-700">{answerKey}</p></div>}
+    </div>
+  );
+}
+
 function RenderResultContent({ result, type, showAnswer, showKorean }: { result: WorkbookResult; type: WorkbookType; showAnswer: boolean; showKorean?: boolean }) {
   if (result.error) return <p className="text-rose-500 font-bold text-sm">{result.error as string}</p>;
 
@@ -690,6 +739,7 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
     case 'sentence_insertion':
       return <RenderSentenceInsertion data={result as {insert_sentence:string;passage:string;answer_key:string}} showAnswer={showAnswer} />;
     case 'suneung_vocab_right':
+      return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_vocab_wrong':
     case 'suneung_grammar_right':
     case 'suneung_grammar_wrong':
@@ -1089,6 +1139,60 @@ function PdfSentenceInsertion({ result, isAnswer, title, id }: { result: Workboo
       {isAnswer && (
         <div style={{ background: '#FFF9C4', borderRadius: 6, padding: '10px 14px', marginTop: 10, fontSize: 13, fontWeight: 700 }}>
           {data.answer_key}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfSuneungVocabABC({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const passage = result.passage as string ?? '';
+  const choices = (result.choices as Array<{label: string; A: string; B: string; C: string}>) || [];
+  const answerKey = result.answer_key as string ?? '';
+  const parts = passage.split(/(\([ABC]\)\[[^\]]+\])/g);
+  const renderPassage = () => parts.map((part, i) => {
+    const m = part.match(/\(([ABC])\)\[([^\]]+)\]/);
+    if (m) return (
+      <span key={i}>
+        <span style={{ fontWeight: 900, color: '#6D28D9' }}>({m[1]})</span>
+        <span style={{ background: '#FEF3C7', border: '1.5px solid #D97706', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>[{m[2]}]</span>
+      </span>
+    );
+    return <span key={i}>{part}</span>;
+  });
+  return (
+    <div id={id} style={PDF_BASE}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
+        Q. (A), (B), (C)의 각 [ ] 안에서 문맥에 맞는 어휘로 가장 적절한 것을 고르시오.
+      </p>
+      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <p style={PDF_P}>{renderPassage()}</p>
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16, fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: '#F1F5F9' }}>
+            <th style={{ padding: '5px 10px', width: 32, borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #CBD5E1' }}></th>
+            {['(A)', '(B)', '(C)'].map((h, i) => (
+              <th key={i} style={{ padding: '5px 0', textAlign: 'center', fontWeight: 900, color: '#374151', borderRight: i < 2 ? '1px solid #E2E8F0' : undefined, borderBottom: '1px solid #CBD5E1', width: '31%' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {choices.map((c, i) => {
+            const correct = isAnswer && c.label === answerKey;
+            return (
+              <tr key={i} style={{ background: correct ? '#FEFCE8' : (i % 2 === 0 ? '#fff' : '#F8FAFC') }}>
+                <td style={{ padding: '4px 10px', fontWeight: 900, color: '#64748B', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #F1F5F9', textAlign: 'center' }}>{c.label}</td>
+                {[c.A, c.B, c.C].map((val, j) => (
+                  <td key={j} style={{ padding: '4px 0', textAlign: 'center', borderRight: j < 2 ? '1px solid #E2E8F0' : undefined, borderBottom: '1px solid #F1F5F9', fontWeight: correct ? 900 : 400, color: correct ? '#059669' : '#1E293B' }}>{val}</td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {isAnswer && (
+        <div style={{ marginTop: 14, padding: '8px 14px', background: '#FEF9C3', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
+          정답: {answerKey}
         </div>
       )}
     </div>
@@ -2122,6 +2226,13 @@ export default function WorkbookPage() {
                   <React.Fragment key={key}>
                     <PdfEnglishWriting result={result} isAnswer={false} title={fullTitle} id={problemId} />
                     <PdfEnglishWriting result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'suneung_vocab_right':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSuneungVocabABC result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfSuneungVocabABC result={result} isAnswer={true} title={fullTitle} id={answerId} />
                   </React.Fragment>
                 );
               case 'passage_translation':
