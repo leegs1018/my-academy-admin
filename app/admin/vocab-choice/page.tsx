@@ -145,7 +145,7 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
   const answerMap: Record<number, string> = {};
   const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
   const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
-  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim(); });
 
   const chunks: VocabChunk[] = [];
   // Allow one level of nested brackets (e.g. 19[further[s] / prevents])
@@ -1104,7 +1104,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
   const answerMap: Record<number, string> = {};
   const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
   const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
-  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim(); });
   const parts = passage.split(/_\((\d+)\)_/);
   return (
     <div id={id} style={PDF_BASE}>

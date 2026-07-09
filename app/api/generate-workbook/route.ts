@@ -571,7 +571,7 @@ function redistributeVocabAnswers(passage: string, answerKey: string): string {
 
   const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
   const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
-  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim(); });
 
   let match: RegExpExecArray | null;
   const regex = new RegExp(choiceRegex.source, 'g');
