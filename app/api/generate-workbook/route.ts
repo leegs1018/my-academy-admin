@@ -658,7 +658,7 @@ export async function POST(request: Request) {
       const prompt = buildPrompt(text.trim(), type, diff);
       const response = await client.chat.completions.create({
         model: 'gpt-5.1',
-        max_tokens: 4096,
+        max_completion_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       });
       const rawText = response.choices[0]?.message?.content ?? '';
