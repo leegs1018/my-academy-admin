@@ -44,6 +44,7 @@ const AI_DIRECT_KEYS = [
   'ai_type_topic_title', 'ai_type_grammar', 'ai_type_vocab_paraphrase',
   'ai_type_vocab_blank', 'ai_type_fill_blank', 'ai_type_summary',
   'ai_type_flow', 'ai_type_phrase_meaning', 'ai_type_sentence_order',
+  'ai_type_sentence_insertion',
 ];
 const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type_'));
 

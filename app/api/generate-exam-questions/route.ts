@@ -28,7 +28,8 @@ const TYPE_LABELS: Record<string, string> = {
   summary:          '요약문 완성 유형',
   flow:             '흐름 문제',
   phrase_meaning:   '어구 의미 유형',
-  sentence_order:   '순서 배열 유형',
+  sentence_order:     '순서 배열 유형',
+  sentence_insertion: '문장 삽입 유형',
 };
 
 const VALID_TYPES = new Set(Object.keys(TYPE_LABELS));
@@ -1024,6 +1025,42 @@ Transition markers alone are insufficient evidence.
 각 단락 간 연결 논리를 한글로 설명:
 - 지시어, 대명사, 일반→구체, 문제→해결, 역접, 예시 확장 등
 - 왜 이 순서만 논리적으로 완결되는지 상세히 설명
+`,
+
+  sentence_insertion: `
+--- sentence_insertion (문장 삽입 유형) ---
+
+[핵심 원칙] 원지문의 단어·문장·표현을 절대 변형하지 마세요. 삽입할 문장 제거 및 ①~⑤ 기호 삽입 외에 어떤 수정도 금지합니다.
+
+생성 규칙:
+1. 지문에서 삽입하기 좋은 문장 1개를 원문 그대로 선택합니다. (접속어/대명사 연결이 자연스러운 문장 우선)
+2. 해당 문장을 지문에서 제거하고, 나머지 지문의 문장은 원문 그대로 유지합니다.
+3. 제거된 문장이 있던 위치를 포함하여 문장 사이 5곳에 ①②③④⑤를 배치합니다.
+4. ①~⑤ 기호는 문장 사이에 넣습니다 (예: "문장A. ② 문장B.").
+5. 정답이 ①이나 ⑤에만 몰리지 않도록 합니다.
+
+[question_text 형식]
+"주어진 문장이 들어가기에 가장 적절한 곳은?\\n\\n[주어진 문장]\\n{삽입할 문장 원문 그대로}"
+
+⚠️ question_text에 위 형식 그대로 작성. 지문은 modified_passage에만 작성.
+
+[modified_passage 형식]
+①~⑤ 기호가 삽입된 지문. 나머지 원문 그대로.
+예시: "문장A. ① 문장B. ② 문장C. ③ 문장D. ④ 문장E. ⑤ 문장F."
+
+[choices — 고정 형식]
+반드시 아래 5개를 그대로 사용:
+{"number":1,"text":"①"}
+{"number":2,"text":"②"}
+{"number":3,"text":"③"}
+{"number":4,"text":"④"}
+{"number":5,"text":"⑤"}
+
+[answer]
+정답 기호의 번호 (1~5)
+
+[explanation]
+삽입 위치의 논리적 근거를 한글로 상세히 설명.
 `
 };
 
@@ -1105,7 +1142,7 @@ ${selectedRules}
 {
   "type": "유형키 (예: topic_title)",
   "question_text": "문제 지시문 전체 (요약문 유형은 요약문 포함)",
-  "modified_passage": "수정된 지문 (grammar/vocab_blank/fill_blank/vocab_paraphrase/sentence_order 유형만, 해당 없는 유형은 키 자체 생략)",
+  "modified_passage": "수정된 지문 (grammar/vocab_blank/fill_blank/vocab_paraphrase/sentence_order/sentence_insertion 유형만, 해당 없는 유형은 키 자체 생략)",
   "choices": [
     {"number": 1, "text": "선지1"},
     {"number": 2, "text": "선지2"},
@@ -1120,6 +1157,7 @@ ${selectedRules}
 [선지 text 필드 절대 규칙]
 - flow 유형만: choices text 필드에 "①"~"⑤" 기호 단독 사용 허용.
 - sentence_order 유형: choices text 필드에 "① (A)-(B)-(C)" 형식 사용 (프롬프트 지정 형식 그대로).
+- sentence_insertion 유형: choices text 필드에 "①"~"⑤" 기호 단독 사용 (프롬프트 지정 형식 그대로).
 - 그 외 모든 유형(topic_title, fill_blank, phrase_meaning, summary, vocab_blank): choices text 필드에 반드시 완전한 영어 명사구/절/문장을 작성할 것. ①②③④⑤ 기호만 있는 선지 절대 금지.
 
 반드시 요청된 유형 순서대로 questions 배열에 포함하라. 요청되지 않은 유형은 생성하지 마라.${targetAnswer != null ? `

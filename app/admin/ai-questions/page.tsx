@@ -90,7 +90,8 @@ const QUESTION_TYPE_OPTIONS: QuestionTypeOption[] = [
   { key: 'summary',          label: '요약문 완성 유형',       description: '요약문의 (A)(B) 빈칸 완성',          color: 'bg-teal-100 text-teal-700 border-teal-200' },
   { key: 'flow',             label: '흐름 유형',              description: '전체 흐름과 관계 없는 문장 찾기',    color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
   { key: 'phrase_meaning',   label: '어구 의미 추론 유형',    description: '밑줄 어구의 문맥 속 의미 추론',      color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { key: 'sentence_order',  label: '순서 배열 유형',         description: '글의 순서로 가장 적절한 것은?',       color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { key: 'sentence_order',     label: '순서 배열 유형',    description: '글의 순서로 가장 적절한 것은?',          color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { key: 'sentence_insertion', label: '문장 삽입 유형',    description: '주어진 문장이 들어가기에 가장 적절한 곳', color: 'bg-violet-100 text-violet-700 border-violet-200' },
 ];
 
 const TYPE_COLOR_MAP: Record<string, string> = {};
@@ -289,6 +290,19 @@ function renderFlowPassage(text: string) {
   });
 }
 
+// 문장 삽입형 지문 — ①~⑤ 기호를 인라인 강조로 렌더링
+function renderSentenceInsertionPassage(text: string) {
+  const CIRCLES = ['①','②','③','④','⑤'];
+  const normalized = text.replace(/\n+/g, ' ').replace(/\s*(①|②|③|④|⑤)/g, ' $1').trim();
+  const parts = normalized.split(/(①|②|③|④|⑤)/g);
+  return parts.map((part, i) => {
+    if (CIRCLES.includes(part)) {
+      return <span key={i} style={{fontWeight: 900, color: '#6d28d9', background: '#ede9fe', borderRadius: '3px', padding: '0 3px'}}>{part}</span>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 // 어휘 (a)(b) 빈칸형 지문 — (a)/(b) 배지 + 밑줄 공간 표시
 function renderVocabBlankPassage(text: string) {
   const normalized = text.replace(/\(([ab])\)\s*_+/gi, '($1)');
@@ -453,6 +467,17 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       for (const [lbl, m] of [['A', aM], ['B', bM], ['C', cM]] as [string, RegExpMatchArray | null][]) {
         if (m) html += `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;width:100%;box-sizing:border-box;"><div style="font-size:9px;font-weight:900;color:#6366f1;margin-bottom:2px;">(${lbl})</div><div style="font-size:12px;line-height:1.6;color:#1e293b;text-align:justify;word-break:break-word;">${escP(m[1].trim())}</div></div>`;
       }
+    } else if (q.type === 'sentence_insertion') {
+      const siParts = q.question_text.split('[주어진 문장]');
+      const siInstruction = siParts[0].trim();
+      const siSentence = (siParts[1] ?? '').trim();
+      html += instrP(`${num}. ${esc(siInstruction)}`);
+      html += `<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:4px;padding:5px 8px;margin-bottom:5px;width:100%;box-sizing:border-box;"><div style="font-size:9px;font-weight:900;color:#7c3aed;margin-bottom:2px;">[주어진 문장]</div><div style="font-size:12px;line-height:1.6;color:#4c1d95;word-break:break-word;">${esc(siSentence)}</div></div>`;
+      if (q.modified_passage) {
+        const siPassage = q.modified_passage.replace(/\n+/g, ' ').replace(/\s*(①|②|③|④|⑤)/g, ' $1').trim();
+        const siHtml = siPassage.replace(/(①|②|③|④|⑤)/g, '<span style="font-weight:900;color:#6d28d9;background:#ede9fe;border-radius:3px;padding:0 2px;">$1</span>');
+        html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;font-size:12px;line-height:1.7;color:#1e293b;text-align:justify;word-break:break-word;">${siHtml}</div>`;
+      }
     } else if (q.modified_passage) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escP(q.modified_passage));
@@ -469,7 +494,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
           const ch = gm ? gm[1] : (CIRCLE_NUMS[c.number - 1] ?? '');
           const wd = gm ? gm[2] : c.text;
           html += `<div style="display:flex;gap:4px;align-items:center;"><span style="font-size:12px;font-weight:900;color:#111827;">${esc(ch)}</span><span style="font-size:13px;font-weight:600;color:#1f2937;">${esc(wd)}</span></div>`;
-        } else if (q.type === 'sentence_order') {
+        } else if (q.type === 'sentence_order' || q.type === 'sentence_insertion') {
           html += `<div style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</div>`;
         } else {
           html += `<div style="display:flex;gap:4px;align-items:flex-start;"><span style="font-weight:900;color:#475569;flex-shrink:0;min-width:14px;font-size:13px;">${CIRCLE_NUMS[j] ?? (j+1)}</span><span style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</span></div>`;
@@ -1936,6 +1961,27 @@ export default function AiQuestionsPage() {
                         </>
                       )}
 
+                      {/* sentence_insertion: [지시문 + 주어진 문장] + [①~⑤ 삽입 지문] */}
+                      {q.type === 'sentence_insertion' && (() => {
+                        const parts = q.question_text.split('[주어진 문장]');
+                        const instruction = parts[0].trim();
+                        const givenSentence = (parts[1] ?? '').trim();
+                        return (
+                          <>
+                            <div className="text-sm font-bold text-gray-800 mb-3 leading-relaxed">{instruction}</div>
+                            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
+                              <p className="text-xs font-black text-violet-400 mb-2">[주어진 문장]</p>
+                              <p className="text-sm font-medium text-violet-800 leading-relaxed">{givenSentence}</p>
+                            </div>
+                            {q.modified_passage && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed font-medium">
+                                {renderSentenceInsertionPassage(q.modified_passage)}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+
                       {/* flow: [질문] + [①~⑤ 문장 지문] */}
                       {q.type === 'flow' && (
                         <>
@@ -1997,7 +2043,7 @@ export default function AiQuestionsPage() {
                       })()}
 
                       {/* 문제 지시문 (아래 유형은 위에서 이미 처리) */}
-                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && q.type !== 'sentence_order' && (
+                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && q.type !== 'sentence_order' && q.type !== 'sentence_insertion' && (
                         <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
                           {q.question_text}
                         </div>
@@ -2016,7 +2062,7 @@ export default function AiQuestionsPage() {
                                     : 'bg-gray-50 border border-transparent'}`}>
                                 {(q.type === 'grammar' || q.type === 'vocab_paraphrase') ? (
                                   renderGrammarChoice(c.text, isCorrect, c.number)
-                                ) : q.type === 'sentence_order' ? (
+                                ) : (q.type === 'sentence_order' || q.type === 'sentence_insertion') ? (
                                   <span className={`text-sm leading-relaxed font-medium
                                     ${isCorrect ? 'font-black text-indigo-700' : 'text-gray-700'}`}>
                                     {c.text}
@@ -2563,7 +2609,26 @@ export default function AiQuestionsPage() {
                           </>
                         );
                       })()}
-                      {q.type !== 'flow' && q.type !== 'grammar' && q.choices?.length > 0 && (
+                      {q.type === 'sentence_insertion' && (() => {
+                        const siParts = q.question_text.split('[주어진 문장]');
+                        const siInstruction = siParts[0].trim();
+                        const siSentence = (siParts[1] ?? '').trim();
+                        return (
+                          <>
+                            <div className="text-sm font-bold text-gray-800 mb-3 whitespace-pre-wrap">{siInstruction}</div>
+                            <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-3">
+                              <p className="text-[10px] font-black text-violet-400 mb-1">[주어진 문장]</p>
+                              <p className="text-sm font-medium text-violet-800 leading-relaxed">{siSentence}</p>
+                            </div>
+                            {q.modified_passage && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 text-sm text-slate-700 leading-relaxed font-medium">
+                                {renderSentenceInsertionPassage(q.modified_passage)}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                      {q.type !== 'flow' && q.type !== 'grammar' && q.type !== 'sentence_insertion' && q.choices?.length > 0 && (
                         <div className="space-y-2 mt-4">
                           {q.choices.map((c, ci) => (
                             <div key={ci} className="flex items-start gap-2">
