@@ -148,13 +148,14 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
   nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim().split(/\s+/)[0]; });
 
   const chunks: VocabChunk[] = [];
-  const choiceRegex = /(\d+)\[([^\]]+)\]/g;
+  // Allow one level of nested brackets (e.g. 19[further[s] / prevents])
+  const choiceRegex = /(\d+)\[((?:[^\[\]]|\[[^\]]*\])+)\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = choiceRegex.exec(passage)) !== null) {
     if (match.index > lastIndex) chunks.push({ type: 'text', text: passage.slice(lastIndex, match.index) });
     const num = parseInt(match[1]);
-    const opts = match[2].split(/\s*\/\s*/).map(o => o.trim());
+    const opts = match[2].split(/\s*\/\s*/).map(o => o.trim()).filter(o => o !== '');
     const ans = answerMap[num] || '';
     const correctIdx = opts.findIndex(o => o.toLowerCase() === ans.toLowerCase());
     const [a, b, c] = opts;
