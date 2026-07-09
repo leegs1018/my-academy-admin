@@ -2415,7 +2415,7 @@ export default function AiQuestionsPage() {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={typeConfigs.map(c => c.id)} strategy={verticalListSortingStrategy}>
                 <div className="space-y-2">
-                  {typeConfigs.map(cfg => <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} />)}
+                  {typeConfigs.map(cfg => <SortableTypeCard key={cfg.id} cfg={cfg} onUpdate={updateConfig} onRemove={removeConfig} cost={mockTypePricing[cfg.type] ?? typePricing[cfg.type]} />)}
                 </div>
               </SortableContext>
             </DndContext>
@@ -2540,6 +2540,12 @@ export default function AiQuestionsPage() {
                         <>
                           <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">{q.question_text}</div>
                           {q.modified_passage && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed font-medium">{renderWithUnderline(q.modified_passage)}</div>}
+                        </>
+                      )}
+                      {q.type === 'fill_blank' && (
+                        <>
+                          <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">{q.question_text}</div>
+                          {q.modified_passage && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{q.modified_passage}</div>}
                         </>
                       )}
                       {q.type === 'sentence_order' && (() => {
