@@ -683,7 +683,7 @@ function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult;
           if (m) return (
             <span key={i} className="inline-flex items-baseline gap-0.5">
               <span className="font-black text-violet-600">({m[1]})</span>
-              <span className="bg-amber-100 border-2 border-amber-400 rounded px-1.5 font-bold text-sm">[{m[2]}]</span>
+              <span className="rounded px-1.5 font-bold text-sm">[{m[2]}]</span>
             </span>
           );
           return <span key={i}>{part}</span>;
@@ -1010,7 +1010,7 @@ const PDF_P: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'br
 
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const chunks = parseVocabPassage(result.passage as string, result.answer_key as string);
-  const choiceBase: React.CSSProperties = { background: '#FEF3C7', borderRadius: 4, padding: '2px 6px', margin: '0 2px', border: '2px solid #D97706', fontWeight: 700, fontSize: 13 };
+  const choiceBase: React.CSSProperties = { borderRadius: 4, padding: '2px 6px', margin: '0 2px', fontWeight: 900, fontSize: 14 };
   return (
     <div id={id} style={PDF_BASE}>
       <h2 style={PDF_H2}>{title}</h2>
@@ -1212,7 +1212,7 @@ function PdfTranslation({ result, isAnswer, title, id }: { result: WorkbookResul
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#3730A3', lineHeight: 1.7 }}>{s.en}</p>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#000', lineHeight: 1.7 }}>{s.en}</p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
               {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.ko}</span>}
@@ -1236,7 +1236,7 @@ function PdfWordOrder({ result, isAnswer, title, id, showKorean }: { result: Wor
             {showKorean && (
               <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 700, color: '#DC2626' }}>{s.ko}</p>
             )}
-            <p style={{ margin: '0 0 4px', fontSize: 13, color: '#475569' }}>
+            <p style={{ margin: '0 0 4px', fontSize: 13, color: '#000' }}>
               ({(s.scrambled || []).join(' / ')})
             </p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
@@ -1288,8 +1288,8 @@ function PdfPassageTranslation({ result, id }: { result: WorkbookResult; id: str
     const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
     const parts = text.split(regex);
     return parts.map((part, i) => {
-      const color = keyColors[part.toLowerCase()];
-      if (color) return <span key={i} style={{ color, fontWeight: 900 }}>{part}</span>;
+      const isKey = !!keyColors[part.toLowerCase()];
+      if (isKey) return <span key={i} style={{ color: '#000', fontWeight: 900 }}>{part}</span>;
       return <span key={i}>{part}</span>;
     });
   };
@@ -1305,7 +1305,7 @@ function PdfPassageTranslation({ result, id }: { result: WorkbookResult; id: str
               <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.7, verticalAlign: 'top' }}>
                 {renderHighlighted(s.en, s.key_words || [])}
               </td>
-              <td style={{ padding: '4px 0 4px 8px', fontSize: 12, color: '#3730A3', fontWeight: 700, lineHeight: 1.6, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
+              <td style={{ padding: '4px 0 4px 8px', fontSize: 12, color: '#000', fontWeight: 700, lineHeight: 1.6, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
                 {s.ko}
               </td>
             </tr>
@@ -1435,7 +1435,7 @@ function PdfSuneungVocabABC({ result, isAnswer, title, id, questionText }: { res
     if (m) return (
       <span key={i}>
         <span style={{ fontWeight: 900, color: '#6D28D9' }}>({m[1]})</span>
-        <span style={{ background: '#FEF3C7', border: '1.5px solid #D97706', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>[{m[2]}]</span>
+        <span style={{ borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>[{m[2]}]</span>
       </span>
     );
     return <span key={i}>{part}</span>;

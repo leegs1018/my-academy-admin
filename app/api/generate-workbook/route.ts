@@ -94,7 +94,8 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     case 'grammar_choice':
       return header('아래 영어 지문으로 어법 선택 문제를 생성하세요.') +
 `생성 규칙:
-1. 각 문장마다 2~3개의 어법 포인트를 선택하여 선택지로 만듭니다. 전체 20~30개.
+1. 각 문장마다 반드시 3개의 어법 포인트를 선택하여 선택지로 만듭니다. 전체 25~35개.
+   ⚠️ 문장당 정확히 3개 — 2개나 1개 금지. 8문장 지문이면 24개 생성.
    포인트 유형: to부정사/동명사, 능동/수동, 주어-동사 수 일치, 관계사(who/whose/which/that),
    접속사, 형용사/부사, 시제, 전치사, 현재분사/과거분사 등
 2. 각 위치에 반드시 숫자[형태A / 형태B] 형식으로 표시합니다. 선택지는 2개입니다.
@@ -115,7 +116,7 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     case 'grammar_correct':
       return header('아래 영어 지문으로 어법 수정 문제를 만드세요.') +
 `생성 규칙:
-1. 각 문장에서 어법 오류를 정확히 3개 삽입합니다. 전체 25~35개.
+1. 지문의 모든 문장 각각에 어법 오류를 정확히 3개씩 삽입합니다.
    오류 유형: 동사 형태(능동↔수동, 현재분사↔과거분사), to부정사↔동명사, 관계사(who/whose/which/that),
    형용사↔부사, 수 일치, 시제, 전치사 등
 2. 틀린 단어는 반드시 번호[틀린단어] 형식으로 표시합니다.
@@ -123,12 +124,17 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
    ⚠️ 구(phrase)나 여러 단어를 괄호 안에 넣는 것은 절대 금지입니다. (예: 1[to the purpose] ← 금지)
 3. 번호[단어]로 표시된 단어는 모두 틀린 어법입니다. 학생은 전부 올바른 형태로 수정합니다.
 4. 번호[단어] 외의 나머지 원문 단어는 절대 변경하지 않습니다.
-5. 오류 위치가 지문 전체에 고르게 분산되어야 합니다.
-6. 문장당 반드시 3개 — 2개나 4개 삽입 금지.
+5. 오류 위치가 문장 전체에 고르게 분산되어야 합니다 (문장 앞/중/뒤).
+
+⚠️⚠️ 핵심 규칙 — 모든 문장에 예외 없이 정확히 3개:
+예) "She 1[go] to school every 2[day], but her 3[friend] never come."
+    "He 4[are] happy because he 5[finding] the answer 6[quick]."
+→ 2문장 = 6개 오류. 지문이 8문장이면 반드시 24개, 10문장이면 30개 생성.
+문장당 1개나 2개만 넣는 것은 절대 금지입니다.
 
 출력 형식 (순수 JSON만):
 {
-  "passage": "문장마다 단어 1개씩, 정확히 3개 오류 삽입 (1[단어] 형식, 전체 25~35개)",
+  "passage": "모든 문장마다 정확히 3개 오류 삽입 (1[단어] 형식)",
   "answer_key": "1. 틀린단어 → 바른단어  2. 틀린단어 → 바른단어 ..."
 }`;
 
@@ -382,7 +388,11 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 - 정답 쌍에는 어법 오류 2개가 모두 포함되어야 함
 - q2_answer: 정답 선택지 번호 (예: "④")
 
-⚠️ 규칙: 빈칸 5개 + 어법 항목 5개 = 총 10개 표시를 지문 전체에 고르게 분산. 원문 나머지 절대 변경 금지.
+⚠️⚠️ 핵심 규칙:
+- 어휘 빈칸 ①~⑤ FIVE개 반드시 모두 생성: (A)_____, (B)_____, (C)_____, (D)_____, (E)_____
+- 어법 항목 ①~⑤ FIVE개 반드시 모두 생성: ①word, ②word, ③word, ④word, ⑤word
+- 총 10개 표시를 지문 전체에 고르게 분산. 원문 나머지 절대 변경 금지.
+- ①~⑤ 번호가 하나라도 빠지면 오답입니다. 모두 포함 필수.
 
 출력 형식 (순수 JSON만):
 {
@@ -423,7 +433,11 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 - 조건: 보기 단어를 모두 한 번씩 사용, 필요시 어형 변형 및 단어 추가 가능
 - q2_items: [{blank, words[], answer}]
 
-⚠️ 규칙: (A)~(D) 각 빈칸은 반드시 문맥상 맞는 품사/의미의 단어. 원문 나머지 절대 변경 금지.
+⚠️⚠️ 핵심 규칙:
+- 짧은 빈칸 FOUR개 반드시 모두 생성: (A)[____], (B)[____], (C)[____], (D)[____] — 하나도 빠뜨리면 안 됨
+- 긴 빈칸 TWO개 반드시 모두 생성: (가)[________________________], (나)[________________________]
+- 각 빈칸은 반드시 문맥상 맞는 품사/의미의 단어. 원문 나머지 절대 변경 금지.
+- q1_choices의 ①~④는 (A)~(D)의 정답 단어, ⑤만 부적절한 디스트랙터로 구성.
 
 출력 형식 (순수 JSON만):
 {
@@ -504,9 +518,12 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 - insert_sentence: 삽입할 문장 (지문에서 제거한 원문 문장)
 - insert_answer: 정답 위치 (예: "(C)")
 
-⚠️ 규칙:
+⚠️⚠️ 핵심 규칙:
+- 문장 삽입 마커 FIVE개 반드시 모두 생성: (A) (B) (C) (D) (E) — 하나도 빠뜨리면 안 됨
+- 어법 항목 ①~⑤ FIVE개 반드시 모두 생성: ①word ②word ③word ④word ⑤word — ①만 있고 나머지 없으면 오답
 - (A)~(E) 마커와 ①~⑤ 항목은 겹치지 않게 배치
 - 번호+단어 사이 공백 금지: ①caring (O) / ① caring (X)
+- passage에 ①②③④⑤가 모두 보여야 하며 하나라도 빠지면 오답입니다
 - 원문 나머지 절대 변경 금지
 
 출력 형식 (순수 JSON만):
