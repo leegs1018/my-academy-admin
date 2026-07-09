@@ -1505,7 +1505,7 @@ export async function POST(request: Request) {
     const DEFAULT_TOKENS = 2500;
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
-    const generateForType = async (questionType: string, difficulty: 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
+    const generateForType = async (questionType: string, difficulty: 'a2' | 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
       const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 4 : 4;
       // sentence_order, grammar는 지문/오류 위치가 AI가 자연스럽게 결정하므로 targetAnswer 강제 불가
       const targetAnswer = (questionType === 'sentence_order' || questionType === 'grammar') ? undefined : Math.floor(Math.random() * 5) + 1;
