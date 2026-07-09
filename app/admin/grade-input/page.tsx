@@ -288,7 +288,7 @@ export default function GradeInputPage() {
         actualSessions = actualSessions.slice(0, sessionLimit);
       }
 
-      const { data: studentData } = await supabase.from('students').select('*').eq('academy_id', userId).eq('class_name', targetClassName);
+      const { data: studentData } = await supabase.from('students').select('*').eq('academy_id', userId).eq('class_name', targetClassName).eq('status', '재원');
       const { data: allGradeData } = await supabase.from('grades').select('*').eq('academy_id', userId).eq('category_id', catId).eq('class_id', classId);
 
       if (studentData) {
