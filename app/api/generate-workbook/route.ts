@@ -657,7 +657,7 @@ export async function POST(request: Request) {
     for (const text of validPassages) {
       const prompt = buildPrompt(text.trim(), type, diff);
       const response = await client.chat.completions.create({
-        model: 'gpt-4.1-mini',
+        model: 'gpt-5.1',
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       });
