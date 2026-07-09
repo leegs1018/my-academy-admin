@@ -318,6 +318,9 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 5. 번호+단어 사이에 공백 없이 붙입니다: ①unlocked (O)  / ① unlocked (X)
 6. 나머지 문장은 원본 그대로 유지합니다.
 
+⚠️ 중요: passage에 ①②③④⑤ 다섯 번호가 반드시 모두 포함되어야 합니다.
+번호 하나라도 빠지면 절대 안 됩니다. 예: ①word … ②word … ③word … ④word … ⑤word 전부 등장.
+
 출력 형식 (순수 JSON만):
 {
   "passage": "지문 (예: ...who was ①unlocked up in a tower...②heard...③scared...④more...⑤life...)",
@@ -364,6 +367,9 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 5. 번호+단어 사이에 공백 없이 붙입니다: ①What's (O) / ① What's (X)
 6. 나머지 문장은 원본 그대로 유지합니다.
 
+⚠️ 중요: passage에 ①②③④⑤ 다섯 번호가 반드시 모두 포함되어야 합니다.
+번호 하나라도 빠지면 절대 안 됩니다. 예: ①word … ②word … ③word … ④word … ⑤word 전부 등장.
+
 출력 형식 (순수 JSON만):
 {
   "passage": "지문 (예: ...①What's it like...②hope...③with...④couldn't...⑤beautiful...)",
@@ -379,8 +385,10 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 
 문제 1 (어휘 빈칸): 빈칸 (A)~(E)에 들어갈 말로 적절하지 않은 것
 - 5개 선택지 형식: {"label":"①","blank":"(A)","word":"ask"}
+- ①=(A), ②=(B), ③=(C), ④=(D), ⑤=(E) — 각 빈칸 하나씩 반드시 5개 전부
 - 4개는 문맥에 적절한 단어, 1개만 부적절한 단어
 - q1_answer: 부적절한 선택지 번호 (예: "③")
+⚠️ q1_choices 반드시 5개 — ①(A)②(B)③(C)④(D)⑤(E) 하나도 빠짐없이
 
 문제 2 (어법): ①~⑤ 중 어법상 어색한 것 2개를 찾는 쌍 선택
 - 어법 항목 5개 중 정확히 2개가 어법 오류(동사형태, 관계사, 분사 오류 등)

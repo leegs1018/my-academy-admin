@@ -726,13 +726,13 @@ function RenderComboGrammarInsert({ result, showAnswer }: { result: WorkbookResu
   const insertAnswer = result.insert_answer as string ?? '';
   const grammarWrong = (result.grammar_wrong as string[]) || [];
   const grammarAnswers = (result.grammar_answers as Array<{num:string;wrong:string;correct:string}>) || [];
-  const parts = passage.split(/(\([A-E]\)|[①②③④⑤][a-zA-Z''\-]+)/g);
+  const parts = passage.split(/(\([A-E]\)|[①②③④⑤] ?[a-zA-Z][a-zA-Z0-9''‘’\-]*)/g);
   const renderPassage = () => parts.map((part, i) => {
     const ins = part.match(/^\(([A-E])\)$/);
     if (ins) return (
       <span key={i} className="font-black text-violet-700 mx-0.5 text-xs align-middle">({ins[1]})</span>
     );
-    const gm = part.match(/^([①②③④⑤])(.+)$/);
+    const gm = part.match(/^([①②③④⑤]) ?(.+)$/);
     if (gm) {
       const wrong = grammarWrong.includes(gm[1]);
       return (
@@ -1150,7 +1150,7 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
         </span>
       );
     } else {
-      parts.push(<span key={m.index} style={{ background: '#FFF9C4', borderRadius: 3, padding: '0 3px' }}><span style={{ fontSize: 10, color: '#666' }}>{num}</span>[{word}]</span>);
+      parts.push(<span key={m.index}><span style={{ fontSize: 10, color: '#666' }}>{num}</span><span style={{ fontWeight: 700 }}>[{word}]</span></span>);
     }
     last = m.index + m[0].length;
   }
@@ -1500,13 +1500,13 @@ function PdfComboGrammarInsert({ result, isAnswer, title, id }: { result: Workbo
   const insertAnswer = result.insert_answer as string ?? '';
   const grammarWrong = (result.grammar_wrong as string[]) || [];
   const grammarAnswers = (result.grammar_answers as Array<{num:string;wrong:string;correct:string}>) || [];
-  const parts = passage.split(/(\([A-E]\)|[①②③④⑤][a-zA-Z''\-]+)/g);
+  const parts = passage.split(/(\([A-E]\)|[①②③④⑤] ?[a-zA-Z][a-zA-Z0-9''''\-]*)/g);
   const renderPassage = () => parts.map((part, i) => {
     const ins = part.match(/^\(([A-E])\)$/);
     if (ins) return (
       <span key={i} style={{ fontWeight: 900, color: '#6D28D9', margin: '0 2px', fontSize: 11 }}>({ins[1]})</span>
     );
-    const gm = part.match(/^([①②③④⑤])(.+)$/);
+    const gm = part.match(/^([①②③④⑤]) ?(.+)$/);
     if (gm) return (
       <span key={i}>
         <span style={{ fontWeight: 900 }}>{gm[1]}</span>
