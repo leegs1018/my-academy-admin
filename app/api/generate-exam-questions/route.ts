@@ -34,7 +34,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const VALID_TYPES = new Set(Object.keys(TYPE_LABELS));
 
-function buildExamPrompt(text: string, questionTypes: string[], difficulty: 'b1' | 'b2' | 'c1' | 'c2' = 'c2', targetAnswer?: number): string {
+function buildExamPrompt(text: string, questionTypes: string[], difficulty: 'a2' | 'b1' | 'b2' | 'c1' | 'c2' = 'c2', targetAnswer?: number): string {
   const typeRules: Record<string, string> = 
   {
   common_principles: `
@@ -663,7 +663,17 @@ Step 1 분석 결과를 기반으로 실제 문제를 생성하라.
 요약문은 반드시 question_text 안에 \\n\\n 뒤에 포함할 것. 별도 필드 사용 금지.
 
 예시:
-"다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?\\n\\nAlthough humans often perceive themselves as purely rational beings, their decision-making is fundamentally shaped by (A) _________ foundations that precede reason, suggesting that (B) _________ processes are not the sole basis of judgment."
+"다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?\\n\\nThe ability to (A) _________ social cues effectively plays a central role in determining how individuals build trust, suggesting that (B) _________ competence is as important as cognitive ability in cooperative settings."
+
+[요약문 시작 표현 다양성 — 반드시 준수]
+⚠️ "Although"로 시작하는 요약문 절대 금지.
+매 문제마다 다른 구조로 시작할 것. 아래 유형 중 하나 선택:
+- 명사구 주어: "The tendency to ...", "A fundamental shift in ...", "The recognition that ..."
+- 동명사/부정사: "Recognizing ...", "To understand ...", "By focusing on ..."
+- 조건절: "When ...", "As ...", "Once ..."
+- 대조 구문: "While ...", "Whereas ...", "Even though ..."
+- 수동 구문: "Shaped by ...", "Driven by ...", "Influenced by ..."
+⚠️ 단, 한 번 사용한 구조는 다음 문제에서 반복 금지.
 
 [요약문 조건]
 - 200~230자(character) 이내 — 초과 절대 금지
@@ -1089,7 +1099,18 @@ ${text}
 - 선택지는 반드시 5개.
 
 ${
-  difficulty === 'b1' ? `=== 어휘 난이도 기준 [중등 — CEFR B1] (최우선 적용) ===
+  difficulty === 'a2' ? `=== 어휘 난이도 기준 [초등~중등 초반 — CEFR A2] (최우선 적용) ===
+- 모든 선지·빈칸어휘는 초등 고학년~중학교 1학년 수준의 기초 어휘를 사용한다.
+- 2음절 이상 학술 어휘 사용 금지.
+- CEFR A2 수준 어휘 예시:
+  · 명사: home, time, work, place, food, friend, water, school, family, money
+  · 동사: help, use, find, give, tell, start, ask, need, try, talk, play, move
+  · 형용사: good, bad, big, small, easy, hard, happy, sad, fast, slow, safe, clean
+- 선지 단어는 중학교 교과서 1~2학년 수준의 단어만 사용.
+- 낱말 쓰임형 선지: 5개 모두 A2 기초 어휘로 구성.
+- 어휘 (a)(b) 빈칸형: 빈칸 어휘는 중1 교과서 단어 수준.
+- 빈칸 추론·요약문 완성: 선지는 짧은 구/절, 핵심 어휘가 A2 수준.`
+  : difficulty === 'b1' ? `=== 어휘 난이도 기준 [중등 — CEFR B1] (최우선 적용) ===
 - 모든 선지·빈칸어휘는 중학교 수준의 준학술 어휘를 사용한다.
 - 너무 쉬운 일상어(get, make, go, say 등)는 선지로 사용 금지.
 - CEFR B1 수준 어휘 예시:
@@ -1396,7 +1417,7 @@ function extractJson(text: string): string {
 
 interface TypeConfigInput {
   type: string;
-  difficulty: 'b1' | 'b2' | 'c1' | 'c2';
+  difficulty: 'a2' | 'b1' | 'b2' | 'c1' | 'c2';
   count: number;
 }
 
@@ -1407,7 +1428,7 @@ export async function POST(request: Request) {
       typeConfigs?: TypeConfigInput[];
       // legacy fields (backward compat)
       questionTypes?: string[];
-      difficulty?: 'b1' | 'b2' | 'c1' | 'c2';
+      difficulty?: 'a2' | 'b1' | 'b2' | 'c1' | 'c2';
       academy_id?: string;
       feature_key?: string;
     };

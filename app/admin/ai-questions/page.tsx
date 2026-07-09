@@ -68,13 +68,14 @@ interface QuestionTypeOption {
 interface TypeConfig {
   id: string;
   type: string;
-  difficulty: 'b1' | 'b2' | 'c1' | 'c2';
+  difficulty: 'a2' | 'b1' | 'b2' | 'c1' | 'c2';
   count: number;    // 1~3
   enabled: boolean;
   isCustom: boolean;
 }
 
 const DIFF_OPTIONS = [
+  { key: 'a2' as const, label: '최하', sub: 'A2', icon: '🌰', active: 'border-lime-400 bg-lime-50 text-lime-700' },
   { key: 'b1' as const, label: '하',   sub: 'B1', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
   { key: 'b2' as const, label: '중',   sub: 'B2', icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
   { key: 'c1' as const, label: '상',   sub: 'C1', icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
@@ -733,7 +734,7 @@ export default function AiQuestionsPage() {
       isCustom: false,
     }))
   );
-  const [bulkDifficulty, setBulkDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2' | ''>('');
+  const [bulkDifficulty, setBulkDifficulty] = useState<'a2' | 'b1' | 'b2' | 'c1' | 'c2' | ''>('');
   const [bulkCount, setBulkCount] = useState<number | ''>(1);
 
   // ── 대량 생성 상태 ──
@@ -1006,9 +1007,9 @@ export default function AiQuestionsPage() {
   };
   const validConfigs = typeConfigs.filter(c => c.enabled && c.type !== '');
 
-  // pdfSortedQuestions 초기화 (questions 또는 pdfLayout 변경 시)
-  useEffect(() => { setPdfSortedQuestions([]); }, [questions, pdfLayout]);
-  useEffect(() => { setMockPdfSortedQuestions([]); }, [mockQuestions, mockPdfLayout]);
+  // pdfSortedQuestions 초기화 (새 문제 생성 시에만 — 레이아웃 변경은 초기화 안 함)
+  useEffect(() => { setPdfSortedQuestions([]); }, [questions]);
+  useEffect(() => { setMockPdfSortedQuestions([]); }, [mockQuestions]);
 
   const sortQuestionsForPdf = useCallback((qs: ExamQuestion[]): ExamQuestion[] => {
     if (pdfLayout === 'passage') return [...qs];
@@ -1156,7 +1157,11 @@ export default function AiQuestionsPage() {
     if (!mockQuestions.length) return;
     setMockPdfLoading('답안');
     try {
-      const sorted = mockPdfSortedQuestions.length ? mockPdfSortedQuestions : mockSortQuestionsForPdf(mockQuestions);
+      let sorted = mockPdfSortedQuestions;
+      if (!sorted.length) {
+        sorted = mockSortQuestionsForPdf(mockQuestions);
+        setMockPdfSortedQuestions(sorted);
+      }
       const blob = await buildAnswerPdfBlob(sorted, mockPdfTitle.trim());
       triggerDownload(blob, `${mockPdfTitle.trim() || '모의고사변형문제'}_답안해설.pdf`);
     } finally { setMockPdfLoading(false); }
@@ -1469,7 +1474,11 @@ export default function AiQuestionsPage() {
     if (!questions) return;
     setPdfLoading('답안');
     try {
-      const sorted = pdfSortedQuestions.length ? pdfSortedQuestions : sortQuestionsForPdf(questions);
+      let sorted = pdfSortedQuestions;
+      if (!sorted.length) {
+        sorted = sortQuestionsForPdf(questions);
+        setPdfSortedQuestions(sorted);
+      }
       const blob = await buildAnswerPdfBlob(sorted, pdfTitle.trim());
       triggerDownload(blob, `${pdfTitle.trim() || '수능형문제'}_답안해설.pdf`);
     } finally {
