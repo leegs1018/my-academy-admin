@@ -15,6 +15,7 @@ interface Academy {
   created_at: string;
   student_count: number;
   sms_count: number;
+  sms_enabled: boolean;
   role: 'ai_only' | 'admin';
   provider: string;
   profile_completed: boolean;
@@ -42,6 +43,7 @@ export default function AcademiesPage() {
   const [search, setSearch] = useState('');
   const [chargeModal, setChargeModal] = useState<ChargeModal | null>(null);
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
+  const [smsLoading, setSmsLoading] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/superadmin/academies')
@@ -81,6 +83,30 @@ export default function AcademiesPage() {
       alert('서버 오류가 발생했습니다.');
     } finally {
       setRoleLoading(null);
+    }
+  };
+
+  const handleSmsToggle = async (academy: Academy) => {
+    if (smsLoading) return;
+    setSmsLoading(academy.user_id);
+    try {
+      const res = await fetch('/api/superadmin/users/sms-enabled', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: academy.user_id, smsEnabled: !academy.sms_enabled }),
+      });
+      const data = await res.json() as { success?: boolean; error?: string };
+      if (data.success) {
+        setAcademies(prev => prev.map(a =>
+          a.user_id === academy.user_id ? { ...a, sms_enabled: !academy.sms_enabled } : a
+        ));
+      } else {
+        alert(data.error || 'SMS 권한 변경 실패');
+      }
+    } catch {
+      alert('서버 오류가 발생했습니다.');
+    } finally {
+      setSmsLoading(null);
     }
   };
 
@@ -169,7 +195,8 @@ export default function AcademiesPage() {
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">추천인코드</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">잔여 콘</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">학생수</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS발송수</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS권한</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">역할</th>
                 <th className="py-3 px-4 text-right text-xs font-black text-slate-500">가입일</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">CON</th>
@@ -216,6 +243,19 @@ export default function AcademiesPage() {
                     <td className="py-3 px-4 text-center font-black text-emerald-400">{a.student_count}</td>
                     <td className="py-3 px-4 text-center font-black text-indigo-400">{a.sms_count}</td>
                     <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => handleSmsToggle(a)}
+                        disabled={smsLoading === a.user_id}
+                        className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors duration-200 disabled:opacity-50 focus:outline-none ${
+                          a.sms_enabled ? 'bg-emerald-500' : 'bg-slate-600'
+                        }`}
+                      >
+                        <span className={`inline-block w-3.5 h-3.5 bg-white rounded-full shadow transition-transform duration-200 ${
+                          a.sms_enabled ? 'translate-x-5' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </td>
+                    <td className="py-3 px-4 text-center">
                       <div className="flex flex-col items-center gap-1.5">
                         {/* 현재 역할 뱃지 */}
                         <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${
@@ -252,7 +292,7 @@ export default function AcademiesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={12} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={13} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>

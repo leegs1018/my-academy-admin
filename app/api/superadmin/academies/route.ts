@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
         own_referral_code: config.own_referral_code || null,
         created_at: u.created_at,
         role: u.user_metadata?.role ?? 'ai_only',
+        sms_enabled: config.sms_enabled ?? false,
         provider,
         student_count: studentCount[u.id] || 0,
         sms_count: smsCount[u.id] || 0,

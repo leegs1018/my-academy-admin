@@ -23,6 +23,7 @@ function getMsgType(text: string): 'SMS' | 'LMS' {
 
 export default function SMSPage() {
   const [userId, setUserId] = useState('');
+  const [accessDenied, setAccessDenied] = useState(false);
 
   // 학생 데이터
   const [students, setStudents] = useState<any[]>([]);
@@ -88,6 +89,18 @@ export default function SMSPage() {
       if (!session?.user?.id) return;
       const uid = session.user.id;
       setUserId(uid);
+
+      // SMS 접근 권한 확인
+      const { data: cfg } = await supabase
+        .from('academy_config')
+        .select('sms_enabled')
+        .eq('user_id', uid)
+        .single();
+      if (!cfg?.sms_enabled) {
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
 
       const [studentsRes, templatesRes, logsRes] = await Promise.all([
         supabase.from('students').select('*').eq('academy_id', uid).order('name', { ascending: true }),
@@ -300,6 +313,18 @@ export default function SMSPage() {
         <div className="text-center">
           <div className="text-4xl mb-4 animate-pulse">📱</div>
           <p className="text-gray-500 font-bold">데이터 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <p className="text-gray-700 font-black text-xl mb-2">접근 권한이 없습니다</p>
+          <p className="text-gray-400 font-bold text-sm">문자 발송 기능은 허용된 계정만 사용할 수 있습니다.</p>
         </div>
       </div>
     );

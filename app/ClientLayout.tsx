@@ -43,6 +43,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [referralRewardCon, setReferralRewardCon] = useState<number | null>(null);
   const [points, setPoints] = useState<number>(0);
   const [userRole, setUserRole] = useState<string>('');
+  const [smsEnabled, setSmsEnabled] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -76,13 +77,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code, points, role, own_referral_code')
+          .select('academy_name, kiosk_code, points, role, own_referral_code, sms_enabled')
           .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
         if (data?.points !== undefined) setPoints(data.points);
         setUserRole(data?.role ?? 'ai_only');
+        setSmsEnabled(data?.sms_enabled ?? false);
         if (data?.own_referral_code) {
           setOwnReferralCode(data.own_referral_code);
         } else {
@@ -174,6 +176,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               : menuItems.filter(item =>
                   item.label === 'AI 문제 생성' || item.label === '이용 가이드' || item.label === 'CON 충전' || item.label === 'CON 사용 이력' || item.label === '공지사항' || item.label === '문의하기'
                 )
+            ).filter(item =>
+              item.label !== '문자 발송' || smsEnabled
             ).map((item) => {
               if (item.children) {
                 const isAnyChildActive = item.children.some(c => pathname.startsWith(c.href));
