@@ -298,7 +298,7 @@ function renderSentenceInsertionPassage(text: string) {
   const parts = normalized.split(/(①|②|③|④|⑤)/g);
   return parts.map((part, i) => {
     if (CIRCLES.includes(part)) {
-      return <span key={i} style={{fontWeight: 900, color: '#6d28d9', background: '#ede9fe', borderRadius: '3px', padding: '0 3px'}}>{part}</span>;
+      return <span key={i} style={{fontWeight: 900, color: '#6d28d9'}}>{part}</span>;
     }
     return <span key={i}>{part}</span>;
   });
@@ -473,10 +473,10 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       const siInstruction = siParts[0].trim();
       const siSentence = (siParts[1] ?? '').trim();
       html += instrP(`${num}. ${esc(siInstruction)}`);
-      html += `<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:4px;padding:5px 8px;margin-bottom:5px;width:100%;box-sizing:border-box;"><div style="font-size:9px;font-weight:900;color:#7c3aed;margin-bottom:2px;">[주어진 문장]</div><div style="font-size:12px;line-height:1.6;color:#4c1d95;word-break:break-word;">${esc(siSentence)}</div></div>`;
+      html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;width:100%;box-sizing:border-box;"><div style="font-size:9px;font-weight:900;color:#94a3b8;margin-bottom:2px;">[주어진 문장]</div><div style="font-size:12px;line-height:1.6;color:#1e293b;word-break:break-word;">${esc(siSentence)}</div></div>`;
       if (q.modified_passage) {
         const siPassage = q.modified_passage.replace(/\n+/g, ' ').replace(/\s*(①|②|③|④|⑤)/g, ' $1').trim();
-        const siHtml = siPassage.replace(/(①|②|③|④|⑤)/g, '<span style="font-weight:900;color:#6d28d9;background:#ede9fe;border-radius:3px;padding:0 2px;">$1</span>');
+        const siHtml = siPassage.replace(/(①|②|③|④|⑤)/g, '<span style="font-weight:900;color:#6d28d9;">$1</span>');
         html += `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;margin-bottom:5px;font-size:12px;line-height:1.7;color:#1e293b;text-align:justify;word-break:break-word;">${siHtml}</div>`;
       }
     } else if (q.modified_passage) {
@@ -486,7 +486,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       html += instrP(`${num}. ${esc(q.question_text)}`);
     }
 
-    if (q.type !== 'flow' && q.type !== 'grammar') {
+    if (q.type !== 'flow' && q.type !== 'grammar' && q.type !== 'sentence_insertion') {
       html += `<div style="display:flex;flex-direction:column;gap:3px;">`;
       for (let j = 0; j < (q.choices ?? []).length; j++) {
         const c = (q.choices ?? [])[j];
@@ -1978,9 +1978,9 @@ export default function AiQuestionsPage() {
                         return (
                           <>
                             <div className="text-sm font-bold text-gray-800 mb-3 leading-relaxed">{instruction}</div>
-                            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4">
-                              <p className="text-xs font-black text-violet-400 mb-2">[주어진 문장]</p>
-                              <p className="text-sm font-medium text-violet-800 leading-relaxed">{givenSentence}</p>
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
+                              <p className="text-xs font-black text-slate-400 mb-2">[주어진 문장]</p>
+                              <p className="text-sm font-medium text-slate-700 leading-relaxed">{givenSentence}</p>
                             </div>
                             {q.modified_passage && (
                               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed font-medium">
@@ -2059,7 +2059,7 @@ export default function AiQuestionsPage() {
                       )}
 
                       {/* 선지 */}
-                      {q.type !== 'flow' && q.type !== 'grammar' && (
+                      {q.type !== 'flow' && q.type !== 'grammar' && q.type !== 'sentence_insertion' && (
                         <div className="space-y-2.5 mb-5">
                           {(q.choices ?? []).map((c, ci) => {
                             const isCorrect = isRevealed && (c.number === q.answer || ci + 1 === q.answer);
@@ -2625,9 +2625,9 @@ export default function AiQuestionsPage() {
                         return (
                           <>
                             <div className="text-sm font-bold text-gray-800 mb-3 whitespace-pre-wrap">{siInstruction}</div>
-                            <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-3">
-                              <p className="text-[10px] font-black text-violet-400 mb-1">[주어진 문장]</p>
-                              <p className="text-sm font-medium text-violet-800 leading-relaxed">{siSentence}</p>
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3">
+                              <p className="text-[10px] font-black text-slate-400 mb-1">[주어진 문장]</p>
+                              <p className="text-sm font-medium text-slate-700 leading-relaxed">{siSentence}</p>
                             </div>
                             {q.modified_passage && (
                               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 text-sm text-slate-700 leading-relaxed font-medium">
