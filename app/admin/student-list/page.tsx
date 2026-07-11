@@ -352,156 +352,204 @@ export default function StudentListPage() {
 
       {/* 수정 모달 영역 */}
       {isEditModalOpen && editingStudent && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl max-h-[95vh] flex flex-col overflow-hidden border border-white/20">
-            <div className="p-7 border-b flex justify-between items-center bg-indigo-600 text-white font-black">
-              <h2 className="text-2xl tracking-tight">{editingStudent.name} 학생 상세 수정</h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 text-2xl">✕</button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-2 gap-10 text-sm">
-              <div className="space-y-8">
-                <h3 className="font-black text-xl text-gray-800 underline decoration-indigo-200 decoration-8 underline-offset-4">학적 및 인적 사항</h3>
-                
-                <div className="grid grid-cols-2 gap-6 bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">학생 상태</label>
-                    <select className="w-full border-2 p-3.5 rounded-2xl font-black bg-white text-indigo-600 outline-none" 
-                      value={editingStudent.status} onChange={e => setEditingStudent({...editingStudent, status: e.target.value})}>
-                      <option value="재원">재원</option>
-                      <option value="휴원">휴원</option>
-                      <option value="퇴원">퇴원</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">비고</label>
-                    <select className="w-full border-2 p-3.5 rounded-2xl font-black bg-white text-orange-600 outline-none" 
-                      value={editingStudent.caution_level} onChange={e => setEditingStudent({...editingStudent, caution_level: Number(e.target.value)})}>
-                      <option value={0}>🥚</option>
-                      <option value={1}>🐤</option>
-                      <option value={2}>🐤🐤</option>
-                      <option value={3}>🐤🐤🐤</option>
-                    </select>
-                  </div>
-                </div>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">이름</label>
-                    <input className="w-full border-2 p-3.5 rounded-2xl font-black text-gray-700 outline-none" value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">성별</label>
-                    <select className="w-full border-2 p-3.5 rounded-2xl font-black text-gray-700 outline-none text-center" value={editingStudent.gender} onChange={e => setEditingStudent({...editingStudent, gender: e.target.value})}>
-                      <option value="남">남</option><option value="여">여</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">생년월일</label>
-                    <input type="date" className="w-full border-2 p-3 rounded-2xl font-black text-indigo-700 outline-none" 
-                      value={editingStudent.birth_date || ''} onChange={e => setEditingStudent({...editingStudent, birth_date: e.target.value})} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-indigo-500 ml-1">학교 구분</label>
-                    <select className="w-full border-2 p-3.5 rounded-2xl font-black bg-indigo-50/50 text-indigo-700 outline-none" 
-                      value={editingStudent.school_level || ''} 
-                      onChange={e => setEditingStudent({...editingStudent, school_level: e.target.value, grade_level: getGradeOptions(e.target.value)[0] || ''})}>
-                      <option value="">선택</option>
-                      {schoolLevels.map(sl => <option key={sl} value={sl}>{sl}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">학교명</label>
-                    <input className="w-full border-2 p-3.5 rounded-2xl font-black text-gray-700 outline-none" 
-                      value={editingStudent.school_name || ''} onChange={e => setEditingStudent({...editingStudent, school_name: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">학년</label>
-                    <select className="w-full border-2 p-3.5 rounded-2xl font-black text-gray-700 outline-none" value={editingStudent.grade_level || ''} onChange={e => setEditingStudent({...editingStudent, grade_level: e.target.value})}>
-                      <option value="">선택</option>
-                      {getGradeOptions(editingStudent.school_level).map(gl => <option key={gl} value={gl}>{gl}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-indigo-600 ml-1">기준 연도</label>
-                    <input className="w-full border-2 p-3.5 rounded-2xl font-black text-center text-gray-700 outline-none border-indigo-100 bg-indigo-50/20"
-                      value={editingStudent.grade_year || ''} 
-                      onChange={e => setEditingStudent({...editingStudent, grade_year: e.target.value})}
-                      placeholder="예: 2026"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">배정 클래스</label>
-                    <select className="w-full border-2 p-3.5 rounded-2xl font-black text-gray-700 outline-none" value={editingStudent.class_name || ''} onChange={e => setEditingStudent({...editingStudent, class_name: e.target.value})}>
-                      <option value="">클래스 선택</option>
-                      {classList.map((c, i) => <option key={i} value={c.class_name}>{c.class_name}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-gray-400 ml-1">입학일</label>
-                    <input type="date" className="w-full border-2 p-3 rounded-2xl font-black text-orange-700 outline-none" 
-                      value={editingStudent.admission_date || ''} onChange={e => setEditingStudent({...editingStudent, admission_date: e.target.value})} />
-                  </div>
-                </div>
-
-                <div className="p-6 bg-indigo-50/50 rounded-[2rem] border border-indigo-100 space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-indigo-600 ml-1">보호자 연락처</label>
-                      <input className="w-full border-2 p-3.5 rounded-2xl font-black bg-white text-gray-700 outline-none" value={editingStudent.parent_phone || ''} onChange={e => setEditingStudent({...editingStudent, parent_phone: e.target.value})} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-indigo-600 ml-1">관계</label>
-                      <select className="w-full border-2 p-3.5 rounded-2xl font-black bg-white text-gray-700 outline-none" value={editingStudent.parent_relation || '기타'} onChange={e => setEditingStudent({...editingStudent, parent_relation: e.target.value})}>
-                        {parentRelations.map(pr => <option key={pr} value={pr}>{pr}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-xs font-black text-indigo-600 ml-1">학생 연락처</label>
-                      <label className="text-[10px] font-black text-indigo-600 flex items-center gap-2 cursor-pointer bg-white px-2 py-1 rounded-lg border border-indigo-100">
-                        <input type="checkbox" className="accent-indigo-600" checked={editingStudent.isPhoneSame} onChange={e => setEditingStudent({...editingStudent, isPhoneSame: e.target.checked})} /> 보호자와 동일
-                      </label>
-                    </div>
-                    <input className={`w-full border-2 p-3.5 rounded-2xl font-black outline-none ${editingStudent.isPhoneSame ? 'bg-gray-100 text-gray-400' : 'bg-white text-gray-700'}`} 
-                      value={editingStudent.isPhoneSame ? editingStudent.parent_phone : (editingStudent.student_phone || '')} 
-                      onChange={e => !editingStudent.isPhoneSame && setEditingStudent({...editingStudent, student_phone: e.target.value})} 
-                      disabled={editingStudent.isPhoneSame} />
-                  </div>
-                </div>
+            {/* 헤더 */}
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-black text-gray-900">{editingStudent.name} 학생 정보 수정</h2>
+                <p className="text-xs text-gray-400 font-medium mt-0.5">변경 후 하단 저장 버튼을 눌러주세요</p>
               </div>
+              <button onClick={() => setIsEditModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg transition-colors">✕</button>
+            </div>
 
-              <div className="flex flex-col h-full space-y-6">
-                <h3 className="font-black text-xl text-gray-800 underline decoration-orange-200 decoration-8 underline-offset-4">상담 히스토리</h3>
-                <div className="space-y-3 bg-orange-50/30 p-4 rounded-3xl border border-orange-100">
-                  <textarea rows={2} className="w-full border-2 p-5 rounded-2xl focus:border-orange-500 outline-none font-bold resize-none bg-white" placeholder="새로운 상담 내용 입력..." value={newMemo} onChange={e => setNewMemo(e.target.value)} />
-                  <button onClick={addMemo} className="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg">상담 기록 추가 📝</button>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-4 min-h-[350px] pr-2">
-                  {editingStudent.memoArray.map((memo: any, idx: number) => (
-                    <div key={idx} className="bg-white p-6 rounded-3xl border border-gray-100 relative group shadow-sm">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-xs font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-full">{memo.date}</span>
-                        <button onClick={() => deleteMemo(idx)} className="text-gray-300 hover:text-red-500 text-xs font-black">삭제</button>
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
+
+                {/* 왼쪽: 학생 정보 */}
+                <div className="space-y-5">
+
+                  {/* 상태 */}
+                  <div>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">상태</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">재원 상태</label>
+                        <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.status} onChange={e => setEditingStudent({...editingStudent, status: e.target.value})}>
+                          <option value="재원">재원</option>
+                          <option value="휴원">휴원</option>
+                          <option value="퇴원">퇴원</option>
+                        </select>
                       </div>
-                      <p className="text-base text-gray-700 leading-relaxed font-bold whitespace-pre-wrap">{memo.content}</p>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">비고</label>
+                        <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.caution_level} onChange={e => setEditingStudent({...editingStudent, caution_level: Number(e.target.value)})}>
+                          <option value={0}>🥚</option>
+                          <option value={1}>🐤</option>
+                          <option value={2}>🐤🐤</option>
+                          <option value={3}>🐤🐤🐤</option>
+                        </select>
+                      </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* 기본 정보 */}
+                  <div>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">기본 정보</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">이름</label>
+                        <input className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">성별</label>
+                        <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.gender} onChange={e => setEditingStudent({...editingStudent, gender: e.target.value})}>
+                          <option value="남">남</option><option value="여">여</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">생년월일</label>
+                        <input type="date" className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.birth_date || ''} onChange={e => setEditingStudent({...editingStudent, birth_date: e.target.value})} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 학교 정보 */}
+                  <div>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">학교 정보</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">학교 구분</label>
+                        <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.school_level || ''}
+                          onChange={e => setEditingStudent({...editingStudent, school_level: e.target.value, grade_level: getGradeOptions(e.target.value)[0] || ''})}>
+                          <option value="">선택</option>
+                          {schoolLevels.map(sl => <option key={sl} value={sl}>{sl}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">학교명</label>
+                        <input className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.school_name || ''} onChange={e => setEditingStudent({...editingStudent, school_name: e.target.value})} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">학년</label>
+                        <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.grade_level || ''} onChange={e => setEditingStudent({...editingStudent, grade_level: e.target.value})}>
+                          <option value="">선택</option>
+                          {getGradeOptions(editingStudent.school_level).map(gl => <option key={gl} value={gl}>{gl}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 수강 정보 */}
+                  <div>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">수강 정보</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">기준 연도</label>
+                        <input className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm text-center"
+                          value={editingStudent.grade_year || ''}
+                          onChange={e => setEditingStudent({...editingStudent, grade_year: e.target.value})}
+                          placeholder="예: 2026" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">배정 클래스</label>
+                        <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.class_name || ''} onChange={e => setEditingStudent({...editingStudent, class_name: e.target.value})}>
+                          <option value="">클래스 선택</option>
+                          {classList.map((c, i) => <option key={i} value={c.class_name}>{c.class_name}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500">입학일</label>
+                        <input type="date" className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                          value={editingStudent.admission_date || ''} onChange={e => setEditingStudent({...editingStudent, admission_date: e.target.value})} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 연락처 */}
+                  <div>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">연락처</p>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-gray-500">보호자 연락처</label>
+                          <input className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                            value={editingStudent.parent_phone || ''} onChange={e => setEditingStudent({...editingStudent, parent_phone: e.target.value})} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-gray-500">관계</label>
+                          <select className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                            value={editingStudent.parent_relation || '기타'} onChange={e => setEditingStudent({...editingStudent, parent_relation: e.target.value})}>
+                            {parentRelations.map(pr => <option key={pr} value={pr}>{pr}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs font-bold text-gray-500">학생 연락처</label>
+                          <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 cursor-pointer">
+                            <input type="checkbox" className="accent-gray-600 w-3.5 h-3.5" checked={editingStudent.isPhoneSame}
+                              onChange={e => setEditingStudent({...editingStudent, isPhoneSame: e.target.checked})} />
+                            보호자와 동일
+                          </label>
+                        </div>
+                        <input className={`w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold focus:outline-none focus:border-gray-400 text-sm transition-colors ${editingStudent.isPhoneSame ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-800'}`}
+                          value={editingStudent.isPhoneSame ? editingStudent.parent_phone : (editingStudent.student_phone || '')}
+                          onChange={e => !editingStudent.isPhoneSame && setEditingStudent({...editingStudent, student_phone: e.target.value})}
+                          disabled={editingStudent.isPhoneSame} />
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
+
+                {/* 오른쪽: 상담 히스토리 */}
+                <div className="flex flex-col space-y-4">
+                  <p className="text-xs font-black text-gray-400 uppercase tracking-wider">상담 히스토리</p>
+
+                  <div className="space-y-2">
+                    <textarea rows={3} className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm resize-none placeholder:text-gray-300"
+                      placeholder="새로운 상담 내용을 입력하세요..." value={newMemo} onChange={e => setNewMemo(e.target.value)} />
+                    <button onClick={addMemo} className="w-full bg-gray-900 hover:bg-gray-700 text-white py-2.5 rounded-xl font-black text-sm transition-colors">
+                      상담 기록 추가
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 min-h-[300px] pr-1">
+                    {editingStudent.memoArray.length === 0 && (
+                      <div className="flex items-center justify-center h-32 text-sm text-gray-300 font-bold">상담 기록이 없습니다</div>
+                    )}
+                    {editingStudent.memoArray.map((memo: any, idx: number) => (
+                      <div key={idx} className="bg-gray-50 px-4 py-3 rounded-xl border border-gray-100">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-xs font-black text-gray-500">{memo.date}</span>
+                          <button onClick={() => deleteMemo(idx)} className="text-xs font-bold text-gray-300 hover:text-red-400 transition-colors">삭제</button>
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed font-medium whitespace-pre-wrap">{memo.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
 
-            <div className="p-8 border-t bg-gray-50 flex gap-6 font-black">
-              <button onClick={() => setIsEditModalOpen(false)} className="flex-1 py-5 text-gray-500 hover:bg-gray-200 rounded-[1.5rem] transition-all text-lg font-black">나가기</button>
-              <button onClick={handleUpdate} className="flex-[2.5] py-5 bg-indigo-600 text-white rounded-[1.5rem] shadow-xl hover:bg-indigo-700 transition-all text-xl font-black">전체 내용 저장하기 ✅</button>
+            {/* 푸터 */}
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button onClick={() => setIsEditModalOpen(false)} className="px-5 py-2.5 text-sm font-black text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">취소</button>
+              <button onClick={handleUpdate} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-700 text-white rounded-xl font-black text-sm transition-colors">저장</button>
             </div>
+
           </div>
         </div>
       )}
