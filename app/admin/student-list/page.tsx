@@ -195,7 +195,7 @@ export default function StudentListPage() {
       
       {/* 헤더 영역 */}
       <div className="flex justify-between items-center border-b-4 border-indigo-100 pb-6">
-        <h1 className="text-3xl font-black text-indigo-700 tracking-tight">📋 학생 통합 명부</h1>
+        <h1 className="text-3xl font-black text-gray-900 tracking-tight">📋 학생 명부</h1>
         <div className="flex gap-3">
           <button 
             onClick={() => router.push('/admin/student')} 
@@ -310,7 +310,7 @@ export default function StudentListPage() {
             {filteredStudents.map((s) => (
               <tr key={s.id} className="hover:bg-indigo-50/30 transition-all font-medium">
                 <td className="p-5 text-left">
-                  <span onClick={() => openEditModal(s)} className="font-black text-indigo-600 text-lg cursor-pointer hover:underline underline-offset-4 decoration-2">{s.name}</span>
+                  <span onClick={() => openEditModal(s)} className="font-black text-gray-900 text-lg cursor-pointer hover:underline underline-offset-4 decoration-2">{s.name}</span>
                 </td>
                 <td className="p-5">
                   <span className={`px-3 py-1.5 rounded-full text-[11px] font-black border ${
