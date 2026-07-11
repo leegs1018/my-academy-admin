@@ -3,6 +3,7 @@
 
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
 
@@ -18,6 +19,7 @@ import {
 
 export default function AdminReportPage() {
 
+  const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
 
   const [classFilter, setClassFilter] = useState('전체 클래스');
@@ -76,7 +78,14 @@ export default function AdminReportPage() {
 
       const { data: classList } = await supabase.from('classes').select('*').eq('academy_id', userId);
 
-      if (studentList) setStudents(studentList);
+      if (studentList) {
+        setStudents(studentList);
+        const paramId = searchParams.get('studentId');
+        if (paramId) {
+          const found = studentList.find((s: any) => s.id === paramId);
+          if (found) setSelectedStudent(found);
+        }
+      }
 
       if (classList) setClassListData(classList);
 

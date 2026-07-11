@@ -335,7 +335,7 @@ export default function StudentListPage() {
                 <td className="p-5">
                   <div className="flex justify-center gap-2">
                    <button 
-  onClick={() => router.push(`/student/report/${s.id}`)} 
+  onClick={() => router.push(`/admin/report?studentId=${s.id}`)} 
   className="bg-amber-50 text-amber-600 px-4 py-2 rounded-xl text-xs font-black border border-amber-100 hover:bg-amber-600 hover:text-white transition-all shadow-sm"
 >
   성적표 📈
