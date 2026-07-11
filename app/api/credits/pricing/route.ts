@@ -10,5 +10,7 @@ export async function GET() {
     .order('feature_key');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ pricing: data });
+  return NextResponse.json({ pricing: data }, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }

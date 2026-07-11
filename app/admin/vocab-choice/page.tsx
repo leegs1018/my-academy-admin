@@ -1878,7 +1878,7 @@ export default function WorkbookPage() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/credits/pricing').then(r => r.ok ? r.json() : null).then(data => {
+    fetch('/api/credits/pricing', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(data => {
       const items: { feature_key: string; cost_per_use: number }[] = data?.pricing ?? [];
       const directP: Record<string, number> = {};
       const mockP: Record<string, number> = {};
