@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Image from 'next/image';
 
 const SECTIONS = [
   {
@@ -38,6 +39,14 @@ export default function SiteSettingsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoMsg, setLogoMsg] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const supabaseClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -54,6 +63,47 @@ export default function SiteSettingsPage() {
     };
     load();
   }, []);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ['image/png', 'image/jpeg', 'image/ico', 'image/x-icon', 'image/svg+xml', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setLogoMsg('PNG, JPG, ICO, SVG, WEBP 파일만 업로드 가능합니다.');
+      return;
+    }
+
+    setLogoUploading(true);
+    setLogoMsg('');
+
+    const ext = file.name.split('.').pop();
+    const path = `favicon.${ext}`;
+
+    const { error: uploadError } = await supabaseClient.storage
+      .from('site-assets')
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadError) {
+      setLogoMsg(`업로드 실패: ${uploadError.message}`);
+      setLogoUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabaseClient.storage.from('site-assets').getPublicUrl(path);
+    const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+    await fetch('/api/superadmin/site-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { site_logo_url: publicUrl } }),
+    });
+
+    setValues(prev => ({ ...prev, site_logo_url: publicUrl }));
+    setLogoMsg('✅ 업로드 완료! 배포 후 반영됩니다.');
+    setLogoUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -75,6 +125,51 @@ export default function SiteSettingsPage() {
       <div className="mb-2">
         <h1 className="text-2xl font-black text-white mb-1">사이트 설정</h1>
         <p className="text-slate-400 font-medium text-sm">개인정보처리방침 및 CON 충전 안내에 표시될 정보를 관리합니다.</p>
+      </div>
+
+      {/* 사이트 파비콘 */}
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-800">
+          <h2 className="text-base font-black text-white">🖼️ 사이트 파비콘 (탭 아이콘)</h2>
+          <p className="text-xs text-slate-400 mt-1">브라우저 탭, 즐겨찾기에 표시되는 아이콘입니다. PNG 32×32 권장</p>
+        </div>
+        <div className="p-6 flex items-center gap-6">
+          <div className="w-16 h-16 rounded-2xl bg-slate-800 border-2 border-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0">
+            {values.site_logo_url ? (
+              <Image src={values.site_logo_url} alt="파비콘 미리보기" width={48} height={48} className="object-contain" unoptimized />
+            ) : (
+              <span className="text-2xl text-slate-600">🖼️</span>
+            )}
+          </div>
+          <div className="flex-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/x-icon,image/svg+xml,image/webp"
+              onChange={handleLogoUpload}
+              className="hidden"
+              id="logo-upload"
+            />
+            <label
+              htmlFor="logo-upload"
+              className={`inline-block px-5 py-2.5 rounded-xl font-black text-sm cursor-pointer transition-all ${
+                logoUploading
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              }`}
+            >
+              {logoUploading ? '업로드 중...' : '파일 선택 및 업로드'}
+            </label>
+            {logoMsg && (
+              <p className={`text-xs font-bold mt-2 ${logoMsg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>
+                {logoMsg}
+              </p>
+            )}
+            {values.site_logo_url && !logoMsg && (
+              <p className="text-xs text-slate-500 mt-2 font-bold truncate max-w-sm">{values.site_logo_url}</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {SECTIONS.map(section => (
