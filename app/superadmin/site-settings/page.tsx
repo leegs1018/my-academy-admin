@@ -23,11 +23,13 @@ const SECTIONS = [
     ],
   },
   {
-    title: '💬 카카오 알림톡 설정',
+    title: '💬 카카오 알림톡 설정 (알리고)',
     fields: [
-      { key: 'KAKAO_PF_ID',                  label: '카카오 채널 ID (pfId)' },
-      { key: 'KAKAO_TEMPLATE_ATTENDANCE_ID',  label: '출결 알림 템플릿 ID' },
-      { key: 'KAKAO_TEMPLATE_GRADE_ID',       label: '성적 알림 템플릿 ID' },
+      { key: 'ALIGO_API_KEY',                 label: '알리고 API Key' },
+      { key: 'ALIGO_USER_ID',                 label: '알리고 User ID' },
+      { key: 'KAKAO_SENDER_KEY',              label: '카카오 발신프로파일 키 (senderkey)' },
+      { key: 'KAKAO_TEMPLATE_ATTENDANCE_ID',  label: '출결 알림 템플릿 코드 (tpl_code)' },
+      { key: 'KAKAO_TEMPLATE_GRADE_ID',       label: '성적 알림 템플릿 코드 (tpl_code)' },
     ],
   },
 ];

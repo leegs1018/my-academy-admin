@@ -1,34 +1,13 @@
 import { NextResponse } from 'next/server';
-import CryptoJS from 'crypto-js';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-async function getAlimtalkConfig(): Promise<{ pfId?: string; attendanceTemplateId?: string; gradeTemplateId?: string }> {
-  const { data } = await supabaseAdmin
-    .from('site_settings')
-    .select('key, value')
-    .in('key', ['KAKAO_PF_ID', 'KAKAO_TEMPLATE_ATTENDANCE_ID', 'KAKAO_TEMPLATE_GRADE_ID']);
-  const map: Record<string, string> = {};
-  (data ?? []).forEach(row => { if (row.value) map[row.key] = row.value; });
-  return {
-    pfId:                 map['KAKAO_PF_ID']                   || process.env.KAKAO_PF_ID,
-    attendanceTemplateId: map['KAKAO_TEMPLATE_ATTENDANCE_ID']  || process.env.KAKAO_TEMPLATE_ATTENDANCE_ID,
-    gradeTemplateId:      map['KAKAO_TEMPLATE_GRADE_ID']       || process.env.KAKAO_TEMPLATE_GRADE_ID,
-  };
-}
-
-// 알림톡 템플릿 변수 타입
 interface AttendanceVars {
   type: 'attendance';
   to: string;
   academyName: string;
   studentName: string;
-  date: string;     // "07월 11일"
-  status: string;   // "등원" | "하원"
+  date: string;
+  status: string;
 }
 
 interface GradeVars {
@@ -36,83 +15,90 @@ interface GradeVars {
   to: string;
   academyName: string;
   studentName: string;
-  date: string;     // "7월 11일(금)"
-  content: string;  // 성적 내용 전체
+  date: string;
+  content: string;
 }
 
 type AlimtalkPayload = AttendanceVars | GradeVars;
 
-function buildSolapiAuth(apiSecret: string) {
-  const date = new Date().toISOString();
-  const salt = Math.random().toString(36).substring(2, 12);
-  const signature = CryptoJS.HmacSHA256(date + salt, apiSecret).toString();
-  return `HMAC-SHA256 apiKey=${process.env.SOLAPI_API_KEY}, date=${date}, salt=${salt}, signature=${signature}`;
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+async function getAlimtalkConfig() {
+  const { data } = await supabaseAdmin
+    .from('site_settings')
+    .select('key, value')
+    .in('key', ['ALIGO_API_KEY', 'ALIGO_USER_ID', 'KAKAO_SENDER_KEY', 'KAKAO_TEMPLATE_ATTENDANCE_ID', 'KAKAO_TEMPLATE_GRADE_ID']);
+  const map: Record<string, string> = {};
+  (data ?? []).forEach(row => { if (row.value) map[row.key] = row.value; });
+  return {
+    apiKey:               map['ALIGO_API_KEY']                 || process.env.ALIGO_API_KEY,
+    userId:               map['ALIGO_USER_ID']                 || process.env.ALIGO_USER_ID,
+    senderKey:            map['KAKAO_SENDER_KEY']              || process.env.KAKAO_SENDER_KEY,
+    attendanceTplCode:    map['KAKAO_TEMPLATE_ATTENDANCE_ID']  || process.env.KAKAO_TEMPLATE_ATTENDANCE_ID,
+    gradeTplCode:         map['KAKAO_TEMPLATE_GRADE_ID']       || process.env.KAKAO_TEMPLATE_GRADE_ID,
+  };
 }
 
 export async function POST(req: Request) {
   const payload = await req.json() as AlimtalkPayload;
 
-  const apiKey    = process.env.SOLAPI_API_KEY;
-  const apiSecret = process.env.SOLAPI_API_SECRET;
-  const sender    = process.env.SOLAPI_SENDER_NUMBER;
-
-  if (!apiKey || !apiSecret || !sender) {
-    return NextResponse.json({ ok: false, error: 'SOLAPI 환경변수 누락' }, { status: 500 });
+  const sender = process.env.SOLAPI_SENDER_NUMBER;
+  if (!sender) {
+    return NextResponse.json({ ok: false, error: '발신번호 환경변수 누락' }, { status: 500 });
   }
 
-  const alimtalkCfg = await getAlimtalkConfig();
-  const pfId      = alimtalkCfg.pfId;
-  const templateId =
-    payload.type === 'attendance'
-      ? alimtalkCfg.attendanceTemplateId
-      : alimtalkCfg.gradeTemplateId;
+  const cfg = await getAlimtalkConfig();
 
-  if (!pfId || !templateId) {
+  if (!cfg.apiKey || !cfg.userId || !cfg.senderKey) {
     return NextResponse.json({
       ok: false,
       error: 'ALIMTALK_NOT_CONFIGURED',
-      message: '알림톡 채널이 아직 설정되지 않았습니다. 슈퍼어드민 CON 관리에서 설정해주세요.',
+      message: '알림톡 채널이 아직 설정되지 않았습니다. 슈퍼어드민 사이트 설정에서 설정해주세요.',
     }, { status: 503 });
   }
 
-  // 템플릿 변수 구성
-  let variables: Record<string, string> = {};
-  if (payload.type === 'attendance') {
-    variables = {
-      '#{학원명}': payload.academyName,
-      '#{학생명}': payload.studentName,
-      '#{날짜}': payload.date,
-      '#{상태}': payload.status,
-    };
-  } else {
-    variables = {
-      '#{학원명}': payload.academyName,
-      '#{학생명}': payload.studentName,
-      '#{날짜}': payload.date,
-      '#{성적내용}': payload.content,
-    };
+  const tplCode = payload.type === 'attendance' ? cfg.attendanceTplCode : cfg.gradeTplCode;
+  if (!tplCode) {
+    return NextResponse.json({
+      ok: false,
+      error: 'ALIMTALK_NOT_CONFIGURED',
+      message: '알림톡 템플릿이 설정되지 않았습니다.',
+    }, { status: 503 });
   }
 
-  try {
-    const res = await fetch('https://api.solapi.com/messages/v4/send', {
-      method: 'POST',
-      headers: {
-        Authorization: buildSolapiAuth(apiSecret),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: {
-          to: payload.to.replace(/-/g, ''),
-          from: sender.replace(/-/g, ''),
-          type: 'ATA',
-          kakaoOptions: { pfId, templateId, variables },
-        },
-      }),
-    });
+  // 메시지 내용 구성 (템플릿 변수 치환)
+  let message = '';
+  let subject = '';
+  if (payload.type === 'attendance') {
+    subject = `[${payload.academyName}] 출결 알림`;
+    message = `[${payload.academyName}]\n${payload.studentName} 학생이 ${payload.date} 수업에 ${payload.status}하였습니다.`;
+  } else {
+    subject = `[${payload.academyName}] 성적 알림`;
+    message = payload.content;
+  }
 
+  const params = new URLSearchParams();
+  params.append('apikey', cfg.apiKey);
+  params.append('userid', cfg.userId);
+  params.append('senderkey', cfg.senderKey);
+  params.append('tpl_code', tplCode);
+  params.append('sender', sender.replace(/-/g, ''));
+  params.append('receiver_1', payload.to.replace(/-/g, ''));
+  params.append('subject_1', subject);
+  params.append('message_1', message);
+
+  try {
+    const res = await fetch('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: params.toString(),
+    });
     const result = await res.json();
-    if (result.errorCode) {
-      return NextResponse.json({ ok: false, error: result.errorMessage || result.errorCode });
+    if (result.code !== 0) {
+      return NextResponse.json({ ok: false, error: result.message || `code: ${result.code}` });
     }
     return NextResponse.json({ ok: true });
   } catch (e: any) {
