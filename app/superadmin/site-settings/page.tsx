@@ -22,6 +22,14 @@ const SECTIONS = [
       { key: 'bank_holder',   label: '예금주' },
     ],
   },
+  {
+    title: '💬 카카오 알림톡 설정',
+    fields: [
+      { key: 'KAKAO_PF_ID',                  label: '카카오 채널 ID (pfId)' },
+      { key: 'KAKAO_TEMPLATE_ATTENDANCE_ID',  label: '출결 알림 템플릿 ID' },
+      { key: 'KAKAO_TEMPLATE_GRADE_ID',       label: '성적 알림 템플릿 ID' },
+    ],
+  },
 ];
 
 export default function SiteSettingsPage() {
