@@ -93,6 +93,7 @@ export default function GradeInputPage() {
   // ── CON 단가 ──────────────────────────────────────
   const [smsPricePerUnit, setSmsPricePerUnit] = useState<number | null>(null);
   const [lmsPricePerUnit, setLmsPricePerUnit] = useState<number | null>(null);
+  const [alimtalkPricePerUnit, setAlimtalkPricePerUnit] = useState<number | null>(null);
 
   // ── 초기: userId + academyName + 로그 로드 ─────────
   useEffect(() => {
@@ -122,8 +123,10 @@ export default function GradeInputPage() {
         const list: { feature_key: string; cost_per_use: number }[] = data?.pricing ?? [];
         const sms = list.find(p => p.feature_key === 'sms');
         const lms = list.find(p => p.feature_key === 'lms');
+        const alimtalk = list.find(p => p.feature_key === 'alimtalk');
         if (sms) setSmsPricePerUnit(sms.cost_per_use);
         if (lms) setLmsPricePerUnit(lms.cost_per_use);
+        if (alimtalk) setAlimtalkPricePerUnit(alimtalk.cost_per_use);
       })
       .catch(() => {});
   }, []);
@@ -482,8 +485,13 @@ export default function GradeInputPage() {
   const validSendPreviews = sendMessagePreviews.filter(p => p.message && getPhoneForRecipient(p, sendRecipientType));
   const noPhoneCount = sendMessagePreviews.filter(p => p.message && !getPhoneForRecipient(p, sendRecipientType)).length;
 
-  // CON 계산: 각 메시지 발송 건수 × 단가 합산
+  // CON 계산: sendMethod에 따라 분기
   const sendConBreakdown = (() => {
+    if (sendMethod === 'alimtalk') {
+      const alimtalkCount = validSendPreviews.length;
+      const alimtalkCon = alimtalkPricePerUnit !== null ? alimtalkCount * alimtalkPricePerUnit : null;
+      return { smsCount: 0, lmsCount: 0, alimtalkCount, smsCon: null, lmsCon: null, alimtalkCon, total: alimtalkCon };
+    }
     let smsCount = 0;
     let lmsCount = 0;
     for (const p of validSendPreviews) {
@@ -496,7 +504,7 @@ export default function GradeInputPage() {
     const smsCon = smsPricePerUnit !== null ? smsCount * smsPricePerUnit : null;
     const lmsCon = lmsPricePerUnit !== null ? lmsCount * lmsPricePerUnit : null;
     const total = smsCon !== null && lmsCon !== null ? smsCon + lmsCon : null;
-    return { smsCount, lmsCount, smsCon, lmsCon, total };
+    return { smsCount, lmsCount, alimtalkCount: 0, smsCon, lmsCon, alimtalkCon: null, total };
   })();
 
   const handleGradeSend = async () => {
@@ -975,9 +983,13 @@ export default function GradeInputPage() {
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-1.5">
                             <span className="text-base font-black text-indigo-600">{p.studentName}</span>
-                            <span className={`px-1.5 py-0.5 rounded-full text-xs font-black ${isLMS ? 'bg-orange-100 text-orange-500' : 'bg-green-100 text-green-600'}`}>
-                              {isLMS ? 'LMS' : 'SMS'}
-                            </span>
+                            {sendMethod === 'alimtalk' ? (
+                              <span className="px-1.5 py-0.5 rounded-full text-xs font-black bg-yellow-100 text-yellow-600">알림톡</span>
+                            ) : (
+                              <span className={`px-1.5 py-0.5 rounded-full text-xs font-black ${isLMS ? 'bg-orange-100 text-orange-500' : 'bg-green-100 text-green-600'}`}>
+                                {isLMS ? 'LMS' : 'SMS'}
+                              </span>
+                            )}
                           </div>
                           <span className="text-xs text-gray-400 font-bold">
                             {sendRecipientType === 'parent' ? p.parentPhone :
@@ -1000,29 +1012,34 @@ export default function GradeInputPage() {
                   <span className="text-gray-500 font-bold">발송 가능</span>
                   <span className="font-black text-indigo-600">{validSendPreviews.length}건</span>
                 </div>
-                {validSendPreviews.length > 0 && (smsPricePerUnit !== null || lmsPricePerUnit !== null) && (
-                  <>
-                    <div className="border-t border-gray-100 pt-1.5">
-                      {sendConBreakdown.smsCount > 0 && smsPricePerUnit !== null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400 font-bold">SMS × {sendConBreakdown.smsCount}건</span>
-                          <span className="font-black text-yellow-600">{(sendConBreakdown.smsCount * smsPricePerUnit).toLocaleString()} C</span>
-                        </div>
-                      )}
-                      {sendConBreakdown.lmsCount > 0 && lmsPricePerUnit !== null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-400 font-bold">LMS × {sendConBreakdown.lmsCount}건</span>
-                          <span className="font-black text-yellow-600">{(sendConBreakdown.lmsCount * lmsPricePerUnit).toLocaleString()} C</span>
-                        </div>
-                      )}
-                      {sendConBreakdown.total !== null && (
-                        <div className="flex justify-between text-sm mt-1">
-                          <span className="font-black text-gray-700">합계</span>
-                          <span className="font-black text-yellow-500 text-base">{sendConBreakdown.total.toLocaleString()} C</span>
-                        </div>
-                      )}
+                {validSendPreviews.length > 0 && sendConBreakdown.total !== null && (
+                  <div className="border-t border-gray-100 pt-1.5">
+                    {sendMethod === 'alimtalk' ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400 font-bold">알림톡 × {sendConBreakdown.alimtalkCount}건</span>
+                        <span className="font-black text-yellow-600">{sendConBreakdown.total.toLocaleString()} C</span>
+                      </div>
+                    ) : (
+                      <>
+                        {sendConBreakdown.smsCount > 0 && smsPricePerUnit !== null && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400 font-bold">SMS × {sendConBreakdown.smsCount}건</span>
+                            <span className="font-black text-yellow-600">{(sendConBreakdown.smsCount * smsPricePerUnit).toLocaleString()} C</span>
+                          </div>
+                        )}
+                        {sendConBreakdown.lmsCount > 0 && lmsPricePerUnit !== null && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-400 font-bold">LMS × {sendConBreakdown.lmsCount}건</span>
+                            <span className="font-black text-yellow-600">{(sendConBreakdown.lmsCount * lmsPricePerUnit).toLocaleString()} C</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div className="flex justify-between text-sm mt-1">
+                      <span className="font-black text-gray-700">합계</span>
+                      <span className="font-black text-yellow-500 text-base">{sendConBreakdown.total.toLocaleString()} C</span>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
               <button onClick={() => setSendShowConfirmModal(true)}
@@ -1150,17 +1167,26 @@ export default function GradeInputPage() {
               {sendConBreakdown.total !== null && sendConBreakdown.total > 0 && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-1">
                   <p className="text-xs font-black text-yellow-700">⭐ CON 차감 안내</p>
-                  {sendConBreakdown.smsCount > 0 && smsPricePerUnit !== null && (
+                  {sendMethod === 'alimtalk' ? (
                     <div className="flex justify-between text-sm">
-                      <span className="text-yellow-700 font-bold">SMS × {sendConBreakdown.smsCount}건</span>
-                      <span className="font-black text-yellow-800">{(sendConBreakdown.smsCount * smsPricePerUnit).toLocaleString()} C</span>
+                      <span className="text-yellow-700 font-bold">알림톡 × {sendConBreakdown.alimtalkCount}건</span>
+                      <span className="font-black text-yellow-800">{sendConBreakdown.total.toLocaleString()} C</span>
                     </div>
-                  )}
-                  {sendConBreakdown.lmsCount > 0 && lmsPricePerUnit !== null && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-yellow-700 font-bold">LMS × {sendConBreakdown.lmsCount}건</span>
-                      <span className="font-black text-yellow-800">{(sendConBreakdown.lmsCount * lmsPricePerUnit).toLocaleString()} C</span>
-                    </div>
+                  ) : (
+                    <>
+                      {sendConBreakdown.smsCount > 0 && smsPricePerUnit !== null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-yellow-700 font-bold">SMS × {sendConBreakdown.smsCount}건</span>
+                          <span className="font-black text-yellow-800">{(sendConBreakdown.smsCount * smsPricePerUnit).toLocaleString()} C</span>
+                        </div>
+                      )}
+                      {sendConBreakdown.lmsCount > 0 && lmsPricePerUnit !== null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-yellow-700 font-bold">LMS × {sendConBreakdown.lmsCount}건</span>
+                          <span className="font-black text-yellow-800">{(sendConBreakdown.lmsCount * lmsPricePerUnit).toLocaleString()} C</span>
+                        </div>
+                      )}
+                    </>
                   )}
                   <div className="flex justify-between text-sm border-t border-yellow-200 pt-1">
                     <span className="font-black text-yellow-800">합계</span>
