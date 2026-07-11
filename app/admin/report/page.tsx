@@ -2,7 +2,7 @@
 
 
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { supabase } from '@/lib/supabase';
@@ -17,7 +17,7 @@ import {
 
 
 
-export default function AdminReportPage() {
+function AdminReportContent() {
 
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
@@ -928,4 +928,12 @@ export default function AdminReportPage() {
 
   );
 
+}
+
+export default function AdminReportPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminReportContent />
+    </Suspense>
+  );
 }
