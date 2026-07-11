@@ -1857,7 +1857,7 @@ export default function WorkbookPage() {
   const [activeResultTab, setActiveResultTab] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [showKorean, setShowKorean] = useState(false);
-  const [pricePerUse, setPricePerUse] = useState(20);
+  const [pricePerUse, setPricePerUse] = useState(0);
   const [wbDirectPricing, setWbDirectPricing] = useState<Record<string, number>>({});
   const [wbMockPricing, setWbMockPricing] = useState<Record<string, number>>({});
   const [downloadingPdf, setDownloadingPdf] = useState(false);
