@@ -33,7 +33,7 @@ function SortableSubjectRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className="flex gap-2 items-center bg-white p-3 rounded-2xl border border-rose-50 shadow-sm"
+      className="flex gap-2 items-center bg-white px-3 py-2.5 rounded-xl border border-gray-200"
     >
       <button
         {...attributes}
@@ -41,21 +41,19 @@ function SortableSubjectRow({
         className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 touch-none text-lg select-none flex-shrink-0"
         tabIndex={-1}
       >⠿</button>
-      <div className="flex-1">
-        <input
-          className="w-full border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300"
-          value={subject.name}
-          onChange={e => onChange(idx, 'name', e.target.value, true)}
-          placeholder="과목명"
-        />
-      </div>
       <input
-        className="flex-[2] border-b-2 p-2 font-bold text-sm outline-none focus:border-rose-300"
+        className="flex-1 border-b border-gray-200 py-1 font-bold text-sm text-gray-800 outline-none focus:border-gray-400"
+        value={subject.name}
+        onChange={e => onChange(idx, 'name', e.target.value, true)}
+        placeholder="과목명"
+      />
+      <input
+        className="flex-[2] border-b border-gray-200 py-1 font-bold text-sm text-gray-800 outline-none focus:border-gray-400"
         value={subject.description}
         onChange={e => onChange(idx, 'description', e.target.value, true)}
         placeholder="설명"
       />
-      <button onClick={() => onRemove(idx, true)} className="text-rose-200 p-2 flex-shrink-0">✕</button>
+      <button onClick={() => onRemove(idx, true)} className="text-gray-300 hover:text-red-400 p-1 flex-shrink-0 transition-colors">✕</button>
     </div>
   );
 }
@@ -77,52 +75,53 @@ function SortableClassCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 hover:shadow-2xl transition-all group relative"
+      className="bg-white p-5 rounded-xl border border-gray-200 hover:shadow-md transition-shadow relative"
     >
-      {/* 드래그 핸들 */}
       <button
         {...attributes}
         {...listeners}
-        className="absolute top-5 left-5 cursor-grab active:cursor-grabbing text-slate-200 hover:text-slate-400 text-2xl touch-none select-none transition-colors"
+        className="absolute top-4 left-4 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 text-lg touch-none select-none transition-colors"
         tabIndex={-1}
       >⠿</button>
 
-      <div className="flex justify-between items-start mb-4 pl-6">
-        <div className="flex gap-2">
-          <span className="bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.target_level} 반</span>
-          <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-[12px] font-black">{c.start_year}년</span>
+      <div className="flex justify-between items-start mb-3 pl-6">
+        <div className="flex gap-1.5">
+          <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-[11px] font-black">{c.target_level}</span>
+          <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-[11px] font-black">{c.start_year}년</span>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => onEdit(c)} className="text-indigo-500 font-black text-xs">수정</button>
-          <button onClick={() => onDelete(c.id)} className="text-rose-300 font-black text-xs">삭제</button>
+          <button onClick={() => onEdit(c)} className="text-gray-500 font-black text-xs hover:text-gray-900 transition-colors">수정</button>
+          <button onClick={() => onDelete(c.id)} className="text-gray-300 font-black text-xs hover:text-red-400 transition-colors">삭제</button>
         </div>
       </div>
 
-      <div className="flex justify-between items-end border-b pb-4 mb-4">
+      <div className="flex justify-between items-end border-b border-gray-100 pb-3 mb-3">
         <div>
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight">{c.class_name}</h3>
-          <p className="text-sm font-bold text-slate-400">Teacher. {c.teacher_name || '미지정'}</p>
+          <h3 className="text-lg font-black text-gray-900">{c.class_name}</h3>
+          <p className="text-xs font-bold text-gray-400 mt-0.5">담당: {c.teacher_name || '미지정'}</p>
         </div>
-        <span className="text-2xl font-black text-indigo-600 italic">{formatKRW(c.tuition_fee)}</span>
+        <span className="text-base font-black text-gray-900">{formatKRW(c.tuition_fee)}</span>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-6">
-        {Array.isArray(c.test_categories) && c.test_categories.map((cat: Subject) => (
-          <span key={cat.id} className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[11px] font-black border border-rose-100">#{cat.name}</span>
-        ))}
-      </div>
+      {Array.isArray(c.test_categories) && c.test_categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {c.test_categories.map((cat: Subject) => (
+            <span key={cat.id} className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full text-[11px] font-black">#{cat.name}</span>
+          ))}
+        </div>
+      )}
 
-      <div className="bg-slate-50 p-6 rounded-[2.5rem] space-y-4">
-        <div className="flex gap-1.5">
+      <div className="bg-gray-50 px-4 py-3 rounded-xl space-y-3">
+        <div className="flex gap-1">
           {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(d => (
-            <span key={d} className={`flex-1 h-10 flex items-center justify-center rounded-2xl text-xs font-black ${c[d] ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-200 border border-slate-50'}`}>
+            <span key={d} className={`flex-1 h-8 flex items-center justify-center rounded-lg text-xs font-black ${c[d] ? 'bg-gray-900 text-white' : 'bg-white text-gray-300 border border-gray-100'}`}>
               {dayLabels[d]}
             </span>
           ))}
         </div>
-        <div className="flex items-center justify-between border-t pt-3 font-black text-indigo-700 text-lg">
-          <span className="text-[10px] text-slate-400 uppercase tracking-widest ml-1">Schedule</span>
-          <div>{formatDisplayTime(c.start_time)} ~ {formatDisplayTime(c.end_time)}</div>
+        <div className="flex items-center justify-between pt-1 border-t border-gray-200 text-sm font-black text-gray-700">
+          <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">수업 시간</span>
+          <span>{formatDisplayTime(c.start_time)} ~ {formatDisplayTime(c.end_time)}</span>
         </div>
       </div>
     </div>
@@ -143,12 +142,7 @@ export default function ClassPage() {
     getUser();
   }, []);
 
-  // 새 과목 생성 시 고유 ID 부여 (이 ID는 평생 갑니다)
-  const createInitialSubject = (): Subject => ({
-    id: generateId(), 
-    name: '',
-    description: ''
-  });
+  const createInitialSubject = (): Subject => ({ id: generateId(), name: '', description: '' });
 
   const [formData, setFormData] = useState({
     class_name: '',
@@ -158,7 +152,7 @@ export default function ClassPage() {
     end_time: '16:00',
     start_year: currentYear,
     tuition_fee: 0,
-    test_categories: [createInitialSubject()], 
+    test_categories: [createInitialSubject()],
     mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false
   });
 
@@ -186,9 +180,8 @@ export default function ClassPage() {
   const formatKRW = (val: number) => new Intl.NumberFormat('ko-KR').format(val) + '원';
   const formatDisplayTime = (timeStr: string) => timeStr ? timeStr.slice(0, 5) : '';
 
-  const classSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const classSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const subjectSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const handleClassDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -197,19 +190,10 @@ export default function ClassPage() {
       const oldIdx = prev.findIndex((c: any) => c.id === active.id);
       const newIdx = prev.findIndex((c: any) => c.id === over.id);
       const next = arrayMove(prev, oldIdx, newIdx);
-      // DB에 sort_order 저장 (백그라운드)
-      Promise.all(
-        next.map((c: any, i: number) =>
-          supabase.from('classes').update({ sort_order: i }).eq('id', c.id)
-        )
-      );
+      Promise.all(next.map((c: any, i: number) => supabase.from('classes').update({ sort_order: i }).eq('id', c.id)));
       return next;
     });
   };
-
-  const subjectSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
 
   const handleSubjectDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -220,28 +204,20 @@ export default function ClassPage() {
     setEditingClass({ ...editingClass, test_categories: arrayMove(cats, oldIdx, newIdx) });
   };
 
-  const addSubjectField = (isEdit: boolean = false) => {
+  const addSubjectField = (isEdit = false) => {
     const newSub = createInitialSubject();
-    if (isEdit) {
-      setEditingClass({ ...editingClass, test_categories: [...(editingClass.test_categories || []), newSub] });
-    } else {
-      setFormData({ ...formData, test_categories: [...formData.test_categories, newSub] });
-    }
+    if (isEdit) setEditingClass({ ...editingClass, test_categories: [...(editingClass.test_categories || []), newSub] });
+    else setFormData({ ...formData, test_categories: [...formData.test_categories, newSub] });
   };
 
-  const removeSubjectField = (index: number, isEdit: boolean = false) => {
+  const removeSubjectField = (index: number, isEdit = false) => {
     if (confirm('과목을 삭제하면 해당 과목의 기존 성적 데이터가 리포트에서 제외됩니다. 계속하시겠습니까?')) {
-      if (isEdit) {
-        const updated = editingClass.test_categories.filter((_: any, i: number) => i !== index);
-        setEditingClass({ ...editingClass, test_categories: updated });
-      } else {
-        const updated = formData.test_categories.filter((_, i) => i !== index);
-        setFormData({ ...formData, test_categories: updated });
-      }
+      if (isEdit) setEditingClass({ ...editingClass, test_categories: editingClass.test_categories.filter((_: any, i: number) => i !== index) });
+      else setFormData({ ...formData, test_categories: formData.test_categories.filter((_, i) => i !== index) });
     }
   };
 
-  const handleSubjectChange = (index: number, field: keyof Subject, value: string, isEdit: boolean = false) => {
+  const handleSubjectChange = (index: number, field: keyof Subject, value: string, isEdit = false) => {
     if (isEdit) {
       const updated = [...editingClass.test_categories];
       updated[index] = { ...updated[index], [field]: value };
@@ -269,22 +245,21 @@ export default function ClassPage() {
     return `${h.toString().padStart(2, '0')}:${minute}`;
   };
 
-  const TimePicker = ({ value, onChange, label }: { value: string, onChange: (val: string) => void, label?: string }) => {
+  const TimePicker = ({ value, onChange, label }: { value: string; onChange: (val: string) => void; label?: string }) => {
     const { ampm, hour, minute } = parseTimeToParts(value);
-    const update = (newAmpm: string, newHour: string, newMin: string) => {
-      onChange(formatPartsToTime(newAmpm, newHour, newMin));
-    };
+    const update = (a: string, h: string, m: string) => onChange(formatPartsToTime(a, h, m));
+    const sel = "border border-gray-200 px-2.5 py-2 rounded-xl font-bold text-sm bg-white text-gray-800 focus:outline-none focus:border-gray-400";
     return (
-      <div className="flex flex-col gap-1">
-        {label && <span className="text-[11px] font-black text-indigo-400 ml-1 uppercase">{label}</span>}
-        <div className="flex gap-1">
-          <select className="border-2 p-3 rounded-2xl font-bold text-sm bg-white" value={ampm} onChange={e => update(e.target.value, hour, minute)}>
+      <div className="flex flex-col gap-1.5">
+        {label && <span className="text-xs font-black text-gray-400">{label}</span>}
+        <div className="flex gap-1.5">
+          <select className={sel} value={ampm} onChange={e => update(e.target.value, hour, minute)}>
             <option value="오전">오전</option><option value="오후">오후</option>
           </select>
-          <select className="border-2 p-3 rounded-2xl font-bold text-sm bg-white" value={hour} onChange={e => update(ampm, e.target.value, minute)}>
+          <select className={sel} value={hour} onChange={e => update(ampm, e.target.value, minute)}>
             {Array.from({length: 12}, (_, i) => (i + 1).toString().padStart(2, '0')).map(h => <option key={h} value={h}>{h}시</option>)}
           </select>
-          <select className="border-2 p-3 rounded-2xl font-bold text-sm bg-white" value={minute} onChange={e => update(ampm, hour, e.target.value)}>
+          <select className={sel} value={minute} onChange={e => update(ampm, hour, e.target.value)}>
             {['00','10','20','30','40','50'].map(m => <option key={m} value={m}>{m}분</option>)}
           </select>
         </div>
@@ -292,20 +267,19 @@ export default function ClassPage() {
     );
   };
 
-  const handleToggleDay = (day: string, isEdit: boolean = false) => {
+  const handleToggleDay = (day: string, isEdit = false) => {
     if (isEdit) setEditingClass({ ...editingClass, [day]: !editingClass[day] });
     else setFormData({ ...formData, [day]: !formData[day as keyof typeof formData] });
   };
 
   const addClass = async () => {
-    if (!formData.class_name) return alert('클래스 명칭을 입력하세요');
+    if (!formData.class_name) return alert('클래스명을 입력하세요');
     const validCategories = formData.test_categories.filter(cat => cat.name.trim() !== '');
     if (validCategories.length === 0) return alert('최소 하나 이상의 과목을 입력하세요.');
     if (!userId) return alert('로그인 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
-
     const { error } = await supabase.from('classes').insert([{ ...formData, academy_id: userId, test_categories: validCategories }]);
     if (!error) {
-      alert('클래스 등록 성공!');
+      alert('클래스 등록 완료!');
       setFormData({
         class_name: '', teacher_name: '', target_level: '초등', start_time: '14:00', end_time: '16:00',
         start_year: currentYear, tuition_fee: 0, test_categories: [createInitialSubject()],
@@ -317,18 +291,17 @@ export default function ClassPage() {
     }
   };
 
-  const openEditModal = (c: any) => { 
+  const openEditModal = (c: any) => {
     const categories = Array.isArray(c.test_categories) ? c.test_categories : [];
-    setEditingClass({ ...c, test_categories: categories.length > 0 ? categories : [createInitialSubject()] }); 
-    setIsEditModalOpen(true); 
+    setEditingClass({ ...c, test_categories: categories.length > 0 ? categories : [createInitialSubject()] });
+    setIsEditModalOpen(true);
   };
 
   const updateClass = async () => {
     const { id, created_at, ...rest } = editingClass;
     const validCategories = editingClass.test_categories.filter((cat: any) => cat.name.trim() !== '');
-    
     const { error } = await supabase.from('classes').update({ ...rest, test_categories: validCategories }).eq('id', id);
-    if (!error) { alert('수정 완료! ✅'); setIsEditModalOpen(false); fetchClasses(); }
+    if (!error) { alert('수정 완료!'); setIsEditModalOpen(false); fetchClasses(); }
   };
 
   const deleteClass = async (id: number) => {
@@ -337,168 +310,193 @@ export default function ClassPage() {
     fetchClasses();
   };
 
-  return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8 pb-20 font-sans text-slate-800">
-      <h1 className="text-3xl font-black text-indigo-700 border-b-4 border-indigo-100 pb-2 tracking-tighter uppercase">🏫 Class Manager</h1>
+  const inputCls = "w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm";
+  const labelCls = "text-xs font-black text-gray-400 uppercase tracking-wider mb-1.5 block";
 
-      {/* 등록 섹션 */}
-      <div className="bg-white p-10 rounded-[3rem] shadow-2xl border-2 border-indigo-50 space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div><label className="text-xs font-black text-gray-400 mb-2 block uppercase">Level</label>
-            <select className="w-full border-2 p-3.5 rounded-2xl font-bold bg-white outline-none focus:border-indigo-500" value={formData.target_level} onChange={e => setFormData({...formData, target_level: e.target.value})}>
-              {levelOptions.map(opt => <option key={opt} value={opt}>{opt}반</option>)}
-            </select>
-          </div>
-          <div><label className="text-xs font-black text-gray-400 mb-2 block uppercase">Class Name</label>
-            <input className="w-full border-2 p-3.5 rounded-2xl font-bold outline-none focus:border-indigo-500" value={formData.class_name} onChange={e => setFormData({...formData, class_name: e.target.value})} placeholder="클래스명" />
-          </div>
-          <div><label className="text-xs font-black text-gray-400 mb-2 block uppercase">Teacher</label>
-            <input className="w-full border-2 p-3.5 rounded-2xl font-bold outline-none focus:border-indigo-500" value={formData.teacher_name} onChange={e => setFormData({...formData, teacher_name: e.target.value})} placeholder="강사명" />
-          </div>
-          <div><label className="text-xs font-black text-gray-400 mb-2 block uppercase">Tuition</label>
-            <input type="number" className="w-full border-2 p-3.5 rounded-2xl font-black text-indigo-600 outline-none" value={formData.tuition_fee} onChange={e => setFormData({...formData, tuition_fee: parseInt(e.target.value) || 0})} />
+  return (
+    <div className="p-6 max-w-4xl mx-auto space-y-6 pb-20">
+
+      {/* 헤더 */}
+      <div className="border-b border-gray-200 pb-5">
+        <h1 className="text-2xl font-black text-gray-900">클래스 관리</h1>
+      </div>
+
+      {/* 등록 폼 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+
+        {/* 기본 정보 */}
+        <div>
+          <p className={labelCls}>기본 정보</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">레벨</label>
+              <select className={inputCls} value={formData.target_level} onChange={e => setFormData({...formData, target_level: e.target.value})}>
+                {levelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">클래스명</label>
+              <input className={inputCls} value={formData.class_name} onChange={e => setFormData({...formData, class_name: e.target.value})} placeholder="예: 중등 심화반" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">담당 강사</label>
+              <input className={inputCls} value={formData.teacher_name} onChange={e => setFormData({...formData, teacher_name: e.target.value})} placeholder="강사명" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">교습비</label>
+              <input type="number" className={inputCls} value={formData.tuition_fee} onChange={e => setFormData({...formData, tuition_fee: parseInt(e.target.value) || 0})} />
+            </div>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <label className="text-xs font-black text-rose-500 block uppercase tracking-widest">📝 Subjects (Auto-ID Sync)</label>
-            <button onClick={() => addSubjectField(false)} className="bg-rose-500 text-white w-8 h-8 rounded-full font-black hover:bg-rose-600 shadow-md">+</button>
+        {/* 과목 */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <p className={labelCls + ' mb-0'}>과목</p>
+            <button onClick={() => addSubjectField(false)} className="w-6 h-6 rounded-full bg-gray-900 text-white font-black text-sm hover:bg-gray-700 transition-colors flex items-center justify-center">+</button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {formData.test_categories.map((cat, index) => (
-              <div key={cat.id} className="flex gap-3 items-start animate-in slide-in-from-left-2">
-                <div className="flex-[1]">
-                  <input className="w-full border-2 p-3.5 rounded-2xl font-bold outline-none focus:border-rose-400 bg-rose-50/10" value={cat.name} onChange={e => handleSubjectChange(index, 'name', e.target.value, false)} placeholder="과목명" />
-                  <p className="text-[8px] text-gray-300 mt-1 ml-2 font-mono">FIXED ID: {cat.id.split('-')[0]}...</p>
-                </div>
-                <div className="flex-[2]">
-                  <input className="w-full border-2 p-3.5 rounded-2xl font-bold outline-none focus:border-rose-400 bg-rose-50/10" value={cat.description} onChange={e => handleSubjectChange(index, 'description', e.target.value, false)} placeholder="설명" />
-                </div>
+              <div key={cat.id} className="flex gap-2 items-center">
+                <input className={inputCls} value={cat.name} onChange={e => handleSubjectChange(index, 'name', e.target.value, false)} placeholder="과목명" />
+                <input className={inputCls} value={cat.description} onChange={e => handleSubjectChange(index, 'description', e.target.value, false)} placeholder="설명" />
                 {formData.test_categories.length > 1 && (
-                  <button onClick={() => removeSubjectField(index, false)} className="p-3.5 text-rose-300">✕</button>
+                  <button onClick={() => removeSubjectField(index, false)} className="text-gray-300 hover:text-red-400 flex-shrink-0 transition-colors">✕</button>
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
-          <div className="lg:col-span-3">
-            <label className="text-xs font-black text-gray-400 mb-2 block uppercase">Opening Year</label>
-            <select className="w-full border-2 p-3.5 rounded-2xl font-black text-sm outline-none focus:border-indigo-500 bg-indigo-50 text-indigo-700" value={formData.start_year} onChange={e => setFormData({...formData, start_year: parseInt(e.target.value)})}>
-              {yearOptions.map(y => <option key={y} value={y}>{y}년도</option>)}
-            </select>
-          </div>
-          <div className="lg:col-span-9">
-            <div className="flex gap-1.5">
-              {Object.keys(dayLabels).map(d => (
-                <button key={d} onClick={() => handleToggleDay(d)} className={`flex-1 py-4 rounded-2xl font-black transition-all ${formData[d as keyof typeof formData] ? 'bg-indigo-600 text-white shadow-lg -translate-y-1' : 'bg-gray-100 text-gray-300'}`}>{dayLabels[d]}</button>
-              ))}
+        {/* 수업 일정 */}
+        <div>
+          <p className={labelCls}>수업 일정</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">기준 연도</label>
+              <select className={inputCls} value={formData.start_year} onChange={e => setFormData({...formData, start_year: parseInt(e.target.value)})}>
+                {yearOptions.map(y => <option key={y} value={y}>{y}년도</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-3 space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">수업 요일</label>
+              <div className="flex gap-1.5">
+                {Object.keys(dayLabels).map(d => (
+                  <button key={d} onClick={() => handleToggleDay(d)}
+                    className={`flex-1 py-2.5 rounded-xl font-black text-sm transition-colors ${formData[d as keyof typeof formData] ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+                    {dayLabels[d]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+          <div className="flex gap-6 mt-3 bg-gray-50 px-4 py-3 rounded-xl">
+            <TimePicker label="시작 시간" value={formData.start_time} onChange={val => setFormData({...formData, start_time: val})} />
+            <div className="flex items-end pb-1 text-gray-300 font-black">→</div>
+            <TimePicker label="종료 시간" value={formData.end_time} onChange={val => setFormData({...formData, end_time: val})} />
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-8 items-center bg-slate-50 p-6 rounded-[2rem]">
-          <TimePicker label="시작 시간" value={formData.start_time} onChange={val => setFormData({...formData, start_time: val})} />
-          <TimePicker label="종료 시간" value={formData.end_time} onChange={val => setFormData({...formData, end_time: val})} />
-        </div>
-
-        <button onClick={addClass} className="w-full bg-indigo-600 text-white py-6 rounded-[2rem] font-black text-xl hover:bg-indigo-700 shadow-2xl transition-all">클래스 등록 ✨</button>
+        <button onClick={addClass} className="w-full bg-gray-900 hover:bg-gray-700 text-white py-3 rounded-xl font-black text-sm transition-colors">
+          클래스 등록
+        </button>
       </div>
 
-      {/* 리스트 섹션 */}
-      <DndContext sensors={classSensors} collisionDetection={closestCenter} onDragEnd={handleClassDragEnd}>
-        <SortableContext items={classes.map((c: any) => c.id)} strategy={verticalListSortingStrategy}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-            {classes.map((c: any) => (
-              <SortableClassCard
-                key={c.id}
-                c={c}
-                onEdit={openEditModal}
-                onDelete={deleteClass}
-                dayLabels={dayLabels}
-                formatKRW={formatKRW}
-                formatDisplayTime={formatDisplayTime}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      {/* 클래스 목록 */}
+      {classes.length > 0 && (
+        <DndContext sensors={classSensors} collisionDetection={closestCenter} onDragEnd={handleClassDragEnd}>
+          <SortableContext items={classes.map((c: any) => c.id)} strategy={verticalListSortingStrategy}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {classes.map((c: any) => (
+                <SortableClassCard
+                  key={c.id}
+                  c={c}
+                  onEdit={openEditModal}
+                  onDelete={deleteClass}
+                  dayLabels={dayLabels}
+                  formatKRW={formatKRW}
+                  formatDisplayTime={formatDisplayTime}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
 
       {/* 수정 모달 */}
       {isEditModalOpen && editingClass && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden border-4 border-indigo-600 animate-in zoom-in-95">
-            <div className="p-8 bg-indigo-600 text-white font-black flex justify-between items-center">
-              <h2 className="text-2xl italic uppercase tracking-tighter">Edit Class</h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-3xl">✕</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-lg font-black text-gray-900">클래스 수정</h2>
+              <button onClick={() => setIsEditModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">✕</button>
             </div>
-            <div className="p-10 space-y-6 overflow-y-auto max-h-[75vh]">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-indigo-400 ml-1">CLASS NAME</label>
-                  <input className="w-full border-2 p-4 rounded-2xl font-bold focus:border-indigo-500 outline-none" value={editingClass.class_name} onChange={e => setEditingClass({...editingClass, class_name: e.target.value})} />
+
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500">클래스명</label>
+                  <input className={inputCls} value={editingClass.class_name} onChange={e => setEditingClass({...editingClass, class_name: e.target.value})} />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-indigo-400 ml-1">TEACHER</label>
-                  <input className="w-full border-2 p-4 rounded-2xl font-bold focus:border-indigo-500 outline-none" value={editingClass.teacher_name} onChange={e => setEditingClass({...editingClass, teacher_name: e.target.value})} />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500">담당 강사</label>
+                  <input className={inputCls} value={editingClass.teacher_name} onChange={e => setEditingClass({...editingClass, teacher_name: e.target.value})} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-indigo-400 ml-1">TARGET LEVEL</label>
-                  <select className="w-full border-2 p-4 rounded-2xl font-bold bg-white" value={editingClass.target_level} onChange={e => setEditingClass({...editingClass, target_level: e.target.value})}>
-                    {levelOptions.map(opt => <option key={opt} value={opt}>{opt}반</option>)}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500">레벨</label>
+                  <select className={inputCls} value={editingClass.target_level} onChange={e => setEditingClass({...editingClass, target_level: e.target.value})}>
+                    {levelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-indigo-400 ml-1">TUITION FEE</label>
-                  <input type="number" className="w-full border-2 p-4 rounded-2xl font-black text-indigo-600 outline-none" value={editingClass.tuition_fee} onChange={e => setEditingClass({...editingClass, tuition_fee: parseInt(e.target.value) || 0})} />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500">교습비</label>
+                  <input type="number" className={inputCls} value={editingClass.tuition_fee} onChange={e => setEditingClass({...editingClass, tuition_fee: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
 
-              <div className="space-y-3 p-6 bg-rose-50/20 rounded-[2rem] border border-rose-100">
+              <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-black text-rose-500 uppercase">Subjects</span>
-                  <button onClick={() => addSubjectField(true)} className="bg-rose-500 text-white w-7 h-7 rounded-full text-xs shadow-md">+</button>
+                  <label className="text-xs font-black text-gray-400 uppercase tracking-wider">과목</label>
+                  <button onClick={() => addSubjectField(true)} className="w-6 h-6 rounded-full bg-gray-900 text-white font-black text-sm hover:bg-gray-700 transition-colors flex items-center justify-center">+</button>
                 </div>
                 <DndContext sensors={subjectSensors} collisionDetection={closestCenter} onDragEnd={handleSubjectDragEnd}>
                   <SortableContext items={editingClass.test_categories.map((c: Subject) => c.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-2">
                       {editingClass.test_categories.map((cat: Subject, index: number) => (
-                        <SortableSubjectRow
-                          key={cat.id}
-                          subject={cat}
-                          idx={index}
-                          onChange={handleSubjectChange}
-                          onRemove={removeSubjectField}
-                        />
+                        <SortableSubjectRow key={cat.id} subject={cat} idx={index} onChange={handleSubjectChange} onRemove={removeSubjectField} />
                       ))}
                     </div>
                   </SortableContext>
                 </DndContext>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-indigo-400 ml-1 uppercase font-black">Days</label>
-                <div className="flex gap-1">
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-wider mb-2 block">수업 요일</label>
+                <div className="flex gap-1.5">
                   {['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(d => (
-                    <button key={d} onClick={() => handleToggleDay(d, true)} className={`flex-1 py-3 rounded-xl font-black transition-all ${editingClass[d] ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-50 text-slate-300'}`}>{dayLabels[d]}</button>
+                    <button key={d} onClick={() => handleToggleDay(d, true)}
+                      className={`flex-1 py-2.5 rounded-xl font-black text-sm transition-colors ${editingClass[d] ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+                      {dayLabels[d]}
+                    </button>
                   ))}
                 </div>
               </div>
 
-              <div className="p-6 bg-slate-50 rounded-[2.5rem] flex gap-4 justify-center items-center">
-                <TimePicker label="시작" value={editingClass.start_time} onChange={val => setEditingClass({...editingClass, start_time: val})} />
-                <div className="text-indigo-200 font-black text-2xl hidden md:block pt-4">→</div>
-                <TimePicker label="종료" value={editingClass.end_time} onChange={val => setEditingClass({...editingClass, end_time: val})} />
+              <div className="bg-gray-50 px-4 py-3 rounded-xl flex gap-6 items-end">
+                <TimePicker label="시작 시간" value={editingClass.start_time} onChange={val => setEditingClass({...editingClass, start_time: val})} />
+                <div className="pb-1 text-gray-300 font-black">→</div>
+                <TimePicker label="종료 시간" value={editingClass.end_time} onChange={val => setEditingClass({...editingClass, end_time: val})} />
               </div>
             </div>
-            <div className="p-8 bg-slate-50 flex gap-4">
-              <button onClick={() => setIsEditModalOpen(false)} className="flex-1 py-5 font-black text-slate-400 bg-white rounded-2xl">취소</button>
-              <button onClick={updateClass} className="flex-[2] py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700">업데이트 완료 ✅</button>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button onClick={() => setIsEditModalOpen(false)} className="px-5 py-2.5 text-sm font-black text-gray-500 hover:bg-gray-100 rounded-xl transition-colors">취소</button>
+              <button onClick={updateClass} className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-700 text-white rounded-xl font-black text-sm transition-colors">저장</button>
             </div>
           </div>
         </div>
