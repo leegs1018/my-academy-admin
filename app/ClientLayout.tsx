@@ -44,6 +44,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [points, setPoints] = useState<number>(0);
   const [userRole, setUserRole] = useState<string>('');
   const [smsEnabled, setSmsEnabled] = useState(false);
+  const [notificationMethod, setNotificationMethod] = useState<'sms' | 'alimtalk'>('sms');
+  const [notifyMethodSaving, setNotifyMethodSaving] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (session?.user?.id) {
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, kiosk_code, points, role, own_referral_code, sms_enabled')
+          .select('academy_name, kiosk_code, points, role, own_referral_code, sms_enabled, notification_method')
           .eq('user_id', session.user.id)
           .single();
         if (data?.academy_name) setAcademyName(data.academy_name);
@@ -85,6 +87,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         if (data?.points !== undefined) setPoints(data.points);
         setUserRole(data?.role ?? 'ai_only');
         setSmsEnabled(data?.sms_enabled ?? false);
+        setNotificationMethod((data?.notification_method ?? 'sms') as 'sms' | 'alimtalk');
         if (data?.own_referral_code) {
           setOwnReferralCode(data.own_referral_code);
         } else {
@@ -122,6 +125,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
+
+  const handleNotificationMethodChange = async (method: 'sms' | 'alimtalk') => {
+    setNotifyMethodSaving(true);
+    setNotificationMethod(method);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+      await supabase.from('academy_config').update({ notification_method: method }).eq('user_id', session.user.id);
+    }
+    setNotifyMethodSaving(false);
+  };
 
   const handleLogout = async () => {
     if (!confirm('로그아웃 하시겠습니까?')) return;
@@ -363,6 +376,27 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     )}
                   </div>
                   <div className="py-2">
+                    {smsEnabled && (
+                      <div className="px-5 py-3 border-b border-gray-100">
+                        <p className="text-[10px] text-gray-400 font-bold mb-2">출결 알림 방법</p>
+                        <div className="flex rounded-xl overflow-hidden border-2 border-gray-200 text-xs font-black">
+                          <button
+                            onClick={() => handleNotificationMethodChange('sms')}
+                            disabled={notifyMethodSaving}
+                            className={`flex-1 py-2 transition-all ${notificationMethod === 'sms' ? 'bg-green-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                          >
+                            SMS
+                          </button>
+                          <button
+                            onClick={() => handleNotificationMethodChange('alimtalk')}
+                            disabled={notifyMethodSaving}
+                            className={`flex-1 py-2 transition-all ${notificationMethod === 'alimtalk' ? 'bg-yellow-400 text-black' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                          >
+                            알림톡
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <Link
                       href="/admin/account"
                       onClick={() => setShowAccountMenu(false)}
