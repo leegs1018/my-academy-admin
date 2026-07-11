@@ -24,7 +24,7 @@ const menuItems: MenuItem[] = [
     children: [
       { href: '/admin/pdf-editor',    label: '지문분석',      icon: '📝' },
       { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
-      { href: '/admin/vocab-choice',  label: '워크북 (개발중)', icon: '📒' },
+      { href: '/admin/vocab-choice',  label: '워크북',          icon: '📒' },
     ],
   },
   { href: '/admin/guide',        label: '이용 가이드',     icon: '📖' },
