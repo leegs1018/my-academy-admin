@@ -89,6 +89,12 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
+const ALIMTALK_FIELDS = [
+  { key: 'KAKAO_PF_ID',                   label: '카카오 채널 ID (pfId)',      placeholder: '_ZdxxxxB' },
+  { key: 'KAKAO_TEMPLATE_ATTENDANCE_ID',   label: '출결 알림 템플릿 ID',        placeholder: 'KA01TP...' },
+  { key: 'KAKAO_TEMPLATE_GRADE_ID',        label: '성적 알림 템플릿 ID',        placeholder: 'KA01TP...' },
+];
+
 export default function ConPricingPage() {
   const [pricing, setPricing] = useState<PricingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,12 +103,45 @@ export default function ConPricingPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<Record<string, string>>({});
 
+  const [alimtalkConfig, setAlimtalkConfig] = useState<Record<string, string>>({});
+  const [alimtalkEditing, setAlimtalkEditing] = useState<Record<string, string>>({});
+  const [alimtalkSaving, setAlimtalkSaving] = useState<string | null>(null);
+  const [alimtalkMsg, setAlimtalkMsg] = useState<Record<string, string>>({});
+
   useEffect(() => {
     fetch('/api/superadmin/credits/pricing')
       .then(r => r.json())
       .then(d => { setPricing(d.pricing || []); setLoading(false); })
       .catch(() => setLoading(false));
+
+    fetch('/api/superadmin/alimtalk-config')
+      .then(r => r.json())
+      .then(d => setAlimtalkConfig(d.config ?? {}))
+      .catch(() => {});
   }, []);
+
+  const handleAlimtalkSave = async (key: string) => {
+    const value = alimtalkEditing[key]?.trim() ?? '';
+    setAlimtalkSaving(key);
+    try {
+      const res = await fetch('/api/superadmin/alimtalk-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setAlimtalkConfig(prev => ({ ...prev, [key]: value }));
+        setAlimtalkEditing(prev => { const n = { ...prev }; delete n[key]; return n; });
+        setAlimtalkMsg(prev => ({ ...prev, [key]: '저장됨' }));
+        setTimeout(() => setAlimtalkMsg(prev => { const n = { ...prev }; delete n[key]; return n; }), 2000);
+      } else {
+        setAlimtalkMsg(prev => ({ ...prev, [key]: `오류: ${d.error}` }));
+      }
+    } catch {
+      setAlimtalkMsg(prev => ({ ...prev, [key]: '서버 오류' }));
+    } finally { setAlimtalkSaving(null); }
+  };
 
   const pricingMap = Object.fromEntries(pricing.map(p => [p.feature_key, p]));
 
@@ -292,6 +331,65 @@ export default function ConPricingPage() {
           {SECTIONS.map(renderSectionCard)}
         </div>
       )}
+
+      {/* 카카오 알림톡 설정 */}
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+        <div className="px-6 py-3 bg-slate-800/60 flex items-center gap-2.5">
+          <h2 className="text-sm font-black text-yellow-400">💬 카카오 알림톡 설정</h2>
+          <span className="text-xs font-bold text-slate-400">채널 승인 후 아래 값을 입력하면 즉시 적용됩니다</span>
+        </div>
+        <div className="divide-y divide-slate-800">
+          {ALIMTALK_FIELDS.map(field => {
+            const current = alimtalkConfig[field.key] ?? '';
+            const ev = alimtalkEditing[field.key];
+            const isSaving = alimtalkSaving === field.key;
+            const msg = alimtalkMsg[field.key];
+            return (
+              <div key={field.key} className="flex items-center gap-4 px-5 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-white">{field.label}</p>
+                  <p className="text-[10px] text-slate-600 font-bold mt-0.5">{field.key}</p>
+                  {msg && (
+                    <p className={`text-[10px] font-bold mt-0.5 ${msg.startsWith('오류') || msg === '서버 오류' ? 'text-red-400' : 'text-green-400'}`}>{msg}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {ev !== undefined ? (
+                    <>
+                      <input
+                        type="text"
+                        value={ev}
+                        placeholder={field.placeholder}
+                        onChange={e => setAlimtalkEditing(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        className="w-52 px-3 py-1.5 bg-slate-800 border-2 border-yellow-500 rounded-lg text-white font-bold text-sm focus:outline-none"
+                        autoFocus
+                      />
+                      <button onClick={() => handleAlimtalkSave(field.key)} disabled={isSaving}
+                        className="px-3 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all disabled:opacity-50">
+                        {isSaving ? '…' : '저장'}
+                      </button>
+                      <button onClick={() => setAlimtalkEditing(prev => { const n = { ...prev }; delete n[field.key]; return n; })}
+                        className="px-3 py-1.5 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all">
+                        취소
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`text-sm font-bold ${current ? 'text-emerald-400' : 'text-slate-600'}`}>
+                        {current || '미설정'}
+                      </span>
+                      <button onClick={() => setAlimtalkEditing(prev => ({ ...prev, [field.key]: current }))}
+                        className="px-3 py-1 text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-all">
+                        {current ? '수정' : '설정'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* CON 패키지 안내 */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">

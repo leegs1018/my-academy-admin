@@ -1,5 +1,25 @@
 import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+async function getAlimtalkConfig(): Promise<{ pfId?: string; attendanceTemplateId?: string; gradeTemplateId?: string }> {
+  const { data } = await supabaseAdmin
+    .from('site_settings')
+    .select('key, value')
+    .in('key', ['KAKAO_PF_ID', 'KAKAO_TEMPLATE_ATTENDANCE_ID', 'KAKAO_TEMPLATE_GRADE_ID']);
+  const map: Record<string, string> = {};
+  (data ?? []).forEach(row => { if (row.value) map[row.key] = row.value; });
+  return {
+    pfId:                 map['KAKAO_PF_ID']                   || process.env.KAKAO_PF_ID,
+    attendanceTemplateId: map['KAKAO_TEMPLATE_ATTENDANCE_ID']  || process.env.KAKAO_TEMPLATE_ATTENDANCE_ID,
+    gradeTemplateId:      map['KAKAO_TEMPLATE_GRADE_ID']       || process.env.KAKAO_TEMPLATE_GRADE_ID,
+  };
+}
 
 // 알림톡 템플릿 변수 타입
 interface AttendanceVars {
@@ -35,22 +55,23 @@ export async function POST(req: Request) {
   const apiKey    = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
   const sender    = process.env.SOLAPI_SENDER_NUMBER;
-  const pfId      = process.env.KAKAO_PF_ID;
-
-  const templateId =
-    payload.type === 'attendance'
-      ? process.env.KAKAO_TEMPLATE_ATTENDANCE_ID
-      : process.env.KAKAO_TEMPLATE_GRADE_ID;
 
   if (!apiKey || !apiSecret || !sender) {
     return NextResponse.json({ ok: false, error: 'SOLAPI 환경변수 누락' }, { status: 500 });
   }
 
+  const alimtalkCfg = await getAlimtalkConfig();
+  const pfId      = alimtalkCfg.pfId;
+  const templateId =
+    payload.type === 'attendance'
+      ? alimtalkCfg.attendanceTemplateId
+      : alimtalkCfg.gradeTemplateId;
+
   if (!pfId || !templateId) {
     return NextResponse.json({
       ok: false,
       error: 'ALIMTALK_NOT_CONFIGURED',
-      message: '알림톡 채널이 아직 설정되지 않았습니다. 카카오 채널 승인 후 이용 가능합니다.',
+      message: '알림톡 채널이 아직 설정되지 않았습니다. 슈퍼어드민 CON 관리에서 설정해주세요.',
     }, { status: 503 });
   }
 
