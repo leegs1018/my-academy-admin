@@ -43,10 +43,6 @@ export default function SiteSettingsPage() {
   const [logoMsg, setLogoMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const supabaseClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   useEffect(() => {
     const load = async () => {
@@ -77,29 +73,19 @@ export default function SiteSettingsPage() {
     setLogoUploading(true);
     setLogoMsg('');
 
-    const ext = file.name.split('.').pop();
-    const path = `favicon.${ext}`;
+    const form = new FormData();
+    form.append('file', file);
 
-    const { error: uploadError } = await supabaseClient.storage
-      .from('site-assets')
-      .upload(path, file, { upsert: true, contentType: file.type });
+    const res = await fetch('/api/superadmin/upload-logo', { method: 'POST', body: form });
+    const data = await res.json();
 
-    if (uploadError) {
-      setLogoMsg(`업로드 실패: ${uploadError.message}`);
+    if (!res.ok || data.error) {
+      setLogoMsg(`업로드 실패: ${data.error || '오류'}`);
       setLogoUploading(false);
       return;
     }
 
-    const { data: urlData } = supabaseClient.storage.from('site-assets').getPublicUrl(path);
-    const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-    await fetch('/api/superadmin/site-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: { site_logo_url: publicUrl } }),
-    });
-
-    setValues(prev => ({ ...prev, site_logo_url: publicUrl }));
+    setValues(prev => ({ ...prev, site_logo_url: data.url }));
     setLogoMsg('✅ 업로드 완료! 배포 후 반영됩니다.');
     setLogoUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
