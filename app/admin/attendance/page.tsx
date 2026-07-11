@@ -17,6 +17,10 @@ export default function AttendancePage() {
   const [noteInput, setNoteInput] = useState('');
   const [allNotes, setAllNotes] = useState<any[]>([]);
   const [userId, setUserId] = useState('');
+  const [academyName, setAcademyName] = useState('');
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [notificationMethod, setNotificationMethod] = useState<'sms' | 'alimtalk'>('sms');
+  const [notifyMethodSaving, setNotifyMethodSaving] = useState(false);
 
   useEffect(() => {
     const getUser = async () => {
@@ -31,8 +35,32 @@ export default function AttendancePage() {
       fetchClasses();
       fetchAllNotes();
       fetchAllStudents();
+      fetchAcademyConfig();
     }
   }, [userId]);
+
+  const fetchAcademyConfig = async () => {
+    const { data } = await supabase
+      .from('academy_config')
+      .select('academy_name, sms_enabled, notification_method')
+      .eq('user_id', userId)
+      .single();
+    if (data) {
+      setAcademyName(data.academy_name ?? '');
+      setSmsEnabled(data.sms_enabled ?? false);
+      setNotificationMethod((data.notification_method ?? 'sms') as 'sms' | 'alimtalk');
+    }
+  };
+
+  const handleNotificationMethodChange = async (method: 'sms' | 'alimtalk') => {
+    setNotifyMethodSaving(true);
+    setNotificationMethod(method);
+    await supabase
+      .from('academy_config')
+      .update({ notification_method: method })
+      .eq('user_id', userId);
+    setNotifyMethodSaving(false);
+  };
 
   useEffect(() => {
     if (userId) {
@@ -85,8 +113,11 @@ export default function AttendancePage() {
           to: student.parent_phone,
           studentName: student.name,
           status: status,
-          attendance_date: selectedDate, // 현재 선택된 날짜 (YYYY-MM-DD)
-          time: timeStr
+          attendance_date: selectedDate,
+          time: timeStr,
+          academyName,
+          academy_id: userId,
+          notification_method: notificationMethod,
         })
       });
       if (res.ok) console.log(`${status} 알림 전송 성공`);
@@ -173,9 +204,32 @@ export default function AttendancePage() {
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 pb-20 font-sans text-gray-900">
       <div className="flex justify-between items-center border-b-4 border-green-100 pb-6">
         <h1 className="text-3xl font-black text-green-700">✅ 출석 및 일정 관리</h1>
-        <div className="text-right">
-          <p className="text-sm text-gray-400 font-bold uppercase tracking-wider">Selected Date</p>
-          <p className="text-xl font-black text-green-600">{selectedDate}</p>
+        <div className="flex items-center gap-6">
+          {smsEnabled && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">알림 방법</span>
+              <div className="flex rounded-xl overflow-hidden border-2 border-gray-200 text-sm font-black">
+                <button
+                  onClick={() => handleNotificationMethodChange('sms')}
+                  disabled={notifyMethodSaving}
+                  className={`px-4 py-2 transition-all ${notificationMethod === 'sms' ? 'bg-green-600 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                >
+                  SMS
+                </button>
+                <button
+                  onClick={() => handleNotificationMethodChange('alimtalk')}
+                  disabled={notifyMethodSaving}
+                  className={`px-4 py-2 transition-all ${notificationMethod === 'alimtalk' ? 'bg-yellow-400 text-black' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                >
+                  알림톡
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="text-right">
+            <p className="text-sm text-gray-400 font-bold uppercase tracking-wider">Selected Date</p>
+            <p className="text-xl font-black text-green-600">{selectedDate}</p>
+          </div>
         </div>
       </div>
 

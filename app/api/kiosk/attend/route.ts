@@ -144,28 +144,57 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '출결 처리 중 오류가 발생했습니다.' }, { status: 500 });
   }
 
-  // 학부모 SMS 발송 + CON 차감
+  // 학원 알림 방법 조회
+  const { data: academyCfg } = await supabaseAdmin
+    .from('academy_config')
+    .select('notification_method')
+    .eq('user_id', academy_id)
+    .single();
+  const notificationMethod = academyCfg?.notification_method ?? 'sms';
+
+  // 학부모 알림 발송 + CON 차감
   let smsResult: { ok: boolean; error?: string } = { ok: true };
   if (student.parent_phone) {
     const smsMessage = `[${academy_name}] ${student.name} 학생이 ${today.slice(5, 7)}월 ${today.slice(8, 10)}일 수업에 ${action}하였습니다.`;
-    const msgType = Buffer.byteLength(smsMessage, 'utf8') > 90 ? 'lms' : 'sms';
-    const pricePerMsg = await getFeaturePrice(msgType);
 
-    // CON 잔액 확인 (부족해도 SMS는 발송하되 차감만 스킵)
-    const balance = await getConBalance(academy_id);
-    const canDeduct = balance >= pricePerMsg;
+    if (notificationMethod === 'alimtalk') {
+      // 알림톡 발송
+      try {
+        const alimRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/alimtalk/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'attendance',
+            to: student.parent_phone,
+            academyName: academy_name,
+            studentName: student.name,
+            date: `${today.slice(5, 7)}월 ${today.slice(8, 10)}일`,
+            status: action,
+          }),
+        });
+        const alimResult = await alimRes.json();
+        smsResult = { ok: alimResult.ok === true, error: alimResult.error };
+      } catch (e: any) {
+        smsResult = { ok: false, error: e.message };
+      }
+    } else {
+      // SMS 발송
+      const msgType = Buffer.byteLength(smsMessage, 'utf8') > 90 ? 'lms' : 'sms';
+      const pricePerMsg = await getFeaturePrice(msgType);
+      const balance = await getConBalance(academy_id);
+      const canDeduct = balance >= pricePerMsg;
 
-    smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
-    if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
+      smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
+      if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
 
-    // 발송 성공 + CON 충분 → 차감 (feature_key는 'kiosk'로 통일)
-    if (smsResult.ok && canDeduct && pricePerMsg > 0) {
-      await supabaseAdmin.rpc('deduct_con', {
-        p_academy_id: academy_id,
-        p_amount: pricePerMsg,
-        p_feature_key: 'kiosk',
-        p_description: `키오스크 ${msgType.toUpperCase()} 발송 (${student.name} ${action})`,
-      });
+      if (smsResult.ok && canDeduct && pricePerMsg > 0) {
+        await supabaseAdmin.rpc('deduct_con', {
+          p_academy_id: academy_id,
+          p_amount: pricePerMsg,
+          p_feature_key: 'kiosk',
+          p_description: `키오스크 ${msgType.toUpperCase()} 발송 (${student.name} ${action})`,
+        });
+      }
     }
 
     // 발송 이력 기록

@@ -86,6 +86,10 @@ export default function GradeInputPage() {
   const [showSaveGradeTemplate, setShowSaveGradeTemplate] = useState(false);
   const [newGradeTemplateName, setNewGradeTemplateName] = useState('');
 
+  // ── 발송 방법 ─────────────────────────────────────
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [sendMethod, setSendMethod] = useState<'sms' | 'alimtalk'>('alimtalk');
+
   // ── CON 단가 ──────────────────────────────────────
   const [smsPricePerUnit, setSmsPricePerUnit] = useState<number | null>(null);
   const [lmsPricePerUnit, setLmsPricePerUnit] = useState<number | null>(null);
@@ -98,8 +102,11 @@ export default function GradeInputPage() {
       const uid = session.user.id;
       setUserId(uid);
 
-      const { data: cfg } = await supabase.from('academy_config').select('academy_name').eq('user_id', uid).single();
+      const { data: cfg } = await supabase.from('academy_config').select('academy_name, sms_enabled').eq('user_id', uid).single();
       if (cfg?.academy_name) setAcademyName(cfg.academy_name);
+      const enabled = cfg?.sms_enabled ?? false;
+      setSmsEnabled(enabled);
+      setSendMethod(enabled ? 'sms' : 'alimtalk');
 
       const { data: logs } = await supabase.from('sms_logs').select('*').eq('academy_id', uid).order('created_at', { ascending: false });
       if (logs) setGradeLogs(logs);
@@ -513,24 +520,49 @@ export default function GradeInputPage() {
 
       for (const phone of phonesToSend) {
         try {
-          const res = await fetch('/api/sms/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: preview.message,
-              recipients: [{ student_id: preview.studentId, name: preview.studentName, phone }],
-              academy_id: userId,
-            }),
-          });
-          const result = await res.json();
-          if (result.results) {
-            allResults.push(...result.results.map((r: any) => ({
-              ...r,
-              message: preview.message,
-            })));
+          let ok = false;
+          let errMsg = '';
+
+          if (sendMethod === 'alimtalk') {
+            const res = await fetch('/api/alimtalk/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'grade',
+                to: phone,
+                academyName,
+                studentName: preview.studentName,
+                date: sendSelectedSession ? (() => {
+                  const parts = sendSelectedSession.split('-');
+                  return `${parseInt(parts[1])}월 ${parseInt(parts[2])}일`;
+                })() : '',
+                content: preview.message,
+              }),
+            });
+            const result = await res.json();
+            ok = result.ok === true;
+            errMsg = result.message || result.error || '';
+          } else {
+            const res = await fetch('/api/sms/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: preview.message,
+                recipients: [{ student_id: preview.studentId, name: preview.studentName, phone }],
+                academy_id: userId,
+              }),
+            });
+            const result = await res.json();
+            if (result.results) {
+              allResults.push(...result.results.map((r: any) => ({ ...r, message: preview.message })));
+            }
+            totalSuccess += result.success || 0;
+            totalFail += result.fail || 0;
+            continue;
           }
-          totalSuccess += result.success || 0;
-          totalFail += result.fail || 0;
+
+          allResults.push({ student_id: preview.studentId, name: preview.studentName, phone, status: ok ? 'success' : 'fail', error: ok ? undefined : errMsg, message: preview.message });
+          if (ok) totalSuccess++; else totalFail++;
         } catch {
           allResults.push({ student_id: preview.studentId, name: preview.studentName, phone, status: 'fail', error: '발송 오류', message: preview.message });
           totalFail++;
@@ -892,6 +924,29 @@ export default function GradeInputPage() {
                     </div>
                   </label>
                 ))}
+              </div>
+            </div>
+
+            {/* 발송 방법 */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-black text-gray-600 mb-3">발송 방법</h3>
+              <div className="space-y-2">
+                {smsEnabled && (
+                  <label className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${sendMethod === 'sms' ? 'border-indigo-400 bg-indigo-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                    <input type="radio" value="sms" checked={sendMethod === 'sms'} onChange={() => setSendMethod('sms')} className="accent-indigo-600" />
+                    <div>
+                      <p className="text-sm font-black text-gray-700">📱 SMS / LMS</p>
+                      <p className="text-[10px] text-gray-400">일반 문자 메시지로 발송</p>
+                    </div>
+                  </label>
+                )}
+                <label className={`flex items-center gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${sendMethod === 'alimtalk' ? 'border-yellow-400 bg-yellow-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                  <input type="radio" value="alimtalk" checked={sendMethod === 'alimtalk'} onChange={() => setSendMethod('alimtalk')} className="accent-yellow-500" />
+                  <div>
+                    <p className="text-sm font-black text-gray-700">💬 카카오 알림톡</p>
+                    <p className="text-[10px] text-gray-400">카카오톡 알림톡으로 발송</p>
+                  </div>
+                </label>
               </div>
             </div>
 
