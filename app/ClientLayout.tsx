@@ -11,7 +11,7 @@ type MenuItem = FlatMenuItem | GroupMenuItem;
 
 const menuItems: MenuItem[] = [
   { href: '/admin',              label: '홈 대시보드',     icon: '🏠' },
-  { href: '/admin/student',      label: '학생 등록 관리',  icon: '👤' },
+  { href: '/admin/student',      label: '학생 등록',       icon: '👤' },
   { href: '/admin/class',        label: '클래스 관리',     icon: '🏫' },
   { href: '/admin/student-list', label: '학생 명부',       icon: '📋' },
   { href: '/admin/grade-input',  label: '성적 관리',       icon: '✍️' },

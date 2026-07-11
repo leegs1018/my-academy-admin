@@ -208,152 +208,185 @@ export default function StudentPage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-8 pb-20">
-      <div className="flex justify-between items-end border-b-4 border-indigo-100 pb-2">
-        <h1 className="text-3xl font-black text-indigo-700">👤 학생 상세 등록</h1>
-        
-        {/* 💡 양식 다운로드와 업로드 버튼 영역 */}
-        <div className="flex gap-2">
-          <button 
-            onClick={downloadExcelTemplate}
-            className="px-4 py-2 rounded-xl font-black text-sm bg-white border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-50 transition-all shadow-md"
-          >
-            📋 양식 다운로드
-          </button>
+    <div className="p-6 max-w-2xl mx-auto space-y-6 pb-20">
 
-          <label className={`cursor-pointer px-4 py-2 rounded-xl font-black text-sm transition-all shadow-md ${isUploading ? 'bg-gray-400 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
-            {isUploading ? '업로드 중...' : '📥 엑셀 일괄 등록'}
+      {/* 헤더 */}
+      <div className="flex justify-between items-center border-b border-gray-200 pb-5">
+        <h1 className="text-2xl font-black text-gray-900">학생 등록</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={downloadExcelTemplate}
+            className="px-4 py-2 rounded-xl font-black text-sm bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            양식 다운로드
+          </button>
+          <label className={`cursor-pointer px-4 py-2 rounded-xl font-black text-sm transition-colors ${isUploading ? 'bg-gray-200 text-gray-400' : 'bg-gray-900 text-white hover:bg-gray-700'}`}>
+            {isUploading ? '업로드 중...' : '엑셀 일괄 등록'}
             <input type="file" accept=".csv" className="hidden" onChange={handleExcelUpload} disabled={isUploading} />
           </label>
         </div>
       </div>
 
-      {/* 입력 폼 영역 (기존과 동일) */}
-      <div className="bg-white rounded-2xl shadow-xl border p-8 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-bold text-gray-500 mb-2">학생 성함 *</label>
-            <input className="w-full border-2 p-3 rounded-lg text-lg font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="이름 입력" />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-500 mb-2">성별</label>
-            <div className="flex gap-4 p-3 border-2 rounded-lg bg-gray-50">
-              {['남', '여'].map(g => (
-                <label key={g} className="flex-1 flex items-center justify-center gap-2 cursor-pointer font-bold">
-                  <input type="radio" checked={formData.gender === g} onChange={() => setFormData({...formData, gender: g})} className="w-5 h-5 accent-indigo-600" /> {g}
-                </label>
-              ))}
+      {/* 입력 폼 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+
+        {/* 기본 정보 */}
+        <div>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">기본 정보</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">이름 *</label>
+              <input
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="홍길동" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">성별</label>
+              <div className="flex border border-gray-200 rounded-xl overflow-hidden h-[42px]">
+                {['남', '여'].map(g => (
+                  <button key={g} type="button"
+                    onClick={() => setFormData({...formData, gender: g})}
+                    className={`flex-1 text-sm font-black transition-colors ${formData.gender === g ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">생년월일</label>
+              <input type="date"
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-blue-50/20 p-5 rounded-2xl border border-blue-50">
-          <div>
-            <label className="block text-sm font-bold text-blue-600 mb-1">학생 생년월일 (선택)</label>
-            <input type="date" className="w-full border-2 p-3 rounded-lg font-medium" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-blue-600 mb-1">학원 입학일</label>
-            <input type="date" className="w-full border-2 p-3 rounded-lg font-medium" value={formData.admissionDate} onChange={e => setFormData({...formData, admissionDate: e.target.value})} />
-          </div>
-        </div>
-
-        <div className="p-5 border-2 border-indigo-50 rounded-2xl bg-indigo-50/10 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-bold text-indigo-600 mb-1">보호자 연락처</label>
-              <input className="w-full border-2 p-3 rounded-lg font-bold border-indigo-100 bg-white" value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="010-0000-0000" />
+        {/* 연락처 */}
+        <div>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">연락처</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500">보호자 연락처</label>
+                <input
+                  className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                  value={formData.parentPhone} onChange={e => setFormData({...formData, parentPhone: e.target.value})} placeholder="010-0000-0000" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500">보호자 관계</label>
+                <select
+                  className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                  value={formData.parentRelation} onChange={e => setFormData({...formData, parentRelation: e.target.value})}>
+                  <option value="어머님 (모)">어머님 (모)</option>
+                  <option value="아버님 (부)">아버님 (부)</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-sm font-bold text-gray-500">학생 번호</label>
-                <label className="flex items-center gap-1 text-xs font-bold text-indigo-500 cursor-pointer">
-                  <input type="checkbox" checked={formData.isPhoneSame} onChange={e => setFormData({...formData, isPhoneSame: e.target.checked})} className="rounded" /> [보호자 연락처와 동일]
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-gray-500">학생 연락처</label>
+                <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 cursor-pointer">
+                  <input type="checkbox" className="accent-gray-600 w-3.5 h-3.5"
+                    checked={formData.isPhoneSame} onChange={e => setFormData({...formData, isPhoneSame: e.target.checked})} />
+                  보호자와 동일
                 </label>
               </div>
-              <input className={`w-full border-2 p-3 rounded-lg ${formData.isPhoneSame ? 'bg-gray-100 text-gray-400' : 'bg-white font-bold border-indigo-100'}`} 
-                value={formData.studentPhone} onChange={e => !formData.isPhoneSame && setFormData({...formData, studentPhone: e.target.value})} placeholder="010-0000-0000" disabled={formData.isPhoneSame} />
+              <input
+                className={`w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold focus:outline-none focus:border-gray-400 text-sm transition-colors ${formData.isPhoneSame ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-800'}`}
+                value={formData.studentPhone} onChange={e => !formData.isPhoneSame && setFormData({...formData, studentPhone: e.target.value})}
+                placeholder="010-0000-0000" disabled={formData.isPhoneSame} />
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-500 mb-1">보호자 구분</label>
-            <select className="w-full border-2 p-3 rounded-lg font-bold text-gray-700" value={formData.parentRelation} onChange={e => setFormData({...formData, parentRelation: e.target.value})}>
-              <option value="어머님 (모)">어머님 (모)</option>
-              <option value="아버님 (부)">아버님 (부)</option>
-              <option value="기타">기타</option>
-            </select>
+        </div>
+
+        {/* 학교 정보 */}
+        <div>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">학교 정보</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">학교 구분</label>
+              <select
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.schoolLevel} onChange={e => {
+                  const level = e.target.value;
+                  setFormData({...formData, schoolLevel: level,
+                    gradeLevel: (level === 'N수생' || level === '기타') ? '' : (level === '유치' ? '4세' : '1학년')});
+                }}>
+                {['유치', '초등', '중등', '고등', 'N수생', '기타'].map(level => <option key={level} value={level}>{level}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">학년</label>
+              {['N수생', '기타'].includes(formData.schoolLevel) ? (
+                <input
+                  className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                  value={formData.gradeLevel} onChange={e => setFormData({...formData, gradeLevel: e.target.value})}
+                  placeholder="상세 입력" />
+              ) : (
+                <select
+                  className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                  value={formData.gradeLevel} onChange={e => setFormData({...formData, gradeLevel: e.target.value})}>
+                  {getGradeOptions().map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">학교명</label>
+              <input
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.schoolName} onChange={e => setFormData({...formData, schoolName: e.target.value})} placeholder="예: 대전초" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">기준 연도</label>
+              <select
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.gradeYear} onChange={e => setFormData({...formData, gradeYear: e.target.value})}>
+                {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년도</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="p-5 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 space-y-6">
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-             <div>
-               <label className="text-xs font-black text-gray-400 uppercase">학년 기준연도</label>
-               <select className="w-full border p-2 rounded-lg font-bold shadow-sm" value={formData.gradeYear} onChange={e => setFormData({...formData, gradeYear: e.target.value})}>
-                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년도</option>)}
-               </select>
-             </div>
-             <div>
-               <label className="text-xs font-black text-gray-400 uppercase">구분 (학교급)</label>
-               <select className="w-full border p-2 rounded-lg font-bold shadow-sm" value={formData.schoolLevel} onChange={e => {
-                 const level = e.target.value;
-                 setFormData({
-                   ...formData, 
-                   schoolLevel: level, 
-                   gradeLevel: (level === 'N수생' || level === '기타') ? '' : (level === '유치' ? '4세' : '1학년')
-                 });
-               }}>
-                 {['유치', '초등', '중등', '고등', 'N수생', '기타'].map(level => <option key={level} value={level}>{level}</option>)}
-               </select>
-             </div>
-             <div className="flex flex-col">
-               <label className="text-xs font-black text-gray-400 uppercase">학년 / 상세구분</label>
-               {['N수생', '기타'].includes(formData.schoolLevel) ? (
-                 <input 
-                   className="w-full border-2 border-orange-200 p-2 rounded-lg font-bold bg-orange-50 focus:border-orange-400 outline-none shadow-sm"
-                   value={formData.gradeLevel}
-                   onChange={e => setFormData({...formData, gradeLevel: e.target.value})}
-                   placeholder={`${formData.schoolLevel} 상세 입력`}
-                 />
-               ) : (
-                 <select className="w-full border-2 p-2 rounded-lg font-bold shadow-sm" value={formData.gradeLevel} onChange={e => setFormData({...formData, gradeLevel: e.target.value})}>
-                   {getGradeOptions().map(g => <option key={g} value={g}>{g}</option>)}
-                 </select>
-               )}
-             </div>
-           </div>
-
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div>
-               <label className="text-xs font-black text-gray-400 uppercase">학교명</label>
-               <input className="w-full border-2 p-2 rounded-lg font-medium bg-white shadow-sm" value={formData.schoolName} onChange={e => setFormData({...formData, schoolName: e.target.value})} placeholder="학교 이름 (예: 대전초)" />
-             </div>
-             <div>
-               <label className="text-xs font-black text-indigo-500 uppercase">수강 클래스 선택</label>
-               <select 
-                 className="w-full border-2 border-indigo-200 p-3 rounded-lg font-bold bg-white focus:border-indigo-500 outline-none shadow-sm text-indigo-900" 
-                 value={formData.className} 
-                 onChange={e => setFormData({...formData, className: e.target.value})}
-               >
-                 <option value="">클래스를 선택하세요</option>
-                 {classList.map(c => (
-                   <option key={c.id} value={c.class_name}>
-                     [{c.target_level}] {c.class_name}
-                   </option>
-                 ))}
-               </select>
-             </div>
-           </div>
+        {/* 수강 정보 */}
+        <div>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">수강 정보</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">입학일</label>
+              <input type="date"
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.admissionDate} onChange={e => setFormData({...formData, admissionDate: e.target.value})} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">배정 클래스</label>
+              <select
+                className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-bold text-gray-800 bg-white focus:outline-none focus:border-gray-400 text-sm"
+                value={formData.className} onChange={e => setFormData({...formData, className: e.target.value})}>
+                <option value="">클래스 선택</option>
+                {classList.map(c => (
+                  <option key={c.id} value={c.class_name}>[{c.target_level}] {c.class_name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-sm font-black text-gray-600">📋 상담 메모 및 특이사항</label>
-          <textarea className="w-full border-2 p-4 rounded-xl min-h-[120px] bg-yellow-50/20 shadow-inner focus:border-yellow-400 outline-none" value={formData.counselingMemo} onChange={e => setFormData({...formData, counselingMemo: e.target.value})} placeholder="학생 성향 등 자유롭게 적어주세요." />
+        {/* 상담 메모 */}
+        <div>
+          <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">상담 메모</p>
+          <textarea
+            className="w-full border border-gray-200 px-3 py-2.5 rounded-xl font-medium text-gray-800 focus:outline-none focus:border-gray-400 text-sm min-h-[100px] resize-none placeholder:text-gray-300"
+            value={formData.counselingMemo} onChange={e => setFormData({...formData, counselingMemo: e.target.value})}
+            placeholder="학생 성향, 특이사항 등 자유롭게 입력하세요." />
         </div>
 
-        <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-2xl shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all">
-          학생 정보 저장 ✅
+        <button onClick={handleSave} className="w-full bg-gray-900 hover:bg-gray-700 text-white py-3 rounded-xl font-black text-sm transition-colors">
+          저장
         </button>
+
       </div>
     </div>
   );
