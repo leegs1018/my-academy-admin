@@ -33,18 +33,18 @@ export default function NoticePage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8 pb-20">
-      <div className="border-b-4 border-indigo-100 pb-6">
-        <h1 className="text-3xl font-black text-indigo-600">📢 공지사항</h1>
+      <div className="border-b border-gray-200 pb-5">
+        <h1 className="text-2xl font-black text-gray-900">공지사항</h1>
         <p className="text-gray-400 font-bold mt-1">관리자로부터 전달되는 공지사항을 확인하세요.</p>
       </div>
 
       <div className="space-y-4">
         {notices.length > 0 ? notices.map((n) => (
-          <div key={n.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all ${n.is_important ? 'border-indigo-400' : 'border-gray-50 hover:border-indigo-100'}`}>
+          <div key={n.id} className={`bg-white p-6 rounded-xl border transition-all ${n.is_important ? 'border-gray-900' : 'border-gray-200 hover:border-gray-300'}`}>
             <div className="flex justify-between items-start mb-3">
               <div className="flex items-center gap-2">
                 {n.is_important && (
-                  <span className="bg-indigo-100 text-indigo-600 px-2 py-1 rounded-lg text-[10px] font-black uppercase">중요 공지</span>
+                  <span className="bg-gray-900 text-white px-2 py-1 rounded-lg text-[10px] font-black">중요 공지</span>
                 )}
                 <h3 className="text-xl font-black text-gray-800">{n.title}</h3>
               </div>
