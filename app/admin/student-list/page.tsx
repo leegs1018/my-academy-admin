@@ -194,107 +194,93 @@ export default function StudentListPage() {
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 pb-20 font-sans bg-gray-50/30 min-h-screen text-gray-800">
       
       {/* 헤더 영역 */}
-      <div className="flex justify-between items-center border-b-4 border-indigo-100 pb-6">
-        <h1 className="text-3xl font-black text-gray-900 tracking-tight">📋 학생 명부</h1>
-        <div className="flex gap-3">
-          <button 
-            onClick={() => router.push('/admin/student')} 
-            className="bg-blue-600 text-white px-6 py-2.5 rounded-2xl hover:bg-blue-700 font-black shadow-lg transition-all active:scale-95"
+      <div className="flex justify-between items-center border-b border-gray-200 pb-5">
+        <h1 className="text-2xl font-black text-gray-900 tracking-tight">학생 명부</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => router.push('/admin/student')}
+            className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-xl hover:bg-gray-700 font-black text-sm transition-colors"
           >
-            학생 등록 ➕
+            학생 등록
           </button>
-          <button 
-            onClick={downloadExcel} 
-            className="bg-emerald-50 text-emerald-600 px-6 py-2.5 rounded-2xl hover:bg-emerald-600 hover:text-white font-black shadow-md transition-all border border-emerald-100 flex items-center gap-2"
+          <button
+            onClick={downloadExcel}
+            className="flex items-center gap-1.5 bg-white text-gray-700 px-4 py-2 rounded-xl hover:bg-gray-50 font-black text-sm transition-colors border border-gray-200"
           >
-            엑셀 저장 📥
+            엑셀 저장
           </button>
         </div>
       </div>
 
-     {/* 필터 영역 - 순서: 이름/연락처 -> 모든상태 -> 모든클래스 -> 모든학교 -> 학교레벨 -> 학년 -> 초기화 */}
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 bg-white p-5 rounded-3xl shadow-sm border border-gray-100 font-bold text-sm">
-  
-  {/* 1. 이름/연락처 검색 */}
-  <input 
-    className="border-2 p-3 rounded-2xl focus:border-indigo-500 outline-none bg-gray-50/50" 
-    placeholder="이름/연락처 검색..." 
-    value={searchTerm} 
-    onChange={(e) => setSearchTerm(e.target.value)} 
-  />
-  
-  {/* 2. 모든 상태 */}
-  <select 
-    className="border-2 p-3 rounded-2xl bg-indigo-50/50 font-black text-indigo-600 outline-none" 
-    value={filterStatus} 
-    onChange={(e) => setFilterStatus(e.target.value)}
-  >
-    <option value="">✅ 모든 상태</option>
-    <option value="재원">재원</option>
-    <option value="휴원">휴원</option>
-    <option value="퇴원">퇴원</option>
-  </select>
-
-  {/* 3. 모든 클래스 */}
-  <select 
-    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none" 
-    value={filterClass} 
-    onChange={(e) => setFilterClass(e.target.value)}
-  >
-    <option value="">📖 모든 클래스</option>
-    {classList.map((c, i) => <option key={i} value={c.class_name}>{c.class_name}</option>)}
-  </select>
-
-  {/* 4. 모든 학교 */}
-  <select 
-    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none" 
-    value={filterSchool} 
-    onChange={(e) => setFilterSchool(e.target.value)}
-  >
-    <option value="">🏫 모든 학교</option>
-    {schoolList.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
-  </select>
-
-  {/* 5. 학교 레벨 */}
-  <select 
-    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none text-blue-600 font-black" 
-    value={filterSchoolLevel} 
-    onChange={(e) => { setFilterSchoolLevel(e.target.value); setFilterGradeLevel(''); }}
-  >
-    <option value="">🎓 학교레벨 전체</option>
-    {existingSchoolLevels.map(sl => <option key={sl} value={sl as string}>{sl as string}</option>)}
-  </select>
-
-  {/* 6. 학년 */}
-  <select 
-    className="border-2 p-3 rounded-2xl bg-gray-50/50 outline-none text-blue-600 font-black" 
-    value={filterGradeLevel} 
-    onChange={(e) => setFilterGradeLevel(e.target.value)}
-  >
-    <option value="">📅 학년 전체</option>
-    {filterSchoolLevel && getGradeOptions(filterSchoolLevel).map(gl => <option key={gl} value={gl}>{gl}</option>)}
-  </select>
-
-  {/* 7. 초기화 버튼 */}
-  <button 
-    onClick={() => {
-      setSearchTerm(''); 
-      setFilterStatus(''); 
-      setFilterClass(''); 
-      setFilterSchool(''); 
-      setFilterSchoolLevel(''); 
-      setFilterGradeLevel('');
-    }} 
-    className="bg-gray-800 text-white py-3 rounded-2xl hover:bg-black transition-all font-black"
-  >
-    초기화
-  </button>
-</div>
+      {/* 필터 영역 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2 bg-white p-4 rounded-xl border border-gray-200 font-bold text-sm">
+        <input
+          className="border border-gray-200 px-3 py-2.5 rounded-xl focus:outline-none focus:border-gray-400 text-gray-700 bg-white placeholder:text-gray-300 font-medium"
+          placeholder="이름 / 연락처 검색"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        <select
+          className="border border-gray-200 px-3 py-2.5 rounded-xl bg-white text-gray-700 focus:outline-none focus:border-gray-400"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+        >
+          <option value="">모든 상태</option>
+          <option value="재원">재원</option>
+          <option value="휴원">휴원</option>
+          <option value="퇴원">퇴원</option>
+        </select>
+        <select
+          className="border border-gray-200 px-3 py-2.5 rounded-xl bg-white text-gray-700 focus:outline-none focus:border-gray-400"
+          value={filterClass}
+          onChange={(e) => setFilterClass(e.target.value)}
+        >
+          <option value="">모든 클래스</option>
+          {classList.map((c, i) => <option key={i} value={c.class_name}>{c.class_name}</option>)}
+        </select>
+        <select
+          className="border border-gray-200 px-3 py-2.5 rounded-xl bg-white text-gray-700 focus:outline-none focus:border-gray-400"
+          value={filterSchool}
+          onChange={(e) => setFilterSchool(e.target.value)}
+        >
+          <option value="">모든 학교</option>
+          {schoolList.map((s, i) => <option key={i} value={s as string}>{s as string}</option>)}
+        </select>
+        <select
+          className="border border-gray-200 px-3 py-2.5 rounded-xl bg-white text-gray-700 focus:outline-none focus:border-gray-400"
+          value={filterSchoolLevel}
+          onChange={(e) => { setFilterSchoolLevel(e.target.value); setFilterGradeLevel(''); }}
+        >
+          <option value="">학교 구분 전체</option>
+          {existingSchoolLevels.map(sl => <option key={sl} value={sl as string}>{sl as string}</option>)}
+        </select>
+        <select
+          className="border border-gray-200 px-3 py-2.5 rounded-xl bg-white text-gray-700 focus:outline-none focus:border-gray-400"
+          value={filterGradeLevel}
+          onChange={(e) => setFilterGradeLevel(e.target.value)}
+        >
+          <option value="">학년 전체</option>
+          {filterSchoolLevel && getGradeOptions(filterSchoolLevel).map(gl => <option key={gl} value={gl}>{gl}</option>)}
+        </select>
+        <button
+          onClick={() => {
+            setSearchTerm('');
+            setFilterStatus('');
+            setFilterClass('');
+            setFilterSchool('');
+            setFilterSchoolLevel('');
+            setFilterGradeLevel('');
+          }}
+          className="border border-gray-200 px-3 py-2.5 rounded-xl bg-white text-gray-500 hover:bg-gray-50 font-black text-sm transition-colors"
+        >
+          초기화
+        </button>
+      </div>
 
       {/* 명단 테이블 */}
-      <div className="bg-white rounded-[2rem] shadow-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-left border-collapse min-w-[1200px]">
-          <thead className="bg-gray-50 text-indigo-900 border-b-2 border-indigo-50 font-black text-xs text-center uppercase tracking-wider">
+          <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 font-black text-xs text-center uppercase tracking-wider">
             <tr>
               <th className="p-5 text-left">이름</th>
               <th className="p-5">상태</th>
@@ -308,7 +294,7 @@ export default function StudentListPage() {
           </thead>
           <tbody className="divide-y divide-gray-50 text-sm text-center">
             {filteredStudents.map((s) => (
-              <tr key={s.id} className="hover:bg-indigo-50/30 transition-all font-medium">
+              <tr key={s.id} className="hover:bg-gray-50 transition-all font-medium">
                 <td className="p-5 text-left">
                   <span onClick={() => openEditModal(s)} className="font-black text-gray-900 text-lg cursor-pointer hover:underline underline-offset-4 decoration-2">{s.name}</span>
                 </td>
@@ -323,7 +309,7 @@ export default function StudentListPage() {
                 </td>
                 <td className="p-5 text-left">
                   <div className="font-bold text-gray-700">{s.school_name || '-'}</div>
-                  <div className="text-[11px] text-indigo-400 font-bold">{s.school_level} {s.grade_level}</div>
+                  <div className="text-[11px] text-gray-400 font-bold">{s.school_level} {s.grade_level}</div>
                 </td>
                 <td className="p-5 text-xl">{renderDucks(s.caution_level || 0)}</td>
                 <td className="p-5 font-mono font-bold text-gray-600">{s.student_phone || '-'}</td>
