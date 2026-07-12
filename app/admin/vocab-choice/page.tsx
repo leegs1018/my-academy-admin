@@ -1154,19 +1154,27 @@ let _pdfAcademy = '';
 
 const PDF_BASE: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, width: '800px',
-  background: 'white', padding: '40px 48px', boxSizing: 'border-box',
+  background: 'white', padding: '20px 48px 40px', boxSizing: 'border-box',
   fontFamily: 'Arial, Helvetica, sans-serif', zIndex: -9999, pointerEvents: 'none',
 };
 const PDF_H2: React.CSSProperties = { fontSize: 14, fontWeight: 900, margin: '0 0 16px', borderBottom: '2px solid #333', paddingBottom: 8 };
 const PDF_P: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'break-word' };
+
+function PdfPageHeader({ children, mb }: { children: React.ReactNode; mb?: number }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #333', paddingBottom: 8, marginBottom: mb ?? 16 }}>
+      <span style={{ fontSize: 14, fontWeight: 900 }}>{children}</span>
+      {_pdfAcademy && <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>{_pdfAcademy}</span>}
+    </div>
+  );
+}
 
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const chunks = parseVocabPassage(result.passage as string, result.answer_key as string);
   const choiceBase: React.CSSProperties = { borderRadius: 4, padding: '2px 6px', margin: '0 2px', fontWeight: 900, fontSize: 14 };
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}</h2>
+      <PdfPageHeader>{title}</PdfPageHeader>
       <p style={PDF_P}>
         {chunks.map((c, i) => {
           if (c.type === 'text') return <span key={i}>{c.text}</span>;
@@ -1207,9 +1215,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
     const answerMap = buildVocabFillAnswerMap(answerKey);
     return (
       <div id={id} style={PDF_BASE}>
-        {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-        <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+          <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {sentences.map((s, si) => {
             const rawParts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
@@ -1262,8 +1268,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
   const parts = passage.split(/_\((\d+)\)_/);
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}</h2>
+      <PdfPageHeader>{title}</PdfPageHeader>
       <div style={{ background: '#EEF2FF', borderRadius: 6, padding: '8px 12px', marginBottom: 14, fontSize: 12, lineHeight: 1.8 }}>
         <strong>보기:</strong> {(wordBank || []).join('  /  ')}
       </div>
@@ -1312,8 +1317,7 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
   if (last < passage.length) parts.push(<span key={last}>{passage.slice(last)}</span>);
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}</h2>
+      <PdfPageHeader>{title}</PdfPageHeader>
       <p style={PDF_P}>{parts}</p>
       {isAnswer && (
         <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
@@ -1337,8 +1341,7 @@ function PdfGrammarCorrectAdv({ result, isAnswer, title, id }: { result: Workboo
   }
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(sentences || []).map((s, i) => (
           <div key={i} style={{ display: 'flex', gap: 6 }}>
@@ -1366,8 +1369,7 @@ function PdfTranslation({ result, isAnswer, title, id }: { result: WorkbookResul
   const sentences = result.sentences as Array<{num:number;en:string;ko:string}>;
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
@@ -1388,8 +1390,7 @@ function PdfWordOrder({ result, isAnswer, title, id, showKorean }: { result: Wor
   const sentences = result.sentences as Array<{num:number;ko:string;scrambled:string[];answer:string}>;
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
@@ -1415,8 +1416,7 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
   const sentences = result.sentences as Array<{num:number;ko:string;hint_start:string;hint_end:string;answer:string}>;
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
@@ -1457,8 +1457,7 @@ function PdfPassageTranslation({ result, id, title }: { result: WorkbookResult; 
 
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title || '지문 해석지'}</h2>
+      <PdfPageHeader>{title || '지문 해석지'}</PdfPageHeader>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
         <tbody>
@@ -1520,8 +1519,7 @@ function PdfParagraphOrder({ result, isAnswer, title, id }: { result: WorkbookRe
   const data = result as {fixed_paragraph:string;shuffled_paragraphs:Array<{label:string;text:string}>;answer_key:string};
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ background: '#fff', border: '2px solid #0F172A', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, lineHeight: 1.7 }}>
         <strong>제시 단락</strong><br />{data.fixed_paragraph}
       </div>
@@ -1543,8 +1541,7 @@ function PdfSentenceInsertion({ result, isAnswer, title, id }: { result: Workboo
   const data = result as {insert_sentence:string;passage:string;answer_key:string};
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ background: '#F5F3FF', border: '2px solid #A78BFA', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontStyle: 'italic', lineHeight: 1.7 }}>
         {data.insert_sentence}
       </div>
@@ -1564,11 +1561,10 @@ function PdfSuneungVocabWrong({ result, isAnswer, title, id, questionText }: { r
   const parts = passage.split(/([①②③④⑤][a-zA-Z''\-]+)/g);
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
         {questionText ?? 'Q. 다음 글의 밑줄 친 부분 중, 문맥상 어휘의 쓰임이 적절하지 않은 것을 고르시오.'}
       </p>
-      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <PdfPageHeader mb={10}>{title}</PdfPageHeader>
       <p style={PDF_P}>
         {parts.map((part, i) => {
           const m = part.match(/^([①②③④⑤])(.+)$/);
@@ -1607,11 +1603,10 @@ function PdfSuneungVocabABC({ result, isAnswer, title, id, questionText }: { res
   });
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
         {questionText ?? 'Q. (A), (B), (C)의 각 [ ] 안에서 문맥에 맞는 어휘로 가장 적절한 것을 고르시오.'}
       </p>
-      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <PdfPageHeader mb={10}>{title}</PdfPageHeader>
       <p style={PDF_P}>{renderPassage()}</p>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16, fontSize: 12 }}>
         <thead>
@@ -1660,8 +1655,7 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
   const isPhr = (role: string) => ['관계사절', '분사구', 'to부정사구', '전치사구'].includes(role);
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title || '지문 구문분석'}</h2>
+      <PdfPageHeader>{title || '지문 구문분석'}</PdfPageHeader>
       {/* 헤더 */}
       <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #CBD5E1', marginBottom: 6, fontSize: 10, fontWeight: 900 }}>
         <div style={{ width: '70%', background: '#1E293B', color: '#fff', padding: '5px 12px' }}>영어 구문분석</div>
@@ -1707,8 +1701,7 @@ function PdfSummarySentence({ result, isAnswer, title, id }: { result: WorkbookR
   const parts = summary.split(/(\(\d+\)_+)/g);
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       {originalText && !isAnswer && (
         <div style={{ marginBottom: 14, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12, lineHeight: 1.8 }}>
           {originalText}
@@ -1744,8 +1737,7 @@ function PdfSummarySentence({ result, isAnswer, title, id }: { result: WorkbookR
 function PdfSimple({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <p style={PDF_P}>{result.passage as string}</p>
       {isAnswer && (
         <div style={{ marginTop: 14, padding: '10px 14px', background: '#FFF9C4', borderRadius: 6, fontSize: 13, fontWeight: 700 }}>
@@ -1781,11 +1773,10 @@ function PdfComboGrammarInsert({ result, isAnswer, title, id }: { result: Workbo
   const choiceLabels = ['A','B','C','D','E'];
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
         Q. 다음 글을 읽고 물음에 답하시오.
       </p>
-      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <PdfPageHeader mb={10}>{title}</PdfPageHeader>
       <p style={PDF_P}>{renderPassage()}</p>
       <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
         <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
@@ -1828,11 +1819,10 @@ function PdfComboGrammarOrder({ result, isAnswer, title, id }: { result: Workboo
   const grammarErrors = (result.grammar_errors as Array<{label:string;wrong:string;correct:string}>) || [];
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
         Q. 다음 글을 읽고 물음에 답하시오.
       </p>
-      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <PdfPageHeader mb={10}>{title}</PdfPageHeader>
       {paragraphs.map((p, i) => {
         const sortedErrors = [...grammarErrors].sort((a, b) => b.wrong.length - a.wrong.length);
         const escaped = sortedErrors.map(e => e.wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -1917,11 +1907,10 @@ function PdfComboVocabFill({ result, isAnswer, title, id }: { result: WorkbookRe
   });
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
         Q. 다음 글을 읽고 물음에 답하시오.
       </p>
-      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <PdfPageHeader mb={10}>{title}</PdfPageHeader>
       <p style={PDF_P}>{renderPassage()}</p>
       <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
         <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
@@ -1988,11 +1977,10 @@ function PdfComboVocabGrammar({ result, isAnswer, title, id }: { result: Workboo
   });
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
         Q. 다음 글을 읽고 물음에 답하시오.
       </p>
-      <h2 style={{ ...PDF_H2, marginBottom: 10 }}>{title}</h2>
+      <PdfPageHeader mb={10}>{title}</PdfPageHeader>
       <p style={PDF_P}>{renderPassage()}</p>
       <div style={{ marginTop: 18, padding: '10px 14px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
         <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 900, color: '#374151' }}>
@@ -2028,8 +2016,7 @@ function PdfCombo({ result, type, isAnswer, title, id }: { result: WorkbookResul
   const [t1, t2] = ['grammar_choice', 'sentence_insertion'];
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title} — {TYPE_LABELS[type]}{isAnswer ? ' (정답)' : ''}</h2>
+      <PdfPageHeader>{title} — {TYPE_LABELS[type]}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ marginBottom: 20 }}>
         <p style={{ fontWeight: 900, fontSize: 12, color: '#4F46E5', marginBottom: 8 }}>Section 1 — {TYPE_LABELS[t1 as WorkbookType]}</p>
         <PdfResultContent result={s1} type={t1 as WorkbookType} isAnswer={isAnswer} title="" id="" embedded />
@@ -2049,7 +2036,7 @@ function PdfResultContent({ result, type, isAnswer, title, id, embedded }: {
   const wrap = (content: React.ReactNode) =>
     embedded ? <div style={style}>{content}</div> : <div id={id} style={style}>{content}</div>;
 
-  const h2 = !embedded ? <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2> : null;
+  const h2 = !embedded ? <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader> : null;
 
   switch (type) {
     case 'vocab_choice':
@@ -2177,8 +2164,7 @@ function PdfSimpleAnswerAll({ allResults, passageIndex, title, id }: {
   const items = allResults.filter(({ results }) => passageIndex < results.length && !results[passageIndex].error);
   return (
     <div id={id} style={PDF_BASE}>
-      {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
-      <h2 style={PDF_H2}>{title} — 심플 답지</h2>
+      <PdfPageHeader>{title} — 심플 답지</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {items.map(({ type, results }, i) => {
           const result = results[passageIndex];
