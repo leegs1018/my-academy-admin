@@ -1668,24 +1668,34 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
     <div id={id} style={PDF_BASE}>
       {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
       <h2 style={PDF_H2}>{title || '지문 구문분석'}</h2>
+      {/* 헤더 */}
+      <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #CBD5E1', marginBottom: 6, fontSize: 10, fontWeight: 900 }}>
+        <div style={{ width: '70%', background: '#1E293B', color: '#fff', padding: '5px 12px' }}>영어 구문분석</div>
+        <div style={{ width: '30%', background: '#334155', color: '#fff', padding: '5px 12px', borderLeft: '1px solid #4B5563' }}>한국어 번역</div>
+      </div>
       {sentences.map((sent, si) => (
-        <div key={si} style={{ marginBottom: 14, borderBottom: '1px solid #E5E7EB', paddingBottom: 10 }}>
-          <p style={{ margin: '0 0 6px', fontSize: 11, color: '#374151', fontWeight: 700 }}>
-            {sent.num}. {sent.ko}
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 4px', alignItems: 'flex-end' }}>
-            {sent.chunks.map((chunk, ci) => {
-              const color = getColor(chunk.role);
-              const phrase = isPhr(chunk.role);
-              return (
-                <div key={ci} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, paddingBottom: 2, borderBottom: `2px solid ${color}`, color, fontStyle: phrase ? 'italic' : 'normal' }}>
-                    {phrase ? `(${chunk.text})` : chunk.text}
-                  </span>
-                  <span style={{ fontSize: 9, fontWeight: 900, color, marginTop: 1 }}>{chunk.role}</span>
-                </div>
-              );
-            })}
+        <div key={si} style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 6, marginBottom: 5, overflow: 'hidden' }}>
+          {/* 왼쪽 70%: 구문분석 */}
+          <div style={{ width: '70%', padding: '10px 12px', background: '#fff', borderRight: '1px solid #F1F5F9' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 6px', alignItems: 'flex-end' }}>
+              {sent.chunks.map((chunk, ci) => {
+                const color = getColor(chunk.role);
+                const phrase = isPhr(chunk.role);
+                return (
+                  <div key={ci} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, paddingBottom: 2, borderBottom: `2px solid ${color}`, color, fontStyle: phrase ? 'italic' : 'normal' }}>
+                      {phrase ? `(${chunk.text})` : chunk.text}
+                    </span>
+                    <span style={{ fontSize: 8, fontWeight: 900, color, marginTop: 1 }}>{chunk.role}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* 오른쪽 30%: 한국어 번역 */}
+          <div style={{ width: '30%', padding: '8px 10px', background: '#F8FAFC', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+            <span style={{ fontSize: 9, fontWeight: 900, color: '#9CA3AF', marginTop: 2, flexShrink: 0 }}>{sent.num}.</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#4B5563', lineHeight: 1.6 }}>{sent.ko}</span>
           </div>
         </div>
       ))}
