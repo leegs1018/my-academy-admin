@@ -165,15 +165,17 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     case 'translation':
       return header('아래 영어 지문으로 해석 연습 문제를 생성하세요.') +
 `생성 규칙:
-1. 지문을 문장 단위로 분리합니다 (10~15문장).
-2. 각 문장에 번호를 붙입니다.
-3. 영어 원문을 절대 바꾸지 말고, 자연스러운 한국어 해석을 제공합니다.
+1. 반드시 마침표(.)가 있는 위치에서만 문장을 나눕니다. 쉼표(,), 세미콜론(;), 콜론(:)은 문장 분리 기준이 아닙니다.
+2. 각 문장은 반드시 완전한 문장(대문자 시작, 마침표로 끝)이어야 합니다.
+3. 중간에 쉼표로 연결된 절들은 하나의 문장으로 묶습니다.
+4. 지문 전체에서 10~15개 문장을 선택합니다.
+5. 각 문장에 번호를 붙이고, 영어 원문을 절대 변형하지 않으며 자연스러운 한국어 해석을 제공합니다.
 
 출력 형식 (순수 JSON만):
 {
   "sentences": [
-    { "num": 1, "en": "원문 영어 문장.", "ko": "자연스러운 한국어 해석." },
-    ...
+    { "num": 1, "en": "Once upon a time, there was a girl who loved to sing.", "ko": "옛날 옛날에, 노래하기를 좋아하는 소녀가 있었다." },
+    { "num": 2, "en": "She would sing every day, filling the room with beautiful melodies.", "ko": "그녀는 매일 노래를 불러 방을 아름다운 선율로 채웠다." }
   ]
 }`;
 
@@ -426,7 +428,26 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 }`;
 
     // ── 1지문 2유형: 어휘+문장완성 ─────────────────────────────────────────
-    case 'combo_vocab_fill':
+    case 'combo_vocab_fill': {
+      const diffLevel = difficulty;
+      const isB1 = diffLevel === 'b1';
+      const isB2 = diffLevel === 'b2';
+      const isHigher = diffLevel === 'c1' || diffLevel === 'c2';
+      const q2Instruction = isB1
+        ? `문제 2 (단어배열): 빈칸 (가),(나)에 주어진 단어를 올바른 순서로 배열하여 영작하시오.
+- 각 긴 빈칸마다 정답 문장의 모든 단어를 섞어서 words 배열로 제공 (필요시 어형 변형 가능)
+- 반드시 "ko" 필드에 각 빈칸에 들어갈 문장의 한국어 번역 포함
+- 조건 문구: "주어진 단어를 모두 사용하여 다음 우리말과 같은 뜻이 되도록 배열하시오."`
+        : isB2
+        ? `문제 2 (단어일부제공): 빈칸 (가),(나)에 들어갈 말을 보기 단어로 완성하시오.
+- 각 긴 빈칸마다 정답 문장 단어의 60~70%만 words로 제공 (나머지는 학생이 스스로 채움)
+- ko 필드 없음
+- 조건 문구: "보기의 단어를 활용하여 빈칸을 완성하시오. (필요시 단어 추가 및 어형 변형 가능)"`
+        : `문제 2 (어형변화): 빈칸 (가),(나)에 들어갈 말을 보기 단어에서 어형을 변화시켜 완성하시오.
+- 각 긴 빈칸마다 정답 문장 단어의 50~60%를 기본형/틀린 형태로 words에 제공 (어형 변화 필요)
+- ko 필드 없음
+- 조건 문구: "보기의 단어를 필요에 따라 어형을 변화시켜 빈칸을 완성하시오."`;
+
       return header('아래 영어 지문으로 "어휘 빈칸 + 문장 완성" 1지문 2문항 문제를 생성하세요.') +
 `지문 형식 (두 종류 빈칸을 지문에 혼합 삽입):
 - 짧은 빈칸 4개: (A)[____], (B)[____], (C)[____], (D)[____] 형식 — 단어 1개
@@ -438,10 +459,7 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 - 4개는 문맥에 적절(각 빈칸의 정답 단어), 1개는 부적절한 단어(디스트랙터)
 - q1_answer: 들어갈 수 없는 선택지 번호 (예: "③")
 
-문제 2 (문장완성): (가),(나)에 들어갈 말을 보기 단어로 완성
-- 각 긴 빈칸마다 보기 단어 목록 제공 (12~16개)
-- 조건: 보기 단어를 모두 한 번씩 사용, 필요시 어형 변형 및 단어 추가 가능
-- q2_items: [{blank, words[], answer}]
+${q2Instruction}
 
 ⚠️⚠️ 핵심 규칙:
 - 짧은 빈칸 FOUR개 반드시 모두 생성: (A)[____], (B)[____], (C)[____], (D)[____] — 하나도 빠뜨리면 안 됨
@@ -463,16 +481,18 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
   "q2_items": [
     {
       "blank": "(가)",
-      "words": ["the", "was", "she", "didn't", "this", "tell", "what", "different", "her", "believe", "witch", "from", "so", "him"],
+      ${isB1 ? '"ko": "이것은 마녀가 그녀에게 말한 것과 달랐고, 그래서 그녀는 그를 믿지 않았다.",' : ''}
+      "words": ${isB1 ? '["This", "was", "different", "from", "what", "the", "witch", "told", "her", "so", "she", "didn\'t", "believe", "him"]' : '["different", "from", "the", "witch", "told", "she", "believe"]'},
       "answer": "This was different from what the witch told her, so she didn't believe him."
     },
     {
       "blank": "(나)",
-      "words": ["the", "world", "was", "full", "of", "happiness", "and", "hope", "wonderful", "place"],
+      ${isB1 ? '"ko": "세계는 행복과 희망으로 가득 찬 멋진 곳이었다.",' : ''}
+      "words": ${isB1 ? '["the", "world", "was", "full", "of", "happiness", "and", "hope", "a", "wonderful", "place"]' : '["full", "happiness", "hope", "wonderful"]'},
       "answer": "The world was full of happiness and hope."
     }
   ]
-}`;
+}`;};
 
     // ── 1지문 2유형: 어법+문장배열 ─────────────────────────────────────────
     case 'combo_grammar_order':

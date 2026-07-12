@@ -93,7 +93,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'workbook', label: '워크북', color: 'text-rose-400',
-    model: 'gpt-4.1-mini',
+    model: 'gpt-5.1',
     subsections: [
       { label: '직접 입력', keys: WB_DIRECT_KEYS },
       { label: '모의고사',  keys: WB_MOCK_KEYS },
