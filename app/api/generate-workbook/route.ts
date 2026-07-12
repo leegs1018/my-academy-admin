@@ -608,6 +608,9 @@ chunk의 role 종류:
 - "전치사+관계대명사"로 시작하는 절(in which, of whom 등)은 반드시 "관계절"로 표시합니다.
 - 수식어구/절의 text에는 괄호를 포함하지 않습니다. (렌더링 시 자동 추가)
 - 반드시 S와 V는 표시합니다.
+- chunk text 앞뒤의 쉼표(,)는 chunk text에서 제외합니다. 쉼표는 원문 위치 그대로 남기되, chunk 경계로만 처리합니다. (예: ", without the risks" → text: "without the risks")
+- There 구문(There + be동사 + 명사): "There"는 role "M"으로, 실질 주어인 명사/명사구는 role "S"로 표시합니다. (예: "There are many hints" → [{"text":"There","role":"M"},{"text":"are","role":"V"},{"text":"many hints","role":"S"}])
+- 생략된 주어(you/it 등)는 chunk에 포함하지 않습니다. 문맥상 명백한 생략은 V chunk 앞에 별도 표시하지 않습니다.
 
 출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
 {
