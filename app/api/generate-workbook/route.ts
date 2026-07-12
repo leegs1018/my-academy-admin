@@ -17,6 +17,7 @@ export type WorkbookType =
   | 'passage_translation'
   | 'paragraph_order'
   | 'sentence_insertion'
+  | 'summary_sentence'
   | 'suneung_vocab_right'
   | 'suneung_vocab_wrong'
   | 'suneung_grammar_right'
@@ -545,6 +546,28 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     {"num": "③", "wrong": "making", "correct": "made"},
     {"num": "⑤", "wrong": "using", "correct": "used"}
   ]
+}`;
+
+    // ── 요약문 서술형 ──────────────────────────────────────────────────────────
+    case 'summary_sentence':
+      return header('아래 영어 지문으로 요약문 서술형 문제를 생성하세요.') +
+`생성 규칙:
+1. 지문의 핵심 내용을 담은 1~2문장짜리 요약문을 작성합니다. (약 25~50단어)
+   - 요약문은 지문의 단어와 표현을 최대한 활용하되, 원문을 그대로 옮기지 않습니다.
+   - 지문 전체의 주제와 핵심 논지를 포함해야 합니다.
+2. 요약문에서 핵심 단어 5~8개를 선택하여 빈칸으로 만듭니다.
+   - 빈칸 정답 단어는 반드시 원본 지문에 그 형태 그대로 등장하는 단어여야 합니다.
+   - 핵심 명사, 동사, 형용사, 부사를 우선 빈칸으로 선택합니다.
+   - 관사(a/an/the), 전치사(of/in/at), 접속사(and/but)는 빈칸 제외.
+3. 빈칸 형식: (1)________, (2)________ 순서로 번호를 매깁니다.
+4. answer_key는 "(1) 단어  (2) 단어" 형식으로 각 빈칸 정답을 나열합니다.
+   정답은 원본 지문에 나오는 정확한 철자로 작성합니다.
+
+출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
+{
+  "instruction": "다음 글의 내용을 한 문장으로 요약할 때, 빈칸에 들어갈 알맞은 단어를 본문에서 찾아 쓰시오.",
+  "summary": "By developing higher (1)________, early humans escaped the (2)________ demands of the continuous (3)________ for food, securing (4)________ and leisure prior to the (5)________ era.",
+  "answer_key": "(1) intelligence  (2) heavy  (3) search  (4) affluence  (5) farming"
 }`;
 
     default:

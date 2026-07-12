@@ -11,7 +11,7 @@ type WorkbookType =
   | 'vocab_choice' | 'vocab_fill'
   | 'grammar_choice' | 'grammar_correct' | 'grammar_correct_adv'
   | 'translation' | 'word_order' | 'english_writing'
-  | 'passage_translation' | 'paragraph_order' | 'sentence_insertion'
+  | 'passage_translation' | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence'
   | 'suneung_vocab_right' | 'suneung_vocab_wrong'
   | 'suneung_grammar_right' | 'suneung_grammar_wrong'
   | 'combo_vocab_grammar' | 'combo_vocab_fill'
@@ -78,6 +78,7 @@ const CATEGORIES = [
     { key: 'passage_translation' as WorkbookType, label: '본문 해석지' },
     { key: 'paragraph_order' as WorkbookType,     label: '문단 배열' },
     { key: 'sentence_insertion' as WorkbookType,  label: '문장 삽입' },
+    { key: 'summary_sentence' as WorkbookType,    label: '요약문 서술형' },
   ]},
   { key: 'suneung',  label: '변형 문제',   types: [
     { key: 'suneung_vocab_right' as WorkbookType,    label: '적절한 어휘' },
@@ -97,7 +98,7 @@ const TYPE_LABELS: Record<WorkbookType, string> = {
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
   translation: '문장 해석', word_order: '단어 배열', english_writing: '영작하기',
-  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입',
+  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
   combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
@@ -937,6 +938,50 @@ function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResul
   );
 }
 
+function RenderSummarySentence({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+  const summary = (result.summary as string) ?? '';
+  const instruction = (result.instruction as string) ?? '다음 글의 내용을 한 문장으로 요약할 때, 빈칸에 들어갈 알맞은 단어를 본문에서 찾아 쓰시오.';
+  const answerKey = (result.answer_key as string) ?? '';
+
+  const answers: Record<number, string> = {};
+  for (const m of answerKey.matchAll(/\((\d+)\)\s+(\S+)/g)) {
+    answers[parseInt(m[1])] = m[2];
+  }
+
+  const parts = summary.split(/(\(\d+\)_+)/g);
+
+  return (
+    <div className="space-y-3">
+      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+        <p className="text-xs font-black text-slate-400 mb-3 italic">{instruction}</p>
+        <p className="text-sm leading-10 text-slate-800 font-medium">
+          {parts.map((part, i) => {
+            const m = part.match(/\((\d+)\)(_+)/);
+            if (m) {
+              const n = parseInt(m[1]);
+              return (
+                <span key={i} className="inline-flex flex-col items-center mx-0.5 align-bottom">
+                  <span className="text-[9px] font-black text-indigo-500 leading-none mb-0.5">({n})</span>
+                  {showAnswer
+                    ? <span className="border-b-2 border-indigo-500 px-2 text-indigo-700 font-black text-xs leading-snug">{answers[n] ?? '?'}</span>
+                    : <span className="border-b-2 border-slate-400 w-16 inline-block">&nbsp;</span>
+                  }
+                </span>
+              );
+            }
+            return <span key={i}>{part}</span>;
+          })}
+        </p>
+      </div>
+      {showAnswer && (
+        <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
+          <p className="text-xs font-black text-amber-700">정답: {answerKey}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RenderResultContent({ result, type, showAnswer, showKorean }: { result: WorkbookResult; type: WorkbookType; showAnswer: boolean; showKorean?: boolean }) {
   if (result.error) return <p className="text-rose-500 font-bold text-sm">{result.error as string}</p>;
 
@@ -986,6 +1031,8 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
       return <RenderParagraphOrder data={result as {fixed_paragraph:string;shuffled_paragraphs:Array<{label:string;text:string}>;answer_key:string}} showAnswer={showAnswer} />;
     case 'sentence_insertion':
       return <RenderSentenceInsertion data={result as {insert_sentence:string;passage:string;answer_key:string}} showAnswer={showAnswer} />;
+    case 'summary_sentence':
+      return <RenderSummarySentence result={result} showAnswer={showAnswer} />;
     case 'suneung_vocab_right':
       return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_vocab_wrong':
