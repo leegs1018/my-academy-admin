@@ -2648,7 +2648,7 @@ export default function WorkbookPage() {
       return next;
     });
   };
-  const allTypeKeys: WorkbookType[] = CATEGORIES.flatMap(c => c.types.map(t => t.key));
+  const allTypeKeys: WorkbookType[] = CATEGORIES.flatMap(c => c.types.map(t => t.key).filter(k => k in currentPricing));
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16">
