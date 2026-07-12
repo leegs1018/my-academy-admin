@@ -1602,6 +1602,83 @@ function PdfSuneungVocabABC({ result, isAnswer, title, id, questionText }: { res
   );
 }
 
+function PdfPassageAnalysis({ result, id }: { result: WorkbookResult; id: string }) {
+  type Chunk = { text: string; role: string };
+  type Sentence = { num: number; en: string; ko: string; chunks: Chunk[] };
+  const sentences = (result.sentences as Sentence[]) ?? [];
+  const ROLE_COLORS: Record<string, string> = {
+    'S': '#1D4ED8', 'V': '#DC2626', 'O': '#059669', 'C': '#7C3AED',
+    'M': '#6B7280', 'PP': '#475569', 'to-V': '#EA580C', 'Ving': '#D97706',
+    'p.p.': '#0D9488', '관계절': '#4338CA', 'that절': '#6D28D9',
+  };
+  const getColor = (role: string) => ROLE_COLORS[role] ?? '#BE185D';
+  const isPhr = (role: string) => ['PP','to-V','Ving','p.p.','관계절','that절'].includes(role) || role.endsWith('절') || role.endsWith('구');
+  return (
+    <div id={id} style={PDF_BASE}>
+      <h2 style={PDF_H2}>지문 구문분석</h2>
+      {sentences.map((sent, si) => (
+        <div key={si} style={{ marginBottom: 14, borderBottom: '1px solid #E5E7EB', paddingBottom: 10 }}>
+          <p style={{ margin: '0 0 6px', fontSize: 11, color: '#374151', fontWeight: 700 }}>
+            {sent.num}. {sent.ko}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 4px', alignItems: 'flex-end' }}>
+            {sent.chunks.map((chunk, ci) => {
+              const color = getColor(chunk.role);
+              const phrase = isPhr(chunk.role);
+              return (
+                <div key={ci} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, paddingBottom: 2, borderBottom: `2px solid ${color}`, color, fontStyle: phrase ? 'italic' : 'normal' }}>
+                    {phrase ? `(${chunk.text})` : chunk.text}
+                  </span>
+                  <span style={{ fontSize: 9, fontWeight: 900, color, marginTop: 1 }}>{chunk.role}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PdfSummarySentence({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const summary = (result.summary as string) ?? '';
+  const instruction = (result.instruction as string) ?? '다음 글의 내용을 한 문장으로 요약할 때, 빈칸에 들어갈 알맞은 단어를 본문에서 찾아 쓰시오.';
+  const answerKey = (result.answer_key as string) ?? '';
+  const answers: Record<number, string> = {};
+  for (const m of answerKey.matchAll(/\((\d+)\)\s+(\S+)/g)) answers[parseInt(m[1])] = m[2];
+  const parts = summary.split(/(\(\d+\)_+)/g);
+  return (
+    <div id={id} style={PDF_BASE}>
+      <h2 style={PDF_H2}>{title}{isAnswer ? ' (정답)' : ''}</h2>
+      <p style={{ margin: '0 0 10px', fontSize: 11, color: '#6B7280', fontStyle: 'italic' }}>{instruction}</p>
+      <p style={{ ...PDF_P, lineHeight: 2.8 }}>
+        {parts.map((part, i) => {
+          const m = part.match(/\((\d+)\)_+/);
+          if (m) {
+            const n = parseInt(m[1]);
+            return (
+              <span key={i} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', margin: '0 2px', verticalAlign: 'bottom' }}>
+                <span style={{ fontSize: 9, color: '#4338CA', fontWeight: 900, lineHeight: 1 }}>({n})</span>
+                {isAnswer
+                  ? <span style={{ borderBottom: '2px solid #4338CA', color: '#4338CA', fontWeight: 900, padding: '0 4px', fontSize: 12 }}>{answers[n] ?? '?'}</span>
+                  : <span style={{ borderBottom: '2px solid #9CA3AF', display: 'inline-block', width: 64 }}>&nbsp;</span>
+                }
+              </span>
+            );
+          }
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+      {isAnswer && (
+        <div style={{ marginTop: 14, padding: '8px 12px', background: '#FFF9C4', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
+          정답: {answerKey}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PdfSimple({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   return (
     <div id={id} style={PDF_BASE}>
@@ -2949,6 +3026,15 @@ export default function WorkbookPage() {
                   <React.Fragment key={key}>
                     <PdfSentenceInsertion result={result} isAnswer={false} title={fullTitle} id={problemId} />
                     <PdfSentenceInsertion result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'passage_analysis':
+                return <PdfPassageAnalysis key={key} result={result} id={problemId} />;
+              case 'summary_sentence':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfSummarySentence result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfSummarySentence result={result} isAnswer={true} title={fullTitle} id={answerId} />
                   </React.Fragment>
                 );
               default:
