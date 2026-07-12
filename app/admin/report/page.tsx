@@ -47,6 +47,7 @@ function AdminReportContent() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [userId, setUserId] = useState('');
+  const [academyName, setAcademyName] = useState('');
 
 
 
@@ -77,6 +78,9 @@ function AdminReportContent() {
       const { data: studentList } = await supabase.from('students').select('*').eq('academy_id', userId).order('name', { ascending: true });
 
       const { data: classList } = await supabase.from('classes').select('*').eq('academy_id', userId);
+
+      const { data: config } = await supabase.from('academy_config').select('academy_name').eq('user_id', userId).single();
+      if (config?.academy_name) setAcademyName(config.academy_name);
 
       if (studentList) {
         setStudents(studentList);
@@ -427,9 +431,7 @@ function AdminReportContent() {
 
                 <div className="text-right">
 
-                  <p className="text-[18px] font-black text-indigo-900 leading-none mb-1 tracking-tight">LJY English Institute</p>
-
-                  <p className="text-[22px] font-black text-indigo-900 leading-none">이주영 영어학원</p>
+                  <p className="text-[22px] font-black text-indigo-900 leading-none">{academyName}</p>
 
                 </div>
 
@@ -812,8 +814,7 @@ function AdminReportContent() {
   <footer className="absolute bottom-0 left-[15mm] right-[15mm] py-8 border-t-2 border-indigo-50 flex justify-between items-end bg-white shrink-0">
     <div className="flex items-center gap-4">
       <div className="text-left">
-        <p className="text-lg font-black text-indigo-900 leading-none mb-1 tracking-tight">LJY English Institute</p>
-        <p className="text-2xl font-black text-indigo-900 leading-none">이주영 영어학원</p>
+        <p className="text-2xl font-black text-indigo-900 leading-none">{academyName}</p>
       </div>
       {/* <div className="w-[3px] h-10 bg-indigo-600"></div> */}
     </div>
