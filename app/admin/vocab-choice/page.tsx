@@ -1672,6 +1672,38 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title || '지문 구문분석'}</PdfPageHeader>
+      {/* 범례 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 6px', marginBottom: 8, alignItems: 'center' }}>
+        {([
+          { label: 'S 주어',      color: '#1D4ED8', italic: false, paren: false },
+          { label: 'V 동사',      color: '#DC2626', italic: false, paren: false },
+          { label: 'O 목적어',    color: '#059669', italic: false, paren: false },
+          { label: 'SC 주격보어', color: '#7C3AED', italic: false, paren: false },
+          { label: 'OC 목적격보어', color: '#D97706', italic: false, paren: false },
+          { label: '전치사구',    color: '#475569', italic: true,  paren: true  },
+          { label: 'to부정사구',  color: '#C2410C', italic: true,  paren: true  },
+          { label: '현재분사구',  color: '#0D9488', italic: true,  paren: true  },
+          { label: '과거분사구',  color: '#0369A1', italic: true,  paren: true  },
+          { label: '관계절',      color: '#4338CA', italic: true,  paren: true  },
+          { label: '부사절',      color: '#BE123C', italic: true,  paren: true  },
+          { label: '명사절',      color: '#7E22CE', italic: true,  paren: true  },
+          { label: 'M 수식어',    color: '#6B7280', italic: false, paren: false },
+        ] as { label: string; color: string; italic: boolean; paren: boolean }[]).map(item => (
+          <span key={item.label} style={{
+            display: 'inline-block',
+            padding: '2px 7px',
+            border: `1.5px solid ${item.color}`,
+            borderRadius: 99,
+            fontSize: 8.5,
+            fontWeight: 700,
+            color: item.color,
+            fontStyle: item.italic ? 'italic' : 'normal',
+            lineHeight: 1.4,
+          }}>
+            {item.paren ? `(${item.label})` : item.label}
+          </span>
+        ))}
+      </div>
       {/* 헤더 */}
       <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #CBD5E1', marginBottom: 6, fontSize: 10, fontWeight: 900 }}>
         <div style={{ width: '70%', background: '#1E293B', color: '#fff', padding: '5px 12px' }}>영어 구문분석</div>
