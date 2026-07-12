@@ -61,17 +61,17 @@ interface HistoryItem {
 
 const CATEGORIES = [
   { key: 'vocab',    label: '어휘 연습',   types: [
-    { key: 'vocab_choice' as WorkbookType, label: '어휘 선택' },
-    { key: 'vocab_fill' as WorkbookType,   label: '어휘 완성' },
+    { key: 'vocab_choice' as WorkbookType, label: '어휘 고르기' },
+    { key: 'vocab_fill' as WorkbookType,   label: '어휘 채우기' },
   ]},
   { key: 'grammar',  label: '어법 연습',   types: [
-    { key: 'grammar_choice' as WorkbookType,     label: '어법 선택' },
-    { key: 'grammar_correct' as WorkbookType,    label: '어법 수정' },
-    { key: 'grammar_correct_adv' as WorkbookType, label: '어법 수정(상)' },
+    { key: 'grammar_choice' as WorkbookType,     label: '어법 고르기' },
+    { key: 'grammar_correct' as WorkbookType,    label: '어법 고치기' },
+    { key: 'grammar_correct_adv' as WorkbookType, label: '어법 고치기(심화)' },
   ]},
   { key: 'sentence', label: '문장 연습',   types: [
-    { key: 'translation' as WorkbookType,     label: '해석하기' },
-    { key: 'word_order' as WorkbookType,      label: '낱말 배열' },
+    { key: 'translation' as WorkbookType,     label: '문장 해석' },
+    { key: 'word_order' as WorkbookType,      label: '단어 배열' },
     { key: 'english_writing' as WorkbookType, label: '영작하기' },
   ]},
   { key: 'passage',  label: '지문 연습',   types: [
@@ -87,21 +87,21 @@ const CATEGORIES = [
   ]},
   { key: 'combo',    label: '1지문 2유형', types: [
     { key: 'combo_vocab_grammar' as WorkbookType,   label: '어휘+어법' },
-    { key: 'combo_vocab_fill' as WorkbookType,      label: '어휘+문장완성' },
-    { key: 'combo_grammar_order' as WorkbookType,   label: '어법+문장배열' },
+    { key: 'combo_vocab_fill' as WorkbookType,      label: '영작 서술형' },
+    { key: 'combo_grammar_order' as WorkbookType,   label: '어법 서술형' },
     { key: 'combo_grammar_insert' as WorkbookType,  label: '어법+문장삽입' },
   ]},
 ];
 
 const TYPE_LABELS: Record<WorkbookType, string> = {
-  vocab_choice: '어휘 선택', vocab_fill: '어휘 완성',
-  grammar_choice: '어법 선택', grammar_correct: '어법 수정', grammar_correct_adv: '어법 수정(상)',
-  translation: '해석하기', word_order: '낱말 배열', english_writing: '영작하기',
+  vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
+  grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
+  translation: '문장 해석', word_order: '단어 배열', english_writing: '영작하기',
   passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
-  combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '어휘+문장완성',
-  combo_grammar_order: '어법+문장배열', combo_grammar_insert: '어법+문장삽입',
+  combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
+  combo_grammar_order: '어법 서술형', combo_grammar_insert: '어법+문장삽입',
 };
 
 const DIFF_CARDS = [

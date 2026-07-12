@@ -28,6 +28,22 @@ interface SectionConfig {
   model?: string;
 }
 
+const WB_TYPE_LABELS: Record<string, string> = {
+  vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
+  grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
+  translation: '문장 해석', word_order: '단어 배열', english_writing: '영작하기',
+  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입',
+  suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
+  suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
+  combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
+  combo_grammar_order: '어법 서술형', combo_grammar_insert: '어법+문장삽입',
+};
+
+const getWbLabel = (featureKey: string) => {
+  const typeKey = featureKey.replace(/^wb_(direct|mock)_/, '');
+  return WB_TYPE_LABELS[typeKey] ?? featureKey;
+};
+
 const WB_DIRECT_KEYS = [
   'wb_direct_vocab_choice', 'wb_direct_vocab_fill',
   'wb_direct_grammar_choice', 'wb_direct_grammar_correct', 'wb_direct_grammar_correct_adv',
@@ -160,7 +176,9 @@ export default function ConPricingPage() {
     return (
       <tr key={item.id} className={`border-t border-slate-800 transition-colors ${item.is_active ? 'hover:bg-slate-800/20' : 'opacity-40 hover:bg-slate-800/10'}`}>
         <td className="py-3 px-5">
-          <p className="font-black text-white text-sm">{item.feature_name}</p>
+          <p className="font-black text-white text-sm">
+            {item.feature_key.startsWith('wb_') ? getWbLabel(item.feature_key) : item.feature_name}
+          </p>
           <p className="text-[10px] text-slate-600 font-bold mt-0.5">{item.feature_key}</p>
         </td>
         <td className="py-3 px-5 text-slate-400 font-bold text-xs">{item.unit_description}</td>
