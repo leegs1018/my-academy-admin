@@ -113,6 +113,7 @@ export default function ConPricingPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<Record<string, string>>({});
+  const [inserting, setInserting] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/superadmin/credits/pricing')
@@ -129,6 +130,26 @@ export default function ConPricingPage() {
   const cancelEdit = (key: string) => {
     setEditing(prev => { const n = { ...prev }; delete n[key]; return n; });
     setSaveMsg(prev => { const n = { ...prev }; delete n[key]; return n; });
+  };
+
+  const handleInsert = async (key: string) => {
+    setInserting(key);
+    const name = key.startsWith('wb_') ? getWbLabel(key) : key;
+    try {
+      const res = await fetch('/api/superadmin/credits/pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feature_key: key, feature_name: name, cost_per_use: 20, unit_description: '1회당', is_active: true }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        setPricing(prev => [...prev, {
+          id: d.id ?? key, feature_key: key, feature_name: name,
+          cost_per_use: 20, unit_description: '1회당', is_active: true,
+          updated_at: new Date().toISOString(),
+        }]);
+      }
+    } finally { setInserting(null); }
   };
 
   const handleSave = async (key: string) => {
@@ -228,9 +249,35 @@ export default function ConPricingPage() {
   };
 
   const renderTable = (keys: string[], showToggle: boolean) => {
-    const items = keys.map(k => pricingMap[k]).filter(Boolean);
-    if (items.length === 0) return <tr><td colSpan={showToggle ? 6 : 5} className="py-4 px-5 text-xs text-slate-500 font-bold text-center">DB에 항목 없음 — SQL 마이그레이션을 실행해주세요</td></tr>;
-    return <>{items.map(item => renderRow(item, showToggle))}</>;
+    const colCount = showToggle ? 6 : 5;
+    return (
+      <>
+        {keys.map(k => {
+          const item = pricingMap[k];
+          if (item) return renderRow(item, showToggle);
+          const isIns = inserting === k;
+          const name = k.startsWith('wb_') ? getWbLabel(k) : k;
+          return (
+            <tr key={k} className="border-t border-slate-800 opacity-50">
+              <td className="py-3 px-5">
+                <p className="font-black text-slate-400 text-sm">{name}</p>
+                <p className="text-[10px] text-slate-600 font-bold mt-0.5">{k}</p>
+              </td>
+              <td className="py-3 px-5 text-slate-600 font-bold text-xs">1회당</td>
+              <td className="py-3 px-5 text-center"><span className="font-black text-slate-600 text-xs">미설정</span></td>
+              {showToggle && <td></td>}
+              <td className="py-3 px-5 text-center">
+                <button onClick={() => handleInsert(k)} disabled={isIns}
+                  className="px-3 py-1 text-xs font-black bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition-all disabled:opacity-50">
+                  {isIns ? '…' : '추가'}
+                </button>
+              </td>
+              <td></td>
+            </tr>
+          );
+        })}
+      </>
+    );
   };
 
   const renderSectionCard = (section: SectionConfig) => {

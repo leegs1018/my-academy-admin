@@ -16,6 +16,40 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ pricing: data });
 }
 
+export async function POST(request: NextRequest) {
+  const authError = await requireSuperAdmin(request);
+  if (authError) return authError;
+
+  const body = await request.json() as {
+    feature_key: string;
+    feature_name: string;
+    cost_per_use?: number;
+    unit_description?: string;
+    is_active?: boolean;
+  };
+  const { feature_key, feature_name, cost_per_use, unit_description, is_active } = body;
+
+  if (!feature_key || !feature_name) {
+    return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('con_pricing')
+    .insert({
+      feature_key,
+      feature_name,
+      cost_per_use: cost_per_use ?? 20,
+      unit_description: unit_description ?? '1회당',
+      is_active: is_active ?? true,
+    })
+    .select('id')
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true, id: data?.id });
+}
+
 export async function PUT(request: NextRequest) {
   const authError = await requireSuperAdmin(request);
   if (authError) return authError;

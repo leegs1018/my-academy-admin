@@ -1982,6 +1982,7 @@ export default function WorkbookPage() {
   const [pricePerUse, setPricePerUse] = useState(0);
   const [wbDirectPricing, setWbDirectPricing] = useState<Record<string, number>>({});
   const [wbMockPricing, setWbMockPricing] = useState<Record<string, number>>({});
+  const [pricingLoaded, setPricingLoaded] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingAnswerPdf, setDownloadingAnswerPdf] = useState(false);
   const [savingHistory, setSavingHistory] = useState(false);
@@ -2009,9 +2010,10 @@ export default function WorkbookPage() {
         else if (p.feature_key.startsWith('wb_mock_')) mockP[p.feature_key.replace('wb_mock_', '')] = p.cost_per_use;
         else if (p.feature_key === 'vocab_choice') setPricePerUse(p.cost_per_use);
       });
-      if (Object.keys(directP).length > 0) setWbDirectPricing(directP);
-      if (Object.keys(mockP).length > 0) setWbMockPricing(mockP);
-    }).catch(() => {});
+      setWbDirectPricing(directP);
+      setWbMockPricing(mockP);
+      setPricingLoaded(true);
+    }).catch(() => { setPricingLoaded(true); });
   }, []);
 
   // Mock cascade selectors
@@ -2558,7 +2560,10 @@ export default function WorkbookPage() {
 
             {/* All categories with checkboxes */}
             <div className="space-y-3">
-              {CATEGORIES.map(cat => (
+              {(!pricingLoaded ? [] : CATEGORIES.map(cat => ({
+                ...cat,
+                types: cat.types.filter(t => t.key in currentPricing),
+              })).filter(cat => cat.types.length > 0)).map(cat => (
                 <div key={cat.key}>
                   <p className="text-[11px] font-black text-slate-400 uppercase tracking-wide mb-1.5">{cat.label}</p>
                   <div className="flex flex-wrap gap-2">
