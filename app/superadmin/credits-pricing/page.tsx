@@ -29,14 +29,15 @@ interface SectionConfig {
 }
 
 const WB_TYPE_LABELS: Record<string, string> = {
+  passage_analysis: '지문 구문분석', passage_translation: '지문 해석지',
+  translation: '문장 해석', word_order: '단어 배열', english_writing: '영작 하기',
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
-  translation: '문장 해석', word_order: '단어 배열', english_writing: '영작하기',
-  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
+  combo_grammar_order: '어법 서술형', combo_vocab_fill: '영작 서술형', summary_sentence: '요약문 서술형',
+  paragraph_order: '문단 배열', sentence_insertion: '문장 삽입',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
-  combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
-  combo_grammar_order: '어법 서술형', combo_grammar_insert: '어법+문장삽입',
+  combo_vocab_grammar: '어휘+어법', combo_grammar_insert: '어법+문장삽입',
 };
 
 const getWbLabel = (featureKey: string) => {
@@ -45,14 +46,19 @@ const getWbLabel = (featureKey: string) => {
 };
 
 const WB_DIRECT_KEYS = [
+  // 지문 드릴
+  'wb_direct_passage_analysis', 'wb_direct_passage_translation',
+  'wb_direct_translation', 'wb_direct_word_order', 'wb_direct_english_writing',
+  // 어휘 어법
   'wb_direct_vocab_choice', 'wb_direct_vocab_fill',
   'wb_direct_grammar_choice', 'wb_direct_grammar_correct', 'wb_direct_grammar_correct_adv',
-  'wb_direct_translation', 'wb_direct_word_order', 'wb_direct_english_writing',
-  'wb_direct_passage_translation', 'wb_direct_paragraph_order', 'wb_direct_sentence_insertion', 'wb_direct_summary_sentence', 'wb_direct_passage_analysis',
+  // 서술형 대비
+  'wb_direct_combo_grammar_order', 'wb_direct_combo_vocab_fill', 'wb_direct_summary_sentence',
+  // 보류
+  'wb_direct_paragraph_order', 'wb_direct_sentence_insertion',
   'wb_direct_suneung_vocab_right', 'wb_direct_suneung_vocab_wrong',
   'wb_direct_suneung_grammar_right', 'wb_direct_suneung_grammar_wrong',
-  'wb_direct_combo_vocab_grammar', 'wb_direct_combo_vocab_fill',
-  'wb_direct_combo_grammar_order', 'wb_direct_combo_grammar_insert',
+  'wb_direct_combo_vocab_grammar', 'wb_direct_combo_grammar_insert',
 ];
 const WB_MOCK_KEYS = WB_DIRECT_KEYS.map(k => k.replace('wb_direct_', 'wb_mock_'));
 

@@ -60,46 +60,42 @@ interface HistoryItem {
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
-  { key: 'vocab',    label: '어휘 연습',   types: [
-    { key: 'vocab_choice' as WorkbookType, label: '어휘 고르기' },
-    { key: 'vocab_fill' as WorkbookType,   label: '어휘 채우기' },
+  { key: 'drill',    label: '지문 드릴',   types: [
+    { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
+    { key: 'passage_translation' as WorkbookType, label: '지문 해석지' },
+    { key: 'translation' as WorkbookType,         label: '문장 해석' },
+    { key: 'word_order' as WorkbookType,          label: '단어 배열' },
+    { key: 'english_writing' as WorkbookType,     label: '영작 하기' },
   ]},
-  { key: 'grammar',  label: '어법 연습',   types: [
-    { key: 'grammar_choice' as WorkbookType,     label: '어법 고르기' },
-    { key: 'grammar_correct' as WorkbookType,    label: '어법 고치기' },
+  { key: 'vocab_grammar', label: '어휘 어법', types: [
+    { key: 'vocab_choice' as WorkbookType,        label: '어휘 고르기' },
+    { key: 'vocab_fill' as WorkbookType,          label: '어휘 채우기' },
+    { key: 'grammar_choice' as WorkbookType,      label: '어법 고르기' },
+    { key: 'grammar_correct' as WorkbookType,     label: '어법 고치기' },
     { key: 'grammar_correct_adv' as WorkbookType, label: '어법 고치기(심화)' },
   ]},
-  { key: 'sentence', label: '문장 연습',   types: [
-    { key: 'translation' as WorkbookType,     label: '문장 해석' },
-    { key: 'word_order' as WorkbookType,      label: '단어 배열' },
-    { key: 'english_writing' as WorkbookType, label: '영작하기' },
+  { key: 'essay',    label: '서술형 대비', types: [
+    { key: 'combo_grammar_order' as WorkbookType, label: '어법 서술형' },
+    { key: 'combo_vocab_fill' as WorkbookType,    label: '영작 서술형' },
+    { key: 'summary_sentence' as WorkbookType,    label: '요약문 서술형' },
   ]},
-  { key: 'passage',  label: '지문 연습',   types: [
-    { key: 'passage_translation' as WorkbookType, label: '본문 해석지' },
+  { key: 'hold',     label: '보류',        types: [
     { key: 'paragraph_order' as WorkbookType,     label: '문단 배열' },
     { key: 'sentence_insertion' as WorkbookType,  label: '문장 삽입' },
-    { key: 'summary_sentence' as WorkbookType,    label: '요약문 서술형' },
-    { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
-  ]},
-  { key: 'suneung',  label: '변형 문제',   types: [
-    { key: 'suneung_vocab_right' as WorkbookType,    label: '적절한 어휘' },
-    { key: 'suneung_vocab_wrong' as WorkbookType,    label: '부적절한 어휘' },
-    { key: 'suneung_grammar_right' as WorkbookType,  label: '맞는 어법' },
-    { key: 'suneung_grammar_wrong' as WorkbookType,  label: '틀린 어법' },
-  ]},
-  { key: 'combo',    label: '1지문 2유형', types: [
-    { key: 'combo_vocab_grammar' as WorkbookType,   label: '어휘+어법' },
-    { key: 'combo_vocab_fill' as WorkbookType,      label: '영작 서술형' },
-    { key: 'combo_grammar_order' as WorkbookType,   label: '어법 서술형' },
-    { key: 'combo_grammar_insert' as WorkbookType,  label: '어법+문장삽입' },
+    { key: 'suneung_vocab_right' as WorkbookType,  label: '적절한 어휘' },
+    { key: 'suneung_vocab_wrong' as WorkbookType,  label: '부적절한 어휘' },
+    { key: 'suneung_grammar_right' as WorkbookType, label: '맞는 어법' },
+    { key: 'suneung_grammar_wrong' as WorkbookType, label: '틀린 어법' },
+    { key: 'combo_vocab_grammar' as WorkbookType,  label: '어휘+어법' },
+    { key: 'combo_grammar_insert' as WorkbookType, label: '어법+문장삽입' },
   ]},
 ];
 
 const TYPE_LABELS: Record<WorkbookType, string> = {
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
-  translation: '문장 해석', word_order: '단어 배열', english_writing: '영작하기',
-  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
+  translation: '문장 해석', word_order: '단어 배열', english_writing: '영작 하기',
+  passage_translation: '지문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
   combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
