@@ -1406,7 +1406,7 @@ function PdfWordOrder({ result, isAnswer, title, id, showKorean }: { result: Wor
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 700, color: '#DC2626' }}>{s.ko}</p>
+            <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 700, color: '#1e293b' }}>{s.ko}</p>
             <p style={{ margin: '0 0 4px', fontSize: 13, color: '#000' }}>
               ({(s.scrambled || []).join(' / ')})
             </p>
