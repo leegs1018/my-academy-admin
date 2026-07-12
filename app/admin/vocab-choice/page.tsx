@@ -11,7 +11,7 @@ type WorkbookType =
   | 'vocab_choice' | 'vocab_fill'
   | 'grammar_choice' | 'grammar_correct' | 'grammar_correct_adv'
   | 'translation' | 'word_order' | 'english_writing'
-  | 'passage_translation' | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence'
+  | 'passage_translation' | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence' | 'passage_analysis'
   | 'suneung_vocab_right' | 'suneung_vocab_wrong'
   | 'suneung_grammar_right' | 'suneung_grammar_wrong'
   | 'combo_vocab_grammar' | 'combo_vocab_fill'
@@ -79,6 +79,7 @@ const CATEGORIES = [
     { key: 'paragraph_order' as WorkbookType,     label: '문단 배열' },
     { key: 'sentence_insertion' as WorkbookType,  label: '문장 삽입' },
     { key: 'summary_sentence' as WorkbookType,    label: '요약문 서술형' },
+    { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
   ]},
   { key: 'suneung',  label: '변형 문제',   types: [
     { key: 'suneung_vocab_right' as WorkbookType,    label: '적절한 어휘' },
@@ -98,7 +99,7 @@ const TYPE_LABELS: Record<WorkbookType, string> = {
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
   translation: '문장 해석', word_order: '단어 배열', english_writing: '영작하기',
-  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형',
+  passage_translation: '본문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
   combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
@@ -938,6 +939,78 @@ function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResul
   );
 }
 
+const ANALYSIS_ROLES: Record<string, { text: string; border: string; bg: string; label: string }> = {
+  'S':    { text: 'text-blue-700',   border: 'border-blue-400',   bg: 'bg-blue-50',   label: 'S' },
+  'V':    { text: 'text-red-700',    border: 'border-red-400',    bg: 'bg-red-50',    label: 'V' },
+  'O':    { text: 'text-green-700',  border: 'border-green-400',  bg: 'bg-green-50',  label: 'O' },
+  'C':    { text: 'text-purple-700', border: 'border-purple-400', bg: 'bg-purple-50', label: 'C' },
+  'M':    { text: 'text-gray-500',   border: 'border-gray-300',   bg: 'bg-gray-50',   label: 'M' },
+  'PP':   { text: 'text-slate-600',  border: 'border-slate-300',  bg: 'bg-slate-50',  label: 'PP' },
+  'to-V': { text: 'text-orange-700', border: 'border-orange-400', bg: 'bg-orange-50', label: 'to-V' },
+  'Ving': { text: 'text-amber-700',  border: 'border-amber-400',  bg: 'bg-amber-50',  label: 'Ving' },
+  'p.p.': { text: 'text-teal-700',   border: 'border-teal-400',   bg: 'bg-teal-50',   label: 'p.p.' },
+  '관계절': { text: 'text-indigo-700', border: 'border-indigo-400', bg: 'bg-indigo-50', label: 'Rel.' },
+  'that절': { text: 'text-violet-700', border: 'border-violet-400', bg: 'bg-violet-50', label: 'that절' },
+};
+const PHRASE_ROLES = new Set(['PP', 'to-V', 'Ving', 'p.p.', '관계절', 'that절']);
+function getAnalysisStyle(role: string) {
+  if (ANALYSIS_ROLES[role]) return ANALYSIS_ROLES[role];
+  if (role.endsWith('절') || role.endsWith('구'))
+    return { text: 'text-rose-700', border: 'border-rose-400', bg: 'bg-rose-50', label: role };
+  return { text: 'text-gray-600', border: 'border-gray-300', bg: 'bg-gray-50', label: role };
+}
+
+function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
+  type Chunk = { text: string; role: string };
+  type Sentence = { num: number; en: string; ko: string; chunks: Chunk[] };
+  const sentences = (result.sentences as Sentence[]) ?? [];
+  const isPhrase = (role: string) => PHRASE_ROLES.has(role) || role.endsWith('절') || role.endsWith('구');
+
+  return (
+    <div className="space-y-4">
+      {/* 범례 */}
+      <div className="flex flex-wrap gap-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
+        {(['S','V','O','C','PP','to-V','Ving','p.p.','관계절'] as const).map(role => {
+          const s = getAnalysisStyle(role);
+          return (
+            <span key={role} className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.text} ${s.border} ${s.bg}`}>
+              {s.label}
+            </span>
+          );
+        })}
+        <span className="text-[10px] text-slate-400 self-center ml-1">· ( ) = 구/절 단위</span>
+      </div>
+
+      {sentences.map(sent => (
+        <div key={sent.num} className="border border-slate-200 rounded-xl overflow-hidden">
+          {/* 구문분석 영어 */}
+          <div className="p-4 bg-white">
+            <div className="flex flex-wrap gap-x-2 gap-y-3 items-end">
+              {sent.chunks.map((chunk, ci) => {
+                const s = getAnalysisStyle(chunk.role);
+                const phrase = isPhrase(chunk.role);
+                return (
+                  <div key={ci} className="flex flex-col items-center">
+                    <span className={`text-sm font-bold px-1.5 py-0.5 border-b-2 ${s.text} ${s.border} ${phrase ? 'italic' : ''}`}>
+                      {phrase ? `(${chunk.text})` : chunk.text}
+                    </span>
+                    <span className={`text-[9px] font-black mt-0.5 ${s.text}`}>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* 한국어 번역 */}
+          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100">
+            <span className="text-[10px] font-black text-slate-400 mr-1.5">{sent.num}.</span>
+            <span className="text-xs font-bold text-slate-600">{sent.ko}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RenderSummarySentence({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
   const summary = (result.summary as string) ?? '';
   const instruction = (result.instruction as string) ?? '다음 글의 내용을 한 문장으로 요약할 때, 빈칸에 들어갈 알맞은 단어를 본문에서 찾아 쓰시오.';
@@ -1033,6 +1106,8 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
       return <RenderSentenceInsertion data={result as {insert_sentence:string;passage:string;answer_key:string}} showAnswer={showAnswer} />;
     case 'summary_sentence':
       return <RenderSummarySentence result={result} showAnswer={showAnswer} />;
+    case 'passage_analysis':
+      return <RenderPassageAnalysis result={result} />;
     case 'suneung_vocab_right':
       return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_vocab_wrong':
