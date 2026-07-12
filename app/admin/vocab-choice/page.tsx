@@ -960,37 +960,29 @@ function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResul
 }
 
 const ANALYSIS_ROLES: Record<string, { text: string; border: string; bg: string; label: string }> = {
-  'S':    { text: 'text-blue-700',   border: 'border-blue-400',   bg: 'bg-blue-50',   label: 'S' },
-  'V':    { text: 'text-red-700',    border: 'border-red-400',    bg: 'bg-red-50',    label: 'V' },
-  'O':    { text: 'text-green-700',  border: 'border-green-400',  bg: 'bg-green-50',  label: 'O' },
-  'C':    { text: 'text-purple-700', border: 'border-purple-400', bg: 'bg-purple-50', label: 'C' },
-  'M':    { text: 'text-gray-500',   border: 'border-gray-300',   bg: 'bg-gray-50',   label: 'M' },
-  'PP':   { text: 'text-slate-600',  border: 'border-slate-300',  bg: 'bg-slate-50',  label: 'PP' },
-  'to-V': { text: 'text-orange-700', border: 'border-orange-400', bg: 'bg-orange-50', label: 'to-V' },
-  'Ving': { text: 'text-amber-700',  border: 'border-amber-400',  bg: 'bg-amber-50',  label: 'Ving' },
-  'p.p.': { text: 'text-teal-700',   border: 'border-teal-400',   bg: 'bg-teal-50',   label: 'p.p.' },
-  '관계절': { text: 'text-indigo-700', border: 'border-indigo-400', bg: 'bg-indigo-50', label: 'Rel.' },
-  'that절': { text: 'text-violet-700', border: 'border-violet-400', bg: 'bg-violet-50', label: 'that절' },
+  'S':  { text: 'text-blue-700',   border: 'border-blue-500',   bg: 'bg-blue-50',   label: 'S 주어' },
+  'V':  { text: 'text-red-600',    border: 'border-red-500',    bg: 'bg-red-50',    label: 'V 동사' },
+  'O':  { text: 'text-emerald-700',border: 'border-emerald-500',bg: 'bg-emerald-50',label: 'O 목적어' },
+  'SC': { text: 'text-violet-700', border: 'border-violet-500', bg: 'bg-violet-50', label: 'SC 주격보어' },
+  'OC': { text: 'text-amber-700',  border: 'border-amber-500',  bg: 'bg-amber-50',  label: 'OC 목적격보어' },
 };
-const PHRASE_ROLES = new Set(['PP', 'to-V', 'Ving', 'p.p.', '관계절', 'that절']);
+const MODIFIER_STYLE = { text: 'text-slate-500', border: 'border-slate-400', bg: 'bg-slate-50', label: 'M 수식어' };
+const PHRASE_ROLES = new Set(['관계사절', '분사구', 'to부정사구', '전치사구']);
 function getAnalysisStyle(role: string) {
-  if (ANALYSIS_ROLES[role]) return ANALYSIS_ROLES[role];
-  if (role.endsWith('절') || role.endsWith('구'))
-    return { text: 'text-rose-700', border: 'border-rose-400', bg: 'bg-rose-50', label: role };
-  return { text: 'text-gray-600', border: 'border-gray-300', bg: 'bg-gray-50', label: role };
+  return ANALYSIS_ROLES[role] ?? MODIFIER_STYLE;
 }
 
 function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
   type Chunk = { text: string; role: string };
   type Sentence = { num: number; en: string; ko: string; chunks: Chunk[] };
   const sentences = (result.sentences as Sentence[]) ?? [];
-  const isPhrase = (role: string) => PHRASE_ROLES.has(role) || role.endsWith('절') || role.endsWith('구');
+  const isPhrase = (role: string) => PHRASE_ROLES.has(role);
 
   return (
     <div className="space-y-3">
       {/* 범례 */}
       <div className="flex flex-wrap gap-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
-        {(['S','V','O','C','PP','to-V','Ving','p.p.','관계절'] as const).map(role => {
+        {(['S','V','O','SC','OC','M'] as const).map(role => {
           const s = getAnalysisStyle(role);
           return (
             <span key={role} className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.text} ${s.border} ${s.bg}`}>
@@ -998,7 +990,7 @@ function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
             </span>
           );
         })}
-        <span className="text-[10px] text-slate-400 self-center ml-1">· ( ) = 구/절 단위</span>
+        <span className="text-[10px] text-slate-400 self-center ml-1">· ( ) = 명사수식어구 (관계사절·분사구·to부정사구·전치사구)</span>
       </div>
 
       {/* 헤더 */}
@@ -1658,12 +1650,14 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
   type Sentence = { num: number; en: string; ko: string; chunks: Chunk[] };
   const sentences = (result.sentences as Sentence[]) ?? [];
   const ROLE_COLORS: Record<string, string> = {
-    'S': '#1D4ED8', 'V': '#DC2626', 'O': '#059669', 'C': '#7C3AED',
-    'M': '#6B7280', 'PP': '#475569', 'to-V': '#EA580C', 'Ving': '#D97706',
-    'p.p.': '#0D9488', '관계절': '#4338CA', 'that절': '#6D28D9',
+    'S': '#1D4ED8', 'V': '#DC2626', 'O': '#059669', 'SC': '#7C3AED', 'OC': '#D97706',
   };
-  const getColor = (role: string) => ROLE_COLORS[role] ?? '#BE185D';
-  const isPhr = (role: string) => ['PP','to-V','Ving','p.p.','관계절','that절'].includes(role) || role.endsWith('절') || role.endsWith('구');
+  const ROLE_LABELS: Record<string, string> = {
+    'S': 'S 주어', 'V': 'V 동사', 'O': 'O 목적어', 'SC': 'SC 주격보어', 'OC': 'OC 목적격보어',
+  };
+  const getColor = (role: string) => ROLE_COLORS[role] ?? '#6B7280';
+  const getLabel = (role: string) => ROLE_LABELS[role] ?? 'M 수식어';
+  const isPhr = (role: string) => ['관계사절', '분사구', 'to부정사구', '전치사구'].includes(role);
   return (
     <div id={id} style={PDF_BASE}>
       {_pdfAcademy && <div style={{ position: 'absolute', top: 8, right: 20, fontSize: 10, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>{_pdfAcademy}</div>}
@@ -1686,7 +1680,7 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
                     <span style={{ fontSize: 11, fontWeight: 700, paddingBottom: 2, borderBottom: `2px solid ${color}`, color, fontStyle: phrase ? 'italic' : 'normal' }}>
                       {phrase ? `(${chunk.text})` : chunk.text}
                     </span>
-                    <span style={{ fontSize: 8, fontWeight: 900, color, marginTop: 1 }}>{chunk.role}</span>
+                    <span style={{ fontSize: 8, fontWeight: 900, color, marginTop: 1 }}>{getLabel(chunk.role)}</span>
                   </div>
                 );
               })}

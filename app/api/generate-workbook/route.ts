@@ -577,27 +577,28 @@ ${q2Instruction}
 2. 각 문장에 자연스러운 한국어 번역을 작성합니다.
 3. 각 문장을 의미 단위(chunk) 배열로 구문 분석합니다.
 
-chunk의 role 종류와 규칙:
-- "S"  : 주어 (명사구, 명사절 전체를 하나의 chunk)
-- "V"  : 동사 (조동사+본동사 포함, 예: "has been developed")
+chunk의 role 종류 (총 9가지):
+필수 문장 성분 5가지:
+- "S"  : 주어
+- "V"  : 동사 (조동사+본동사 전체, 예: "has been developed")
 - "O"  : 목적어
-- "C"  : 보어 (주격보어/목적격보어)
-- "M"  : 일반 수식어/부사어 (단어 하나)
-- "PP" : 전치사구 (전치사부터 끝까지, 예: "of their success")
-- "to-V" : to부정사구 (to부터 끝까지, 예: "to kill their prey")
-- "Ving"  : 현재분사구 (예: "using their brain")
-- "p.p."  : 과거분사구 (예: "developed by humans")
-- "관계절" : 관계대명사/관계부사절 (예: "which they developed")
-- "that절" : that 명사절 (예: "that they were intelligent")
-- "접속사절": when/because/if/although 등 부사절 (role에 접속사명 기재, 예: "before절", "when절")
+- "SC" : 주격보어 (2형식 be/become/seem 뒤 보어)
+- "OC" : 목적격보어 (5형식 목적어 뒤 보어)
+
+수식어구 4가지 (렌더링 시 자동으로 ( ) 괄호가 추가됨):
+- "관계사절" : 관계대명사/관계부사절 전체 (예: "which helped him succeed")
+- "분사구"   : 현재분사구 또는 과거분사구 (예: "running fast", "written by him")
+- "to부정사구" : to부정사구 전체 (예: "to achieve their goals")
+- "전치사구"  : 전치사부터 명사구 끝까지 (예: "in the early 20th century")
+
+일반 수식어:
+- "M" : 위 4가지에 해당하지 않는 단순 부사/형용사 등
 
 중요 규칙:
-- chunk는 문장 왼쪽부터 순서대로 나열합니다.
-- 하나의 chunk에는 연속된 단어들이 들어갑니다. 건너뛰기 금지.
-- PP/to-V/Ving/p.p./관계절 등 구/절 단위 chunk는 text에 괄호 포함 없이 단어만 씁니다.
-  (렌더링 시 자동으로 괄호가 추가됩니다)
-- 짧은 문장이라도 반드시 S, V는 표시합니다.
-- 단어 한 개짜리 M은 앞뒤 chunk에 자연스럽게 포함시킵니다.
+- chunk는 문장 왼쪽부터 순서대로 나열합니다. 건너뛰기 금지.
+- 수식어구(관계사절·분사구·to부정사구·전치사구)의 text에는 괄호를 포함하지 않습니다.
+- 부사절(when/because/if/although 등)은 "M"으로 처리하고 text에 절 전체를 씁니다.
+- 반드시 S와 V는 표시합니다.
 
 출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
 {
@@ -610,7 +611,7 @@ chunk의 role 종류와 규칙:
         {"text": "They", "role": "S"},
         {"text": "used", "role": "V"},
         {"text": "brain not brawn", "role": "O"},
-        {"text": "to kill their prey", "role": "to-V"}
+        {"text": "to kill their prey", "role": "to부정사구"}
       ]
     },
     {
@@ -618,8 +619,8 @@ chunk의 role 종류와 규칙:
       "en": "At the end of the long hunting era, before they turned to farming, they were already enjoying some degree of affluence.",
       "ko": "긴 수렵 시대의 끝 무렵, 그들이 농업으로 전환하기 전에, 그들은 이미 어느 정도의 풍요로움을 누리고 있었다.",
       "chunks": [
-        {"text": "At the end of the long hunting era", "role": "PP"},
-        {"text": "before they turned to farming", "role": "before절"},
+        {"text": "At the end of the long hunting era", "role": "전치사구"},
+        {"text": "before they turned to farming", "role": "M"},
         {"text": "they", "role": "S"},
         {"text": "were already enjoying", "role": "V"},
         {"text": "some degree of affluence", "role": "O"}
