@@ -582,27 +582,31 @@ ${q2Instruction}
 5. 각 문장에 자연스러운 한국어 번역을 작성합니다.
 6. 각 문장을 의미 단위(chunk) 배열로 구문 분석합니다. chunk의 text를 모두 합치면 원문과 동일해야 합니다.
 
-chunk의 role 종류 (총 9가지):
-필수 문장 성분 5가지:
-- "S"  : 주어
-- "V"  : 동사 (조동사+본동사 전체, 예: "has been developed")
+chunk의 role 종류:
+
+필수 문장 성분 (괄호 없음):
+- "S"  : 주어 (명사/명사구 전체)
+- "V"  : 동사 (조동사+본동사 전체, 예: "has been developed", "could not have been")
 - "O"  : 목적어
-- "SC" : 주격보어 (2형식 be/become/seem 뒤 보어)
-- "OC" : 목적격보어 (5형식 목적어 뒤 보어)
+- "SC" : 주격보어 (2형식: be/become/seem/feel/look 뒤 보어)
+- "OC" : 목적격보어 (5형식: 목적어 뒤 보어)
 
-수식어구 4가지 (렌더링 시 자동으로 ( ) 괄호가 추가됨):
-- "관계사절" : 관계대명사/관계부사절 전체 (예: "which helped him succeed")
-- "분사구"   : 현재분사구 또는 과거분사구 (예: "running fast", "written by him")
-- "to부정사구" : to부정사구 전체 (예: "to achieve their goals")
-- "전치사구"  : 전치사부터 명사구 끝까지 (예: "in the early 20th century")
+수식어구/절 (렌더링 시 자동으로 ( ) 괄호가 추가됨, role 이름을 레이블로 그대로 표시):
+- "전치사구"  : 전치사부터 명사구 끝까지 (예: "in the early morning", "of their success", "in which we can practice")
+- "to부정사구" : to부정사구 전체 (예: "to achieve their goals", "to be honest")
+- "현재분사구" : -ing 분사구문·형용사적 현재분사구 (예: "running toward the exit", "knowing the answer")
+- "과거분사구" : p.p. 분사구문·형용사적 과거분사구 (예: "written by the author", "surrounded by trees")
+- "관계절"    : 관계대명사/관계부사절 전체 (예: "who helped them", "which we developed", "where we live", "in which we can rehearse forthcoming actions")
+- "부사절"    : when/while/because/although/if/since/as/before/after/unless 등 부사절 전체
+- "명사절"    : that/whether/what/where/how/who 등 명사절 (S 또는 O 자리, 예: "that he succeeded", "what she said")
 
-일반 수식어:
-- "M" : 위 4가지에 해당하지 않는 단순 부사/형용사 등
+단순 수식어:
+- "M" : 단일 부사 한 단어 (예: "always", "often", "very") — 절이나 구는 반드시 위 role 사용
 
 중요 규칙:
-- chunk는 문장 왼쪽부터 순서대로 나열합니다. 건너뛰기 금지.
-- 수식어구(관계사절·분사구·to부정사구·전치사구)의 text에는 괄호를 포함하지 않습니다.
-- 부사절(when/because/if/although 등)은 "M"으로 처리하고 text에 절 전체를 씁니다.
+- chunk는 문장 왼쪽부터 순서대로, 건너뛰기 없이 나열합니다.
+- "전치사+관계대명사"로 시작하는 절(in which, of whom 등)은 반드시 "관계절"로 표시합니다.
+- 수식어구/절의 text에는 괄호를 포함하지 않습니다. (렌더링 시 자동 추가)
 - 반드시 S와 V는 표시합니다.
 
 출력 형식 (순수 JSON만, 마크다운 코드블록 없이):

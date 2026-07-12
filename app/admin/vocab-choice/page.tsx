@@ -959,17 +959,27 @@ function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResul
   );
 }
 
-const ANALYSIS_ROLES: Record<string, { text: string; border: string; bg: string; label: string }> = {
-  'S':  { text: 'text-blue-700',   border: 'border-blue-500',   bg: 'bg-blue-50',   label: 'S 주어' },
-  'V':  { text: 'text-red-600',    border: 'border-red-500',    bg: 'bg-red-50',    label: 'V 동사' },
-  'O':  { text: 'text-emerald-700',border: 'border-emerald-500',bg: 'bg-emerald-50',label: 'O 목적어' },
-  'SC': { text: 'text-violet-700', border: 'border-violet-500', bg: 'bg-violet-50', label: 'SC 주격보어' },
-  'OC': { text: 'text-amber-700',  border: 'border-amber-500',  bg: 'bg-amber-50',  label: 'OC 목적격보어' },
+const ANALYSIS_ROLES: Record<string, { text: string; border: string; bg: string; label: string; paren?: boolean }> = {
+  // 필수 문장 성분
+  'S':     { text: 'text-blue-700',   border: 'border-blue-500',   bg: 'bg-blue-50',    label: 'S 주어' },
+  'V':     { text: 'text-red-600',    border: 'border-red-500',    bg: 'bg-red-50',     label: 'V 동사' },
+  'O':     { text: 'text-emerald-700',border: 'border-emerald-500',bg: 'bg-emerald-50', label: 'O 목적어' },
+  'SC':    { text: 'text-violet-700', border: 'border-violet-500', bg: 'bg-violet-50',  label: 'SC 주격보어' },
+  'OC':    { text: 'text-amber-700',  border: 'border-amber-500',  bg: 'bg-amber-50',   label: 'OC 목적격보어' },
+  // 수식어구/절 (괄호 표시)
+  '전치사구':  { text: 'text-slate-600',  border: 'border-slate-500',  bg: 'bg-slate-100',  label: '전치사구',  paren: true },
+  'to부정사구':{ text: 'text-orange-700', border: 'border-orange-500', bg: 'bg-orange-50',  label: 'to부정사구', paren: true },
+  '현재분사구':{ text: 'text-teal-700',   border: 'border-teal-500',   bg: 'bg-teal-50',    label: '현재분사구', paren: true },
+  '과거분사구':{ text: 'text-cyan-700',   border: 'border-cyan-500',   bg: 'bg-cyan-50',    label: '과거분사구', paren: true },
+  '관계절':   { text: 'text-indigo-700', border: 'border-indigo-500', bg: 'bg-indigo-50',  label: '관계절',   paren: true },
+  '부사절':   { text: 'text-rose-700',   border: 'border-rose-500',   bg: 'bg-rose-50',    label: '부사절',   paren: true },
+  '명사절':   { text: 'text-purple-700', border: 'border-purple-500', bg: 'bg-purple-50',  label: '명사절',   paren: true },
+  // 단순 수식어
+  'M':     { text: 'text-gray-500',   border: 'border-gray-300',   bg: 'bg-gray-50',    label: 'M 수식어' },
 };
-const MODIFIER_STYLE = { text: 'text-slate-500', border: 'border-slate-400', bg: 'bg-slate-50', label: 'M 수식어' };
-const PHRASE_ROLES = new Set(['관계사절', '분사구', 'to부정사구', '전치사구']);
+const PHRASE_ROLES = new Set(['전치사구','to부정사구','현재분사구','과거분사구','관계절','부사절','명사절']);
 function getAnalysisStyle(role: string) {
-  return ANALYSIS_ROLES[role] ?? MODIFIER_STYLE;
+  return ANALYSIS_ROLES[role] ?? { text: 'text-gray-500', border: 'border-gray-300', bg: 'bg-gray-50', label: role };
 }
 
 function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
@@ -982,15 +992,17 @@ function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
     <div className="space-y-3">
       {/* 범례 */}
       <div className="flex flex-wrap gap-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
-        {(['S','V','O','SC','OC','M'] as const).map(role => {
+        {(['S','V','O','SC','OC'] as const).map(role => {
           const s = getAnalysisStyle(role);
-          return (
-            <span key={role} className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.text} ${s.border} ${s.bg}`}>
-              {s.label}
-            </span>
-          );
+          return <span key={role} className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.text} ${s.border} ${s.bg}`}>{s.label}</span>;
         })}
-        <span className="text-[10px] text-slate-400 self-center ml-1">· ( ) = 명사수식어구 (관계사절·분사구·to부정사구·전치사구)</span>
+        <span className="text-[10px] text-slate-300 self-center">|</span>
+        {(['전치사구','to부정사구','현재분사구','과거분사구','관계절','부사절','명사절'] as const).map(role => {
+          const s = getAnalysisStyle(role);
+          return <span key={role} className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.text} ${s.border} ${s.bg}`}>({s.label})</span>;
+        })}
+        <span className="text-[10px] text-slate-300 self-center">|</span>
+        <span className="text-[10px] text-slate-400 self-center">M 수식어</span>
       </div>
 
       {/* 헤더 */}
@@ -1646,13 +1658,17 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
   const sentences = (result.sentences as Sentence[]) ?? [];
   const ROLE_COLORS: Record<string, string> = {
     'S': '#1D4ED8', 'V': '#DC2626', 'O': '#059669', 'SC': '#7C3AED', 'OC': '#D97706',
+    '전치사구': '#475569', 'to부정사구': '#C2410C', '현재분사구': '#0D9488', '과거분사구': '#0369A1',
+    '관계절': '#4338CA', '부사절': '#BE123C', '명사절': '#7E22CE',
   };
   const ROLE_LABELS: Record<string, string> = {
     'S': 'S 주어', 'V': 'V 동사', 'O': 'O 목적어', 'SC': 'SC 주격보어', 'OC': 'OC 목적격보어',
+    '전치사구': '전치사구', 'to부정사구': 'to부정사구', '현재분사구': '현재분사구', '과거분사구': '과거분사구',
+    '관계절': '관계절', '부사절': '부사절', '명사절': '명사절',
   };
   const getColor = (role: string) => ROLE_COLORS[role] ?? '#6B7280';
   const getLabel = (role: string) => ROLE_LABELS[role] ?? 'M 수식어';
-  const isPhr = (role: string) => ['관계사절', '분사구', 'to부정사구', '전치사구'].includes(role);
+  const isPhr = (role: string) => PHRASE_ROLES.has(role);
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title || '지문 구문분석'}</PdfPageHeader>
