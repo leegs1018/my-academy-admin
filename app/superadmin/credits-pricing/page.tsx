@@ -18,9 +18,9 @@ interface SectionConfig {
   subsections?: SubSection[]; keys?: string[];
   noToggle?: boolean; note?: string; model?: string;
 }
-type ModelKey = 'gpt-5.1' | 'gpt-5.4';
+type ModelKey = 'gpt-5.1' | 'gpt-5.5';
 interface ModelPricing { inputPricePerM: number; outputPricePerM: number }
-interface FeatureTokens { in: number; out: number; model: ModelKey }
+interface FeatureTokens { in: number; out: number; model: ModelKey; steps?: number }
 
 // ─── 레이블 ──────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type
 
 // ─── 유형별 평균 토큰 (프롬프트 분석 기반 추정) ──────────────────────────────
 
-const T = (i: number, o: number, m: ModelKey = 'gpt-5.1'): FeatureTokens => ({ in: i, out: o, model: m });
+const T = (i: number, o: number, m: ModelKey = 'gpt-5.1', steps = 1): FeatureTokens => ({ in: i, out: o, model: m, steps });
 
 // 워크북 base (wb_direct_* 접두사 없는 순수 타입명)
 const WB_TOKENS: Record<string, FeatureTokens> = {
@@ -99,20 +99,20 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
   ...Object.fromEntries(Object.entries(WB_TOKENS).map(([k, v]) => [`wb_mock_${k}`, { ...v, in: v.in + 100 }])),
 
   // 실전 변형 직접 입력
-  ai_type_topic_title:        T(1500,  700),         // 주제/제목: 선택지 5개 + 해설
-  ai_type_grammar:            T(1800, 1200, 'gpt-5.4'), // 어법: 복잡한 CSAT 규칙 + 지문 변형
-  ai_type_vocab_paraphrase:   T(1500,  800),         // 어휘 낱말 쓰임: 선택지 + 해설
-  ai_type_vocab_blank:        T(1500,  700),         // 어휘 (a)(b) 빈칸: 2빈칸 선택지
-  ai_type_fill_blank:         T(1600,  800),         // 빈칸 추론: 지문 변형 + 선택지
-  ai_type_summary:            T(1600,  800),         // 요약문 완성: 요약 + 선택지
-  ai_type_flow:               T(1600,  900),         // 흐름: 지문 변형 + 선택지
-  ai_type_phrase_meaning:     T(1500,  700),         // 어구 의미 추론: 선택지
-  ai_type_sentence_order:     T(1600,  900),         // 순서 배열: 단락 분리 + 선택지
-  ai_type_sentence_insertion: T(1600,  900),         // 문장 삽입: 지문 변형 + 선택지
+  ai_type_topic_title:        T(1500,  700),              // 주제/제목: 선택지 5개 + 해설
+  ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2), // 어법: gpt-5.5, 2단계 생성, 토큰 대형
+  ai_type_vocab_paraphrase:   T(1500,  800),              // 어휘 낱말 쓰임: 선택지 + 해설
+  ai_type_vocab_blank:        T(1500,  700),              // 어휘 (a)(b) 빈칸: 2빈칸 선택지
+  ai_type_fill_blank:         T(1600,  800),              // 빈칸 추론: 지문 변형 + 선택지
+  ai_type_summary:            T(1600,  800),              // 요약문 완성: 요약 + 선택지
+  ai_type_flow:               T(1600,  900),              // 흐름: 지문 변형 + 선택지
+  ai_type_phrase_meaning:     T(1500,  700),              // 어구 의미 추론: 선택지
+  ai_type_sentence_order:     T(1600,  900),              // 순서 배열: 단락 분리 + 선택지
+  ai_type_sentence_insertion: T(1600,  900),              // 문장 삽입: 지문 변형 + 선택지
 
   // 실전 변형 모의고사 (모의고사 지문 약간 더 긺)
   mock_ai_type_topic_title:        T(1600,  700),
-  mock_ai_type_grammar:            T(1900, 1200, 'gpt-5.4'),
+  mock_ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2),
   mock_ai_type_vocab_paraphrase:   T(1600,  800),
   mock_ai_type_vocab_blank:        T(1600,  700),
   mock_ai_type_fill_blank:         T(1700,  800),
@@ -156,12 +156,12 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
-    model: 'gpt-5.1 (어법: gpt-5.4)',
+    model: 'gpt-5.1 (어법: gpt-5.5 × 2단계)',
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
-    model: 'gpt-5.1 (어법: gpt-5.4)',
+    model: 'gpt-5.1 (어법: gpt-5.5 × 2단계)',
     keys: AI_MOCK_KEYS,
   },
 ];
@@ -169,10 +169,10 @@ const SECTIONS: SectionConfig[] = [
 // ─── 기본 모델 단가 ───────────────────────────────────────────────────────────
 
 const DEFAULT_MODEL_PRICING: Record<ModelKey, ModelPricing> = {
-  'gpt-5.1': { inputPricePerM: 2.0, outputPricePerM: 8.0 },
-  'gpt-5.4': { inputPricePerM: 4.0, outputPricePerM: 16.0 },
+  'gpt-5.1': { inputPricePerM: 1.25, outputPricePerM: 10.0 },
+  'gpt-5.5': { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
 };
-const MODEL_KEYS: ModelKey[] = ['gpt-5.1', 'gpt-5.4'];
+const MODEL_KEYS: ModelKey[] = ['gpt-5.1', 'gpt-5.5'];
 
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
 
@@ -232,8 +232,9 @@ export default function ConPricingPage() {
     if (!tokens) return null;
     const mp = modelPricing[tokens.model];
     if (!mp) return null;
-    const usd = (tokens.in / 1_000_000) * mp.inputPricePerM
-              + (tokens.out / 1_000_000) * mp.outputPricePerM;
+    const steps = tokens.steps ?? 1;
+    const usd = ((tokens.in / 1_000_000) * mp.inputPricePerM
+               + (tokens.out / 1_000_000) * mp.outputPricePerM) * steps;
     return Math.round(usd * exchangeRate * 10) / 10;
   };
 
@@ -318,7 +319,8 @@ export default function ConPricingPage() {
           {tokens
             ? <span className="text-[11px] font-bold text-slate-500 tabular-nums whitespace-nowrap">
                 {tokens.in.toLocaleString()} / {tokens.out.toLocaleString()}
-                {tokens.model === 'gpt-5.4' && <span className="ml-1 text-[9px] text-amber-500 font-black">5.4</span>}
+                {tokens.model === 'gpt-5.5' && <span className="ml-1 text-[9px] text-amber-500 font-black">5.5</span>}
+                {(tokens.steps ?? 1) > 1 && <span className="ml-1 text-[9px] text-orange-400 font-black">×{tokens.steps}</span>}
               </span>
             : <span className="text-slate-700 text-xs">—</span>
           }
