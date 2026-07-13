@@ -26,6 +26,14 @@ interface SectionConfig {
   noToggle?: boolean;
   note?: string;
   model?: string;
+  hasCost?: boolean; // 원가 계산기 적용 여부
+}
+
+interface SectionCostConfig {
+  avgInputTokens: number;
+  avgOutputTokens: number;
+  inputPricePerM: number;  // USD per 1M input tokens
+  outputPricePerM: number; // USD per 1M output tokens
 }
 
 const WB_TYPE_LABELS: Record<string, string> = {
@@ -85,7 +93,8 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'pdf', label: '지문분석', color: 'text-teal-400',
-    model: 'gpt-4.1-mini',
+    model: 'gpt-5.1',
+    hasCost: true,
     subsections: [
       { label: '직접 입력', keys: ['pdf_analysis_direct'] },
       { label: '모의고사',  keys: ['pdf_analysis_mock'] },
@@ -94,6 +103,7 @@ const SECTIONS: SectionConfig[] = [
   {
     key: 'workbook', label: '워크북', color: 'text-rose-400',
     model: 'gpt-5.1',
+    hasCost: true,
     subsections: [
       { label: '직접 입력', keys: WB_DIRECT_KEYS },
       { label: '모의고사',  keys: WB_MOCK_KEYS },
@@ -102,15 +112,33 @@ const SECTIONS: SectionConfig[] = [
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
     model: 'gpt-5.1 (어법: gpt-5.4)',
+    hasCost: true,
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
     model: 'gpt-5.1 (어법: gpt-5.4)',
+    hasCost: true,
     keys: AI_MOCK_KEYS,
   },
 ];
 
+const DEFAULT_SECTION_COSTS: Record<string, SectionCostConfig> = {
+  pdf:        { avgInputTokens: 3000, avgOutputTokens: 4000, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  workbook:   { avgInputTokens: 1500, avgOutputTokens: 2000, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  exam_direct:{ avgInputTokens: 2000, avgOutputTokens: 1500, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  exam_mock:  { avgInputTokens: 2000, avgOutputTokens: 1500, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+};
+
+const SECTION_LABELS: Record<string, string> = {
+  pdf: '지문분석', workbook: '워크북', exam_direct: '실전 변형(직접)', exam_mock: '실전 변형(모의)',
+};
+
+function calcCostKRW(cfg: SectionCostConfig, exchangeRate: number): number {
+  const usd = (cfg.avgInputTokens / 1_000_000) * cfg.inputPricePerM
+            + (cfg.avgOutputTokens / 1_000_000) * cfg.outputPricePerM;
+  return Math.round(usd * exchangeRate * 10) / 10;
+}
 
 export default function ConPricingPage() {
   const [pricing, setPricing] = useState<PricingItem[]>([]);
@@ -120,6 +148,10 @@ export default function ConPricingPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<Record<string, string>>({});
   const [inserting, setInserting] = useState<string | null>(null);
+
+  // 원가 계산기 상태
+  const [exchangeRate, setExchangeRate] = useState(1380);
+  const [sectionCosts, setSectionCosts] = useState<Record<string, SectionCostConfig>>(DEFAULT_SECTION_COSTS);
 
   useEffect(() => {
     fetch('/api/superadmin/credits/pricing')
@@ -195,11 +227,21 @@ export default function ConPricingPage() {
     } finally { setToggling(null); }
   }, []);
 
-  const renderRow = (item: PricingItem, showToggle: boolean) => {
+  const updateSectionCost = (sectionKey: string, field: keyof SectionCostConfig, value: number) => {
+    setSectionCosts(prev => ({
+      ...prev,
+      [sectionKey]: { ...prev[sectionKey], [field]: value },
+    }));
+  };
+
+  const renderRow = (item: PricingItem, showToggle: boolean, sectionKey?: string) => {
     const ev = editing[item.feature_key];
     const isSaving = saving === item.feature_key;
     const isToggling = toggling === item.feature_key;
     const msg = saveMsg[item.feature_key];
+    const costCfg = sectionKey ? sectionCosts[sectionKey] : undefined;
+    const costKRW = costCfg ? calcCostKRW(costCfg, exchangeRate) : null;
+
     return (
       <tr key={item.id} className={`border-t border-slate-800 transition-colors ${item.is_active ? 'hover:bg-slate-800/20' : 'opacity-40 hover:bg-slate-800/10'}`}>
         <td className="py-3 px-5">
@@ -209,6 +251,12 @@ export default function ConPricingPage() {
           <p className="text-[10px] text-slate-600 font-bold mt-0.5">{item.feature_key}</p>
         </td>
         <td className="py-3 px-5 text-slate-400 font-bold text-xs">{item.unit_description}</td>
+        <td className="py-3 px-5 text-center">
+          {costKRW !== null
+            ? <span className="font-bold text-slate-400 text-xs">~{costKRW.toLocaleString()}원</span>
+            : <span className="text-slate-600 text-xs">—</span>
+          }
+        </td>
         <td className="py-3 px-5 text-center">
           {ev !== undefined ? (
             <input type="number" min="0" value={ev}
@@ -254,33 +302,38 @@ export default function ConPricingPage() {
     );
   };
 
-  const renderTable = (keys: string[], showToggle: boolean) => {
-    const colCount = showToggle ? 6 : 5;
+  const renderMissingRow = (k: string, showToggle: boolean, colCount: number) => {
+    const isIns = inserting === k;
+    const name = k.startsWith('wb_') ? getWbLabel(k) : k;
+    return (
+      <tr key={k} className="border-t border-slate-800 opacity-50">
+        <td className="py-3 px-5">
+          <p className="font-black text-slate-400 text-sm">{name}</p>
+          <p className="text-[10px] text-slate-600 font-bold mt-0.5">{k}</p>
+        </td>
+        <td className="py-3 px-5 text-slate-600 font-bold text-xs">1회당</td>
+        <td className="py-3 px-5 text-center"><span className="text-slate-600 text-xs">—</span></td>
+        <td className="py-3 px-5 text-center"><span className="font-black text-slate-600 text-xs">미설정</span></td>
+        {showToggle && <td></td>}
+        <td className="py-3 px-5 text-center">
+          <button onClick={() => handleInsert(k)} disabled={isIns}
+            className="px-3 py-1 text-xs font-black bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition-all disabled:opacity-50">
+            {isIns ? '…' : '추가'}
+          </button>
+        </td>
+        <td></td>
+      </tr>
+    );
+  };
+
+  const renderTable = (keys: string[], showToggle: boolean, sectionKey?: string) => {
+    const colCount = showToggle ? 7 : 6;
     return (
       <>
         {keys.map(k => {
           const item = pricingMap[k];
-          if (item) return renderRow(item, showToggle);
-          const isIns = inserting === k;
-          const name = k.startsWith('wb_') ? getWbLabel(k) : k;
-          return (
-            <tr key={k} className="border-t border-slate-800 opacity-50">
-              <td className="py-3 px-5">
-                <p className="font-black text-slate-400 text-sm">{name}</p>
-                <p className="text-[10px] text-slate-600 font-bold mt-0.5">{k}</p>
-              </td>
-              <td className="py-3 px-5 text-slate-600 font-bold text-xs">1회당</td>
-              <td className="py-3 px-5 text-center"><span className="font-black text-slate-600 text-xs">미설정</span></td>
-              {showToggle && <td></td>}
-              <td className="py-3 px-5 text-center">
-                <button onClick={() => handleInsert(k)} disabled={isIns}
-                  className="px-3 py-1 text-xs font-black bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition-all disabled:opacity-50">
-                  {isIns ? '…' : '추가'}
-                </button>
-              </td>
-              <td></td>
-            </tr>
-          );
+          if (item) return renderRow(item, showToggle, sectionKey);
+          return renderMissingRow(k, showToggle, colCount);
         })}
       </>
     );
@@ -288,7 +341,7 @@ export default function ConPricingPage() {
 
   const renderSectionCard = (section: SectionConfig) => {
     const showToggle = !section.noToggle;
-    const colCount = showToggle ? 6 : 5;
+    const colCount = showToggle ? 7 : 6;
     const hasItems = section.subsections
       ? section.subsections.some(sub => sub.keys.some(k => pricingMap[k]))
       : (section.keys ?? []).some(k => pricingMap[k]);
@@ -311,6 +364,7 @@ export default function ConPricingPage() {
             <tr>
               <th className="py-2 px-5 text-left text-xs font-black text-slate-500">기능</th>
               <th className="py-2 px-5 text-left text-xs font-black text-slate-500">단위</th>
+              <th className="py-2 px-5 text-center text-xs font-black text-slate-500">원가</th>
               <th className="py-2 px-5 text-center text-xs font-black text-slate-500">단가 (C)</th>
               {showToggle && <th className="py-2 px-5 text-center text-xs font-black text-slate-500">활성</th>}
               <th className="py-2 px-5 text-center text-xs font-black text-slate-500">수정</th>
@@ -326,11 +380,11 @@ export default function ConPricingPage() {
                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">└ {sub.label}</span>
                     </td>
                   </tr>
-                  {renderTable(sub.keys, showToggle)}
+                  {renderTable(sub.keys, showToggle, section.hasCost ? section.key : undefined)}
                 </>
               ))
             ) : (
-              renderTable(section.keys ?? [], showToggle)
+              renderTable(section.keys ?? [], showToggle, section.hasCost ? section.key : undefined)
             )}
             {!hasItems && (
               <tr><td colSpan={colCount} className="py-4 px-5 text-xs text-slate-500 font-bold text-center">
@@ -381,6 +435,80 @@ export default function ConPricingPage() {
           ))}
         </div>
         <p className="text-xs text-slate-500 font-bold">위 패키지 정보는 참고용입니다. 실제 충전은 학원 관리 페이지에서 직접 진행해주세요.</p>
+      </div>
+
+      {/* 원가 계산기 */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+        <div>
+          <h3 className="text-sm font-black text-white">🧮 원가 계산기</h3>
+          <p className="text-xs text-slate-500 font-bold mt-1">
+            토큰 단가와 평균 사용량을 입력하면 위 테이블의 원가 컬럼이 자동 계산됩니다. 이 값은 저장되지 않으며 참고용입니다.
+          </p>
+        </div>
+
+        {/* 환율 */}
+        <div className="flex items-center gap-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+          <span className="text-xs font-black text-slate-300 whitespace-nowrap">💱 환율 (원/달러)</span>
+          <input
+            type="number" min="0" step="10" value={exchangeRate}
+            onChange={e => setExchangeRate(Number(e.target.value))}
+            className="w-28 text-center px-2 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white font-black focus:outline-none text-sm"
+          />
+          <span className="text-xs text-slate-500 font-bold">KRW / 1 USD</span>
+        </div>
+
+        {/* 섹션별 토큰 설정 */}
+        <div className="space-y-3">
+          {SECTIONS.filter(s => s.hasCost).map(section => {
+            const cfg = sectionCosts[section.key];
+            if (!cfg) return null;
+            const costKRW = calcCostKRW(cfg, exchangeRate);
+            return (
+              <div key={section.key} className="p-4 bg-slate-800/40 rounded-xl border border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-black ${section.color}`}>{SECTION_LABELS[section.key] ?? section.label}</span>
+                    {section.model && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-black bg-slate-700 text-slate-400 rounded border border-slate-600">
+                        {section.model}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-slate-400">원가 </span>
+                    <span className="text-sm font-black text-emerald-400">~{costKRW.toLocaleString()}원</span>
+                    <span className="text-[10px] text-slate-500 font-bold ml-1">/ 1회</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {([
+                    { field: 'inputPricePerM'  as const, label: '입력 토큰 단가', suffix: 'USD/1M' },
+                    { field: 'outputPricePerM' as const, label: '출력 토큰 단가', suffix: 'USD/1M' },
+                    { field: 'avgInputTokens'  as const, label: '평균 입력 토큰', suffix: 'tokens' },
+                    { field: 'avgOutputTokens' as const, label: '평균 출력 토큰', suffix: 'tokens' },
+                  ]).map(({ field, label, suffix }) => (
+                    <div key={field} className="space-y-1">
+                      <p className="text-[10px] font-black text-slate-500">{label}</p>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number" min="0" step={field.includes('Price') ? 0.1 : 100}
+                          value={cfg[field]}
+                          onChange={e => updateSectionCost(section.key, field, Number(e.target.value))}
+                          className="w-full text-center px-2 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white font-black focus:outline-none text-xs"
+                        />
+                        <span className="text-[9px] text-slate-600 font-bold whitespace-nowrap">{suffix}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="text-[10px] text-slate-600 font-bold">
+          * 원가 = (평균입력토큰 / 1M × 입력단가 + 평균출력토큰 / 1M × 출력단가) × 환율
+        </p>
       </div>
     </div>
   );
