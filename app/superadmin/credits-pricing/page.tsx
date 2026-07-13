@@ -18,7 +18,7 @@ interface SectionConfig {
   subsections?: SubSection[]; keys?: string[];
   noToggle?: boolean; note?: string; model?: string;
 }
-type ModelKey = 'gpt-5.1' | 'gpt-5.5';
+type ModelKey = 'gpt-5.1' | 'gpt-5.5' | 'gpt-5.6-luna';
 interface ModelPricing { inputPricePerM: number; outputPricePerM: number }
 interface FeatureTokens { in: number; out: number; model: ModelKey; steps?: number }
 
@@ -99,29 +99,30 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
   // 워크북 모의고사 (지문 100토큰 더 긺)
   ...Object.fromEntries(Object.entries(WB_TOKENS).map(([k, v]) => [`wb_mock_${k}`, { ...v, in: v.in + 100 }])),
 
-  // 실전 변형 직접 입력 — 입력: 공통원칙+유형규칙+지문, 출력: modified_passage+선택지+해설
-  // 스크린샷 실측 기준: 나머지 8유형 입력 ~1,500 / 출력 ~1,500
-  ai_type_topic_title:        T(1500, 1500),              // 주제/제목: modified_passage 없음, 해설 verbose
-  ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2), // 어법: gpt-5.5, 2단계, 실측 기준
-  ai_type_vocab_paraphrase:   T(1500, 1500),              // 어휘 낱말 쓰임: modified_passage 포함
-  ai_type_vocab_blank:        T(1500, 1500),              // 어휘 (a)(b): modified_passage 포함
-  ai_type_fill_blank:         T(1500, 1500),              // 빈칸 추론: modified_passage 포함
-  ai_type_summary:            T(1500, 1500),              // 요약문 완성: modified_passage 포함
-  ai_type_flow:               T(1500, 1500),              // 흐름: modified_passage 포함
-  ai_type_phrase_meaning:     T(1500, 1500),              // 어구 의미 추론
-  ai_type_sentence_order:     T(1500, 1500),              // 순서 배열: 단락 분리 포함
-  ai_type_sentence_insertion: T(1500, 1500),              // 문장 삽입: modified_passage 포함
+  // 실전 변형 직접 입력
+  // 2단계(MULTI_STEP): grammar/vocab_paraphrase/vocab_blank/fill_blank/summary/phrase_meaning/sentence_order
+  // 1단계: topic_title/flow/sentence_insertion
+  ai_type_topic_title:        T(1500, 1500),                       // 1단계
+  ai_type_grammar:            T(4500, 5500, 'gpt-5.6-luna', 2),    // 2단계 · gpt-5.6-luna
+  ai_type_vocab_paraphrase:   T(1500, 1500, 'gpt-5.1', 2),         // 2단계
+  ai_type_vocab_blank:        T(1500, 1500, 'gpt-5.1', 2),         // 2단계
+  ai_type_fill_blank:         T(1500, 1500, 'gpt-5.1', 2),         // 2단계
+  ai_type_summary:            T(1500, 1500, 'gpt-5.1', 2),         // 2단계
+  ai_type_flow:               T(1500, 1500),                       // 1단계
+  ai_type_phrase_meaning:     T(1500, 1500, 'gpt-5.1', 2),         // 2단계
+  ai_type_sentence_order:     T(1500, 1500, 'gpt-5.1', 2),         // 2단계
+  ai_type_sentence_insertion: T(1500, 1500),                       // 1단계
 
   // 실전 변형 모의고사 (모의고사 지문 약간 더 긺)
   mock_ai_type_topic_title:        T(1600, 1500),
-  mock_ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2),
-  mock_ai_type_vocab_paraphrase:   T(1600, 1500),
-  mock_ai_type_vocab_blank:        T(1600, 1500),
-  mock_ai_type_fill_blank:         T(1600, 1500),
-  mock_ai_type_summary:            T(1600, 1500),
+  mock_ai_type_grammar:            T(4500, 5500, 'gpt-5.6-luna', 2),
+  mock_ai_type_vocab_paraphrase:   T(1600, 1500, 'gpt-5.1', 2),
+  mock_ai_type_vocab_blank:        T(1600, 1500, 'gpt-5.1', 2),
+  mock_ai_type_fill_blank:         T(1600, 1500, 'gpt-5.1', 2),
+  mock_ai_type_summary:            T(1600, 1500, 'gpt-5.1', 2),
   mock_ai_type_flow:               T(1600, 1500),
-  mock_ai_type_phrase_meaning:     T(1600, 1500),
-  mock_ai_type_sentence_order:     T(1600, 1500),
+  mock_ai_type_phrase_meaning:     T(1600, 1500, 'gpt-5.1', 2),
+  mock_ai_type_sentence_order:     T(1600, 1500, 'gpt-5.1', 2),
   mock_ai_type_sentence_insertion: T(1600, 1500),
 };
 
@@ -158,12 +159,12 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
-    model: 'gpt-5.1 (어법: gpt-5.6-luna × 2단계)',
+    model: 'gpt-5.1 × 2단계 (어법만 gpt-5.6-luna) / topic_title·flow·insertion 1단계',
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
-    model: 'gpt-5.1 (어법: gpt-5.6-luna × 2단계)',
+    model: 'gpt-5.1 × 2단계 (어법만 gpt-5.6-luna) / topic_title·flow·insertion 1단계',
     keys: AI_MOCK_KEYS,
   },
 ];
@@ -171,10 +172,11 @@ const SECTIONS: SectionConfig[] = [
 // ─── 기본 모델 단가 ───────────────────────────────────────────────────────────
 
 const DEFAULT_MODEL_PRICING: Record<ModelKey, ModelPricing> = {
-  'gpt-5.1': { inputPricePerM: 1.25, outputPricePerM: 10.0 },
-  'gpt-5.5': { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
+  'gpt-5.1':      { inputPricePerM: 1.25, outputPricePerM: 10.0 },
+  'gpt-5.5':      { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
+  'gpt-5.6-luna': { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
 };
-const MODEL_KEYS: ModelKey[] = ['gpt-5.1', 'gpt-5.5'];
+const MODEL_KEYS: ModelKey[] = ['gpt-5.1', 'gpt-5.5', 'gpt-5.6-luna'];
 
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
 
