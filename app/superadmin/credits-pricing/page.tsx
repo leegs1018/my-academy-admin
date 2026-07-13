@@ -65,27 +65,28 @@ const T = (i: number, o: number, m: ModelKey = 'gpt-5.1', steps = 1): FeatureTok
 
 // 워크북 base (wb_direct_* 접두사 없는 순수 타입명)
 const WB_TOKENS: Record<string, FeatureTokens> = {
-  passage_translation:   T(700,  600),   // 지문 해석지: 지문+프롬프트 / 문장별 한글 번역
-  passage_analysis:      T(700,  2000),  // 구문분석: 출력이 가장 큼 (전체 문장 파싱 JSON)
-  translation:           T(700,  400),   // 문장 해석: 문장별 번역 리스트
-  word_order:            T(700,  500),   // 단어 배열: 문장별 scrambled 리스트
-  english_writing:       T(700,  300),   // 영작: 힌트+정답 간결
-  vocab_choice:          T(700,  1500),  // 어휘고르기: 지문 전체 + [A/B] 선택지
-  vocab_fill:            T(700,  1200),  // 어휘채우기: 지문 전체 + 빈칸 번호
-  grammar_choice:        T(700,  1000),  // 어법고르기: 지문 전체 + (A)(B) 선택지
-  grammar_correct:       T(700,  800),   // 어법고치기: 지문 전체 + 오류 태깅
-  grammar_correct_adv:   T(700,  1000),  // 어법고치기(심화): 더 많은 오류 포함
-  combo_grammar_order:   T(800,  1500),  // 어법+순서배열: 두 섹션 합산
-  combo_vocab_fill:      T(800,  1500),  // 영작+어휘: 두 섹션 합산
-  summary_sentence:      T(700,  500),   // 요약문 서술형: 빈칸 요약문
-  paragraph_order:       T(700,  600),   // 문단 배열: shuffled 단락 리스트
-  sentence_insertion:    T(700,  600),   // 문장 삽입: 지문 + 삽입 문장
-  suneung_vocab_right:   T(700,  800),   // 수능 어휘(맞는): 지문 + 선택지
-  suneung_vocab_wrong:   T(700,  800),   // 수능 어휘(틀린): 지문 + 선택지
-  suneung_grammar_right: T(700,  800),   // 수능 어법(맞는): 지문 + 선택지
-  suneung_grammar_wrong: T(700,  800),   // 수능 어법(틀린): 지문 + 선택지
-  combo_vocab_grammar:   T(800,  1500),  // 어휘+어법: 두 섹션 합산
-  combo_grammar_insert:  T(800,  1500),  // 어법+문장삽입: 두 섹션 합산
+  // 출력 큰 것: passage_translation은 문장 전체 + vocab_table 15~25개 (동의어/반의어 포함)
+  passage_translation:   T(700,  1500),  // 지문 해석지: sentences JSON + vocab_table(15~25개) → 출력 큼
+  passage_analysis:      T(700,  2000),  // 구문분석: 전체 문장 chunk JSON → 가장 큰 출력
+  translation:           T(600,   500),  // 문장 해석: 10~15문장 en/ko 쌍
+  word_order:            T(600,   600),  // 단어 배열: 문장별 scrambled 배열 + answer
+  english_writing:       T(600,   500),  // 영작: hint_start/hint_end + answer × 10~12문장
+  vocab_choice:          T(650,   900),  // 어휘고르기: 지문에 N[A/B] 삽입 + answer_key
+  vocab_fill:            T(650,   900),  // 어휘채우기: sentences JSON (en/ko + 빈칸) + answer_key
+  grammar_choice:        T(650,   900),  // 어법고르기: 지문에 N[A/B] 삽입 + answer_key
+  grammar_correct:       T(650,   700),  // 어법고치기: 지문에 N[word] 삽입 + answer_key
+  grammar_correct_adv:   T(650,   700),  // 어법고치기(심화): sentences JSON + answer_key
+  combo_grammar_order:   T(800,  1200),  // 문단배열+어법수정: paragraphs × 5 + grammar_errors × 3
+  combo_vocab_fill:      T(800,  1200),  // 어휘+문장완성: passage + q1_choices + q2_items
+  summary_sentence:      T(600,   400),  // 요약문 서술형: 짧은 요약문 + 빈칸 + answer_key
+  paragraph_order:       T(600,   700),  // 문단 배열: fixed + shuffled × 3~4 + answer
+  sentence_insertion:    T(600,   500),  // 문장 삽입: insert_sentence + passage(①~⑤) + answer
+  suneung_vocab_right:   T(650,   700),  // 수능 어휘(맞는): passage + choices × 5 + answer
+  suneung_vocab_wrong:   T(650,   600),  // 수능 어휘(틀린): passage + answer_key
+  suneung_grammar_right: T(650,   700),  // 수능 어법(맞는): passage + choices × 5 + answer
+  suneung_grammar_wrong: T(650,   600),  // 수능 어법(틀린): passage + answer_key
+  combo_vocab_grammar:   T(800,  1000),  // 어휘+어법: passage(A~E + ①~⑤) + q1/q2 choices
+  combo_grammar_insert:  T(800,  1000),  // 어법+문장삽입: passage((A)~(E) + ①~⑤) + grammar + insert
 };
 
 const FEATURE_TOKENS: Record<string, FeatureTokens> = {
@@ -98,29 +99,30 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
   // 워크북 모의고사 (지문 100토큰 더 긺)
   ...Object.fromEntries(Object.entries(WB_TOKENS).map(([k, v]) => [`wb_mock_${k}`, { ...v, in: v.in + 100 }])),
 
-  // 실전 변형 직접 입력
-  ai_type_topic_title:        T(1500,  700),              // 주제/제목: 선택지 5개 + 해설
-  ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2), // 어법: gpt-5.5, 2단계 생성, 토큰 대형
-  ai_type_vocab_paraphrase:   T(1500,  800),              // 어휘 낱말 쓰임: 선택지 + 해설
-  ai_type_vocab_blank:        T(1500,  700),              // 어휘 (a)(b) 빈칸: 2빈칸 선택지
-  ai_type_fill_blank:         T(1600,  800),              // 빈칸 추론: 지문 변형 + 선택지
-  ai_type_summary:            T(1600,  800),              // 요약문 완성: 요약 + 선택지
-  ai_type_flow:               T(1600,  900),              // 흐름: 지문 변형 + 선택지
-  ai_type_phrase_meaning:     T(1500,  700),              // 어구 의미 추론: 선택지
-  ai_type_sentence_order:     T(1600,  900),              // 순서 배열: 단락 분리 + 선택지
-  ai_type_sentence_insertion: T(1600,  900),              // 문장 삽입: 지문 변형 + 선택지
+  // 실전 변형 직접 입력 — 입력: 공통원칙+유형규칙+지문, 출력: modified_passage+선택지+해설
+  // 스크린샷 실측 기준: 나머지 8유형 입력 ~1,500 / 출력 ~1,500
+  ai_type_topic_title:        T(1500, 1500),              // 주제/제목: modified_passage 없음, 해설 verbose
+  ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2), // 어법: gpt-5.5, 2단계, 실측 기준
+  ai_type_vocab_paraphrase:   T(1500, 1500),              // 어휘 낱말 쓰임: modified_passage 포함
+  ai_type_vocab_blank:        T(1500, 1500),              // 어휘 (a)(b): modified_passage 포함
+  ai_type_fill_blank:         T(1500, 1500),              // 빈칸 추론: modified_passage 포함
+  ai_type_summary:            T(1500, 1500),              // 요약문 완성: modified_passage 포함
+  ai_type_flow:               T(1500, 1500),              // 흐름: modified_passage 포함
+  ai_type_phrase_meaning:     T(1500, 1500),              // 어구 의미 추론
+  ai_type_sentence_order:     T(1500, 1500),              // 순서 배열: 단락 분리 포함
+  ai_type_sentence_insertion: T(1500, 1500),              // 문장 삽입: modified_passage 포함
 
   // 실전 변형 모의고사 (모의고사 지문 약간 더 긺)
-  mock_ai_type_topic_title:        T(1600,  700),
+  mock_ai_type_topic_title:        T(1600, 1500),
   mock_ai_type_grammar:            T(4500, 5500, 'gpt-5.5', 2),
-  mock_ai_type_vocab_paraphrase:   T(1600,  800),
-  mock_ai_type_vocab_blank:        T(1600,  700),
-  mock_ai_type_fill_blank:         T(1700,  800),
-  mock_ai_type_summary:            T(1700,  800),
-  mock_ai_type_flow:               T(1700,  900),
-  mock_ai_type_phrase_meaning:     T(1600,  700),
-  mock_ai_type_sentence_order:     T(1700,  900),
-  mock_ai_type_sentence_insertion: T(1700,  900),
+  mock_ai_type_vocab_paraphrase:   T(1600, 1500),
+  mock_ai_type_vocab_blank:        T(1600, 1500),
+  mock_ai_type_fill_blank:         T(1600, 1500),
+  mock_ai_type_summary:            T(1600, 1500),
+  mock_ai_type_flow:               T(1600, 1500),
+  mock_ai_type_phrase_meaning:     T(1600, 1500),
+  mock_ai_type_sentence_order:     T(1600, 1500),
+  mock_ai_type_sentence_insertion: T(1600, 1500),
 };
 
 // ─── 섹션 설정 ────────────────────────────────────────────────────────────────
