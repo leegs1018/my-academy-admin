@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface PricingItem {
   id: string;
@@ -123,11 +123,15 @@ const SECTIONS: SectionConfig[] = [
   },
 ];
 
+// 프롬프트 분석 기반 추정값
+// pdf: 시스템 프롬프트(~850) + 지문(~250) + JSON 템플릿(~400) = 입력 ~1500 / 출력: 변형지문+T/F10+요약+어휘표 = ~2200
+// workbook: 헤더(~100) + 지문(~250) + 유형별 규칙(~350) = 입력 ~700 / 출력: 유형별 단일 결과 = ~800
+// exam: CSAT 원칙(~500) + 지문(~250) + 유형별 규칙(~1000×2유형) = 입력 ~1800 / 출력: 문제+선택지+해설 = ~1200
 const DEFAULT_SECTION_COSTS: Record<string, SectionCostConfig> = {
-  pdf:        { avgInputTokens: 3000, avgOutputTokens: 4000, inputPricePerM: 2.0, outputPricePerM: 8.0 },
-  workbook:   { avgInputTokens: 1500, avgOutputTokens: 2000, inputPricePerM: 2.0, outputPricePerM: 8.0 },
-  exam_direct:{ avgInputTokens: 2000, avgOutputTokens: 1500, inputPricePerM: 2.0, outputPricePerM: 8.0 },
-  exam_mock:  { avgInputTokens: 2000, avgOutputTokens: 1500, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  pdf:        { avgInputTokens: 1500, avgOutputTokens: 2200, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  workbook:   { avgInputTokens: 700,  avgOutputTokens: 800,  inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  exam_direct:{ avgInputTokens: 1800, avgOutputTokens: 1200, inputPricePerM: 2.0, outputPricePerM: 8.0 },
+  exam_mock:  { avgInputTokens: 1800, avgOutputTokens: 1200, inputPricePerM: 2.0, outputPricePerM: 8.0 },
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -152,13 +156,46 @@ export default function ConPricingPage() {
   // 원가 계산기 상태
   const [exchangeRate, setExchangeRate] = useState(1380);
   const [sectionCosts, setSectionCosts] = useState<Record<string, SectionCostConfig>>(DEFAULT_SECTION_COSTS);
+  const [costSaveStatus, setCostSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
-    fetch('/api/superadmin/credits/pricing')
-      .then(r => r.json())
-      .then(d => { setPricing(d.pricing || []); setLoading(false); })
-      .catch(() => setLoading(false));
+    // pricing + cost_calc_config 동시 로드
+    Promise.all([
+      fetch('/api/superadmin/credits/pricing').then(r => r.json()),
+      fetch('/api/superadmin/site-settings?keys=cost_calc_config').then(r => r.json()),
+    ]).then(([pricingData, settingsData]) => {
+      setPricing(pricingData.pricing || []);
+      const raw = settingsData.settings?.cost_calc_config;
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw);
+          if (typeof saved.exchangeRate === 'number') setExchangeRate(saved.exchangeRate);
+          if (saved.sectionCosts) setSectionCosts({ ...DEFAULT_SECTION_COSTS, ...saved.sectionCosts });
+        } catch { /* JSON 파싱 실패 시 기본값 사용 */ }
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
+
+  // 원가 계산기 변경 시 1초 뒤 자동 저장
+  useEffect(() => {
+    if (isInitialLoad.current) { isInitialLoad.current = false; return; }
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setCostSaveStatus('saving');
+    autoSaveTimer.current = setTimeout(() => {
+      const config = JSON.stringify({ exchangeRate, sectionCosts });
+      fetch('/api/superadmin/site-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: { cost_calc_config: config } }),
+      }).then(() => {
+        setCostSaveStatus('saved');
+        setTimeout(() => setCostSaveStatus('idle'), 2000);
+      }).catch(() => setCostSaveStatus('idle'));
+    }, 1000);
+  }, [exchangeRate, sectionCosts]);
 
   const pricingMap = Object.fromEntries(pricing.map(p => [p.feature_key, p]));
 
@@ -439,11 +476,17 @@ export default function ConPricingPage() {
 
       {/* 원가 계산기 */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
-        <div>
-          <h3 className="text-sm font-black text-white">🧮 원가 계산기</h3>
-          <p className="text-xs text-slate-500 font-bold mt-1">
-            토큰 단가와 평균 사용량을 입력하면 위 테이블의 원가 컬럼이 자동 계산됩니다. 이 값은 저장되지 않으며 참고용입니다.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black text-white">🧮 원가 계산기</h3>
+            <p className="text-xs text-slate-500 font-bold mt-1">
+              토큰 단가와 평균 사용량을 입력하면 위 테이블의 원가 컬럼이 자동 계산됩니다. 변경 시 자동 저장됩니다.
+            </p>
+          </div>
+          <div className="shrink-0 text-xs font-black pt-1">
+            {costSaveStatus === 'saving' && <span className="text-slate-400">저장 중...</span>}
+            {costSaveStatus === 'saved'  && <span className="text-emerald-400">✓ 저장됨</span>}
+          </div>
         </div>
 
         {/* 환율 */}
