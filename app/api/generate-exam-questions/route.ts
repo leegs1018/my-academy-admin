@@ -1494,9 +1494,9 @@ export async function POST(request: Request) {
     const CIRCLES = ['①','②','③','④','⑤'];
 
     const TYPE_MODEL_MAP: Record<string, string> = {
-      grammar: 'gpt-5.4',
+      grammar: 'gpt-5.6-luna',
     };
-    const DEFAULT_MODEL = 'gpt-5.6-luna';
+    const DEFAULT_MODEL = 'gpt-5.1';
 
     const TYPE_TOKENS_MAP: Record<string, number> = {
       grammar: 4000,
