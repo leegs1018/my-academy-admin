@@ -1496,7 +1496,7 @@ export async function POST(request: Request) {
     const TYPE_MODEL_MAP: Record<string, string> = {
       grammar: 'gpt-5.4',
     };
-    const DEFAULT_MODEL = 'gpt-5.1';
+    const DEFAULT_MODEL = 'gpt-5.6-luna';
 
     const TYPE_TOKENS_MAP: Record<string, number> = {
       grammar: 4000,

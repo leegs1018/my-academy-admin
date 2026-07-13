@@ -158,12 +158,12 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
-    model: 'gpt-5.1 (어법: gpt-5.5 × 2단계)',
+    model: 'gpt-5.6-luna (어법: gpt-5.5 × 2단계)',
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
-    model: 'gpt-5.1 (어법: gpt-5.5 × 2단계)',
+    model: 'gpt-5.6-luna (어법: gpt-5.5 × 2단계)',
     keys: AI_MOCK_KEYS,
   },
 ];
