@@ -817,12 +817,8 @@ export async function POST(request: Request) {
     const results: unknown[] = [];
     for (const text of validPassages) {
       const prompt = buildPrompt(text.trim(), type, diff);
-      // passage_translation·combo_vocab_fill은 출력량이 많아 gpt-5.6-luna에서 401 발생 → gpt-5.1 사용
-      const useModel = (type === 'passage_translation' || type === 'combo_vocab_fill')
-        ? 'gpt-5.1'
-        : 'gpt-5.6-luna';
       const response = await client.chat.completions.create({
-        model: useModel,
+        model: 'gpt-5.1',
         max_completion_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       });

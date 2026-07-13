@@ -61,7 +61,7 @@ const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type
 
 // ─── 유형별 평균 토큰 (프롬프트 분석 기반 추정) ──────────────────────────────
 
-const T = (i: number, o: number, m: ModelKey = 'gpt-5.6-luna', steps = 1): FeatureTokens => ({ in: i, out: o, model: m, steps });
+const T = (i: number, o: number, m: ModelKey = 'gpt-5.1', steps = 1): FeatureTokens => ({ in: i, out: o, model: m, steps });
 
 // 워크북 base (wb_direct_* 접두사 없는 순수 타입명)
 const WB_TOKENS: Record<string, FeatureTokens> = {
@@ -143,7 +143,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'pdf', label: '지문분석', color: 'text-teal-400',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-5.1',
     subsections: [
       { label: '직접 입력', keys: ['pdf_analysis_direct'] },
       { label: '모의고사',  keys: ['pdf_analysis_mock'] },
@@ -151,7 +151,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'workbook', label: '워크북', color: 'text-rose-400',
-    model: 'gpt-5.6-luna',
+    model: 'gpt-5.1',
     subsections: [
       { label: '직접 입력', keys: WB_DIRECT_KEYS },
       { label: '모의고사',  keys: WB_MOCK_KEYS },
@@ -159,12 +159,12 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
-    model: 'gpt-5.6-luna × 2단계 / topic_title·flow·insertion 1단계',
+    model: 'gpt-5.1 × 2단계 (어법: gpt-5.6-luna × 2단계) / topic_title·flow·insertion 1단계',
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
-    model: 'gpt-5.6-luna × 2단계 / topic_title·flow·insertion 1단계',
+    model: 'gpt-5.1 × 2단계 (어법: gpt-5.6-luna × 2단계) / topic_title·flow·insertion 1단계',
     keys: AI_MOCK_KEYS,
   },
 ];
