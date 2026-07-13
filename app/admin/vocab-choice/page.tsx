@@ -1371,7 +1371,7 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
         </span>
       );
     } else {
-      parts.push(<span key={m.index} style={{ background: '#FFF9C4', borderRadius: 3, padding: '1px 4px', margin: '0 1px' }}><span style={{ fontWeight: 900 }}>{num}</span>[<span style={{ fontWeight: 700 }}>{word}</span>]</span>);
+      parts.push(<span key={m.index}><span style={{ fontWeight: 900 }}>{num}</span>[<span style={{ fontWeight: 700 }}>{word}</span>]</span>);
     }
     last = m.index + m[0].length;
   }
