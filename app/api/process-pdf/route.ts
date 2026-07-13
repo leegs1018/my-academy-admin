@@ -113,15 +113,9 @@ ${text}
 3. answer_key: "1. T  2. F ..." 형식. 괄호 없음. 번호 복사가 깔끔하게.
 4. english_titles: 지문 내용에 알맞은 영어 제목 3가지. 조금 길게 (시험 문제 대비용). 괄호 안에 한글 번역 포함. 총 3개.
 5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역은 괄호(( ))나 이중 괄호 없이 순수 한글 텍스트로만 작성. 요약문에서 중요 어휘는 **볼드** 처리. 한글 번역에서 중요 어휘는 *이탤릭* 처리 (별표 1개). 총 3개.
-6. vocabulary_table: 지문 내에서 주제와 관련된 어휘를 10개 추출 (지문에 쓰인 어휘 그대로, 소문자 변환). 각 어휘마다 동의어 3개, 반의어 1개 생성. 모두 소문자.
-   필드별 언어 규칙 (반드시 준수):
-   - word: 반드시 영어 단어 (English only)
-   - meaning: 반드시 한글 뜻 (Korean only)
-   - syn1, syn2, syn3: 반드시 영어 유의어 (English only)
-   - syn1_m, syn2_m, syn3_m: 반드시 한글 뜻 (Korean only)
-   - antonym: 반드시 영어 반의어 (English only)
-   - antonym_m: 반드시 한글 뜻 (Korean only)
-   영어 필드에 한글 입력 금지. 한글 필드에 영어 입력 금지. 총 10행.`;
+6. vocabulary_table: 지문 전체에서 핵심 어휘 10개를 추출하여 vocabulary_table을 만듭니다.
+   각 항목: 원형(표제어), 뜻, 유의어 3개(+뜻), 반의어 1개(+뜻).
+   유의어/반의어가 없거나 부적절하면 빈 문자열("")로 둡니다. 총 10행.`;
 }
 
 function extractJson(text: string): string {
