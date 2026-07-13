@@ -11,7 +11,7 @@ type WorkbookType =
   | 'vocab_choice' | 'vocab_fill'
   | 'grammar_choice' | 'grammar_correct' | 'grammar_correct_adv'
   | 'translation' | 'word_order' | 'english_writing'
-  | 'passage_translation' | 'tf_questions' | 'title_summary'
+  | 'passage_translation' | 'tf_questions' | 'title_summary' // kept in type for route compatibility
   | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence' | 'passage_analysis'
   | 'suneung_vocab_right' | 'suneung_vocab_wrong'
   | 'suneung_grammar_right' | 'suneung_grammar_wrong'
@@ -64,8 +64,6 @@ const CATEGORIES = [
   { key: 'drill',    label: '지문 드릴',   types: [
     { key: 'passage_translation' as WorkbookType, label: '지문 해석지' },
     { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
-    { key: 'tf_questions' as WorkbookType,        label: 'T/F 문제' },
-    { key: 'title_summary' as WorkbookType,       label: '제목/요약문' },
     { key: 'translation' as WorkbookType,         label: '문장 해석' },
     { key: 'word_order' as WorkbookType,          label: '단어 배열' },
     { key: 'english_writing' as WorkbookType,     label: '영작 하기' },
@@ -2398,7 +2396,7 @@ export default function WorkbookPage() {
   const [wbDirectPricing, setWbDirectPricing] = useState<Record<string, number>>({});
   const [wbMockPricing, setWbMockPricing] = useState<Record<string, number>>({});
   const [pricingLoaded, setPricingLoaded] = useState(false);
-  const [wbPdfLayout, setWbPdfLayout] = useState<'passage' | 'type' | 'random'>('passage');
+  const [wbPdfLayout, setWbPdfLayout] = useState<'passage' | 'type'>('type');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingAnswerPdf, setDownloadingAnswerPdf] = useState(false);
   const [savingHistory, setSavingHistory] = useState(false);
@@ -2704,11 +2702,6 @@ export default function WorkbookPage() {
         allResults.forEach(({ results }, ti) => {
           results.forEach((r, pi) => { if (!r.error) ids.push(`wb-pdf-${suffix}-${ti}-${pi}`); });
         });
-      } else {
-        allResults.forEach(({ results }, ti) => {
-          results.forEach((r, pi) => { if (!r.error) ids.push(`wb-pdf-${suffix}-${ti}-${pi}`); });
-        });
-        for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
       }
       const blob = await captureAllToPdf(ids);
       const url = URL.createObjectURL(blob);
@@ -3108,9 +3101,8 @@ export default function WorkbookPage() {
               <p className="text-xs font-black text-slate-500 mb-2">📐 PDF 문제 배치</p>
               <div className="flex gap-2">
                 {([
-                  { key: 'passage', label: '지문별', desc: 'A지문 → B지문' },
-                  { key: 'type',    label: '유형별', desc: '어법 → 어휘 순서' },
-                  { key: 'random',  label: '무작위', desc: '지문·유형 섞기' },
+                  { key: 'type',    label: '기본 배치', desc: '유형 순서대로' },
+                  { key: 'passage', label: '지문별',   desc: 'A지문 → B지문' },
                 ] as const).map(({ key, label, desc }) => (
                   <button key={key} type="button" onClick={() => setWbPdfLayout(key)}
                     className={`flex-1 py-2 px-3 rounded-xl border-2 text-xs font-black transition-all text-center ${

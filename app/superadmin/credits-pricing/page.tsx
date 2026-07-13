@@ -34,7 +34,6 @@ const WB_TYPE_LABELS: Record<string, string> = {
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
   combo_grammar_order: '어법 서술형 + 순서배열', combo_vocab_fill: '영작 서술형 + 어휘', summary_sentence: '요약문 서술형',
-  tf_questions: 'T/F 문제', title_summary: '제목/요약문',
   paragraph_order: '문단 배열', sentence_insertion: '문장 삽입',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
@@ -49,7 +48,6 @@ const getWbLabel = (featureKey: string) => {
 const WB_DIRECT_KEYS = [
   // 지문 드릴
   'wb_direct_passage_translation', 'wb_direct_passage_analysis',
-  'wb_direct_tf_questions', 'wb_direct_title_summary',
   'wb_direct_translation', 'wb_direct_word_order', 'wb_direct_english_writing',
   // 어휘 어법
   'wb_direct_vocab_choice', 'wb_direct_vocab_fill',
