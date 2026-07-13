@@ -947,7 +947,7 @@ export default function PdfEditorPage() {
 
       <div className="no-print mb-6">
         <h1 className="text-4xl font-black text-slate-900 tracking-tighter">📝 지문분석</h1>
-        <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 변형 지문, T/F문제 10개, 한글 요약, 영어 제목 3가지, 1문장 영어 요약 3가지, 관련 어휘 10개 총 6가지 교육 자료를 만들어드려요</p>
+        <p className="text-slate-500 font-bold mt-2">지문을 입력하거나 사진을 등록하면 AI가 변형 지문, T/F문제 10개, 한글 요약, 영어 제목 3가지, 1문장 영어 요약 3가지, 핵심 어휘 동반의어표(10개) 총 6가지 교육 자료를 만들어드려요</p>
       </div>
 
       <div className="no-print flex gap-2 mb-6 border-b-2 border-slate-100">
