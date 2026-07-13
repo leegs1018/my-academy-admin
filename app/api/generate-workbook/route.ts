@@ -15,6 +15,8 @@ export type WorkbookType =
   | 'word_order'
   | 'english_writing'
   | 'passage_translation'
+  | 'tf_questions'
+  | 'title_summary'
   | 'paragraph_order'
   | 'sentence_insertion'
   | 'summary_sentence'
@@ -642,6 +644,49 @@ chunk의 role 종류:
 }`;
 
     // ── 요약문 서술형 ──────────────────────────────────────────────────────────
+    case 'tf_questions':
+      return header('아래 영어 지문으로 T/F 문제 10개를 생성하세요.') +
+`생성 규칙:
+1. 지문 내용을 바탕으로 T(참) 또는 F(거짓)로 답할 수 있는 문장 10개를 생성합니다.
+2. T와 F의 비율을 5:5 또는 6:4로 균형 있게 배분합니다.
+3. F 문항은 지문 내용을 미묘하게 왜곡하거나 반대로 진술합니다.
+4. 각 문장은 15~25단어 수준으로 간결하고 명확하게 작성합니다.
+5. explanation은 왜 T 또는 F인지 한국어로 10단어 이내로 간략히 설명합니다.
+
+출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
+{
+  "questions": [
+    { "num": 1, "statement": "Humans excel at creating visual images in their minds.", "answer": "T", "explanation": "지문에서 직접 언급됨" },
+    { "num": 2, "statement": "The brain evolved this ability to avoid all risks in reality.", "answer": "F", "explanation": "위험을 피하려는 게 아니라 연습하기 위함" }
+  ]
+}`;
+
+    case 'title_summary':
+      return header('아래 영어 지문으로 제목 및 요약 자료를 생성하세요.') +
+`생성 규칙:
+1. 영어 제목 3가지: 서로 다른 스타일의 제목을 작성합니다.
+   - 제목 1: 주제 중심형 (명사구, 5~8단어)
+   - 제목 2: 질문형 (의문문, 6~10단어)
+   - 제목 3: 핵심 어휘 활용형 (콜론(:) 포함, 6~10단어)
+2. 1문장 영어 요약 3가지: 지문의 핵심 논지를 담은 서로 다른 1문장 요약을 작성합니다.
+   - 각 요약은 20~30단어, 서로 다른 구조와 표현을 사용합니다.
+3. 한글 요약: 지문 핵심 내용을 3~5문장으로 한글 요약합니다.
+
+출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
+{
+  "titles": [
+    "The Evolution of Human Visual Imagery",
+    "Why Do Humans Excel at Mental Visualization?",
+    "Mental Modeling: How Brains Simulate Reality"
+  ],
+  "summaries": [
+    "Human brains evolved the ability to create internal mental models, allowing people to rehearse actions without real-world risks.",
+    "Through evolutionary development, humans gained the capacity for visual imagery that enables safe simulation of future scenarios.",
+    "The brain's mental modeling capability, shaped by evolution, allows humans to practice actions internally while keeping models intentionally imperfect."
+  ],
+  "korean_summary": "인간의 뇌는 시각적 이미지를 통해 내적 모델을 만드는 능력을 발달시켰습니다. 이 능력 덕분에 실제 위험 없이 미래 행동을 연습할 수 있습니다. 그러나 진화는 이 모델이 현실과 완전히 일치하지 않도록 설계하여, 우리가 실제 경험도 필요로 하게 합니다."
+}`;
+
     case 'summary_sentence':
       return header('아래 영어 지문으로 요약문 서술형 문제를 생성하세요.') +
 `생성 규칙:

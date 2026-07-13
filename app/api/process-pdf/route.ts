@@ -174,7 +174,7 @@ export async function POST(request: Request) {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
     const response = await client.chat.completions.create({
-      model: 'gpt-4.1-mini',
+      model: 'gpt-5.1',
       max_tokens: 8192,
       messages: [
         {

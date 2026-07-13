@@ -11,7 +11,8 @@ type WorkbookType =
   | 'vocab_choice' | 'vocab_fill'
   | 'grammar_choice' | 'grammar_correct' | 'grammar_correct_adv'
   | 'translation' | 'word_order' | 'english_writing'
-  | 'passage_translation' | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence' | 'passage_analysis'
+  | 'passage_translation' | 'tf_questions' | 'title_summary'
+  | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence' | 'passage_analysis'
   | 'suneung_vocab_right' | 'suneung_vocab_wrong'
   | 'suneung_grammar_right' | 'suneung_grammar_wrong'
   | 'combo_vocab_grammar' | 'combo_vocab_fill'
@@ -61,8 +62,10 @@ interface HistoryItem {
 
 const CATEGORIES = [
   { key: 'drill',    label: '지문 드릴',   types: [
-    { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
     { key: 'passage_translation' as WorkbookType, label: '지문 해석지' },
+    { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
+    { key: 'tf_questions' as WorkbookType,        label: 'T/F 문제' },
+    { key: 'title_summary' as WorkbookType,       label: '제목/요약문' },
     { key: 'translation' as WorkbookType,         label: '문장 해석' },
     { key: 'word_order' as WorkbookType,          label: '단어 배열' },
     { key: 'english_writing' as WorkbookType,     label: '영작 하기' },
@@ -75,8 +78,8 @@ const CATEGORIES = [
     { key: 'grammar_correct_adv' as WorkbookType, label: '어법 고치기(심화)' },
   ]},
   { key: 'essay',    label: '서술형 대비', types: [
-    { key: 'combo_grammar_order' as WorkbookType, label: '어법 서술형' },
-    { key: 'combo_vocab_fill' as WorkbookType,    label: '영작 서술형' },
+    { key: 'combo_grammar_order' as WorkbookType, label: '어법 서술형 + 순서배열' },
+    { key: 'combo_vocab_fill' as WorkbookType,    label: '영작 서술형 + 어휘' },
     { key: 'summary_sentence' as WorkbookType,    label: '요약문 서술형' },
   ]},
   { key: 'hold',     label: '보류',        types: [
@@ -96,10 +99,11 @@ const TYPE_LABELS: Record<WorkbookType, string> = {
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
   translation: '문장 해석', word_order: '단어 배열', english_writing: '영작 하기',
   passage_translation: '지문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
+  tf_questions: 'T/F 문제', title_summary: '제목/요약문',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
-  combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형',
-  combo_grammar_order: '어법 서술형', combo_grammar_insert: '어법+문장삽입',
+  combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형 + 어휘',
+  combo_grammar_order: '어법 서술형 + 순서배열', combo_grammar_insert: '어법+문장삽입',
 };
 
 const DIFF_CARDS = [
@@ -1147,6 +1151,53 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
       return <RenderSummarySentence result={result} showAnswer={showAnswer} />;
     case 'passage_analysis':
       return <RenderPassageAnalysis result={result} />;
+    case 'tf_questions': {
+      const questions = (result.questions as Array<{num:number;statement:string;answer:string;explanation?:string}>) ?? [];
+      return (
+        <div className="space-y-3">
+          {questions.map((q, i) => (
+            <div key={i} className="flex gap-3 items-start pb-3 border-b border-slate-100 last:border-0">
+              <span className="shrink-0 text-sm font-black text-slate-500 min-w-5">{q.num}.</span>
+              <div className="flex-1">
+                <p className="text-sm leading-relaxed mb-2">{q.statement}</p>
+                {showAnswer ? (
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-black px-3 py-0.5 rounded ${q.answer === 'T' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{q.answer}</span>
+                    {q.explanation && <span className="text-xs text-slate-500">{q.explanation}</span>}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <span className="text-xs px-3 py-0.5 border border-slate-200 rounded text-slate-400">T</span>
+                    <span className="text-xs px-3 py-0.5 border border-slate-200 rounded text-slate-400">F</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    case 'title_summary': {
+      const titles = (result.titles as string[]) ?? [];
+      const summaries = (result.summaries as string[]) ?? [];
+      const koreanSummary = (result.korean_summary as string) ?? '';
+      return (
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">영어 제목 (3가지)</p>
+            {titles.map((t, i) => <p key={i} className="text-sm font-bold italic mb-1"><span className="text-slate-400 mr-2">{i+1}.</span>{t}</p>)}
+          </div>
+          <div>
+            <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">1문장 영어 요약 (3가지)</p>
+            {summaries.map((s, i) => <p key={i} className="text-sm leading-relaxed mb-2"><span className="text-slate-400 mr-2">{i+1}.</span>{s}</p>)}
+          </div>
+          <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+            <p className="text-xs font-black text-slate-500 mb-2">한글 요약</p>
+            <p className="text-sm leading-relaxed text-slate-700">{koreanSummary}</p>
+          </div>
+        </div>
+      );
+    }
     case 'suneung_vocab_right':
       return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
     case 'suneung_vocab_wrong':
@@ -1247,7 +1298,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
                         <span key={i} style={{ whiteSpace: 'nowrap', margin: '0 2px' }}>
                           <span style={{ fontWeight: 700, fontSize: 12 }}>{num}.</span>
                           <span style={{ fontSize: 12, fontWeight: 600 }}>{letter}</span>
-                          <span style={{ display: 'inline-block', minWidth: 55, borderBottom: '1.5px solid #333', verticalAlign: 'bottom', marginLeft: 1 }} />
+                          <span style={{ display: 'inline-block', minWidth: 110, borderBottom: '1.5px solid #333', verticalAlign: 'bottom', marginLeft: 1 }} />
                         </span>
                       );
                     }
@@ -1315,14 +1366,14 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
     const correct = answerMap[num] ?? '';
     if (isAnswer) {
       parts.push(
-        <span key={m.index} style={{ background: '#FEE2E2', borderRadius: 3, padding: '0 3px' }}>
-          <span style={{ fontSize: 10, color: '#666' }}>{num}</span>
-          <span style={{ textDecoration: 'line-through', color: '#EF4444' }}>[{word}]</span>
+        <span key={m.index} style={{ background: '#FEE2E2', borderRadius: 3, padding: '1px 4px', margin: '0 1px' }}>
+          <span style={{ fontWeight: 900 }}>{num}</span>
+          <span style={{ textDecoration: 'line-through', color: '#EF4444', marginLeft: 1 }}>[{word}]</span>
           {correct && <span style={{ color: '#16A34A', fontWeight: 900 }}>→{correct}</span>}
         </span>
       );
     } else {
-      parts.push(<span key={m.index}><span style={{ fontSize: 10, color: '#666' }}>{num}</span><span style={{ fontWeight: 700 }}>[{word}]</span></span>);
+      parts.push(<span key={m.index} style={{ background: '#FFF9C4', borderRadius: 3, padding: '1px 4px', margin: '0 1px' }}><span style={{ fontWeight: 900 }}>{num}</span>[<span style={{ fontWeight: 700 }}>{word}</span>]</span>);
     }
     last = m.index + m[0].length;
   }
@@ -1763,7 +1814,7 @@ function PdfSummarySentence({ result, isAnswer, title, id }: { result: WorkbookR
               <span key={i} style={{ display: 'inline-flex', alignItems: 'flex-end', margin: '0 2px', verticalAlign: 'bottom' }}>
                 {isAnswer
                   ? <span style={{ borderBottom: '2px solid #4338CA', color: '#4338CA', fontWeight: 900, padding: '0 4px', fontSize: 12 }}>{answers[n] ?? '?'}</span>
-                  : <span style={{ borderBottom: '2px solid #9CA3AF', display: 'inline-block', width: 64 }}>&nbsp;</span>
+                  : <span style={{ borderBottom: '2px solid #9CA3AF', display: 'inline-block', width: 128 }}>&nbsp;</span>
                 }
               </span>
             );
@@ -1776,6 +1827,76 @@ function PdfSummarySentence({ result, isAnswer, title, id }: { result: WorkbookR
           정답: {answerKey}
         </div>
       )}
+    </div>
+  );
+}
+
+function PdfTfQuestions({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const questions = (result.questions as Array<{num:number;statement:string;answer:string;explanation?:string}>) ?? [];
+  return (
+    <div id={id} style={PDF_BASE}>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {questions.map((q, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+            <span style={{ flexShrink: 0, minWidth: 24, fontSize: 12, fontWeight: 900, color: '#64748B' }}>{q.num}.</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7 }}>{q.statement}</p>
+              {isAnswer ? (
+                <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 900, padding: '1px 8px', borderRadius: 4, background: q.answer === 'T' ? '#D1FAE5' : '#FEE2E2', color: q.answer === 'T' ? '#065F46' : '#991B1B' }}>{q.answer}</span>
+                  {q.explanation && <span style={{ fontSize: 10, color: '#6B7280' }}>{q.explanation}</span>}
+                </div>
+              ) : (
+                <div style={{ marginTop: 4, display: 'flex', gap: 8 }}>
+                  <span style={{ fontSize: 11, padding: '1px 10px', border: '1px solid #CBD5E1', borderRadius: 4, color: '#94A3B8' }}>T</span>
+                  <span style={{ fontSize: 11, padding: '1px 10px', border: '1px solid #CBD5E1', borderRadius: 4, color: '#94A3B8' }}>F</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {isAnswer && (
+        <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
+          <strong>정답:</strong> {questions.map(q => `${q.num}.${q.answer}`).join('  ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfTitleSummary({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
+  const titles = (result.titles as string[]) ?? [];
+  const summaries = (result.summaries as string[]) ?? [];
+  const koreanSummary = (result.korean_summary as string) ?? '';
+  return (
+    <div id={id} style={PDF_BASE}>
+      <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 900, color: '#475569', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>영어 제목 (3가지)</div>
+          {titles.map((t, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 5 }}>
+              <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, color: '#94A3B8', minWidth: 18 }}>{i+1}.</span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontStyle: 'italic' }}>{t}</span>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 900, color: '#475569', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>1문장 영어 요약 (3가지)</div>
+          {summaries.map((s, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, color: '#94A3B8', minWidth: 18 }}>{i+1}.</span>
+              <span style={{ fontSize: 12, lineHeight: 1.7 }}>{s}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: '#F8FAFC', borderRadius: 6, padding: '10px 14px', border: '1px solid #E2E8F0' }}>
+          <div style={{ fontSize: 10, fontWeight: 900, color: '#475569', marginBottom: 5 }}>한글 요약</div>
+          <p style={{ margin: 0, fontSize: 12, lineHeight: 1.8, color: '#374151' }}>{koreanSummary}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2166,6 +2287,12 @@ function getSimpleAnswerSections(result: WorkbookResult, type: WorkbookType): { 
       return flat(['(지문 해석지 참조)']);
     case 'passage_analysis':
       return flat(['(구문분석 참조)']);
+    case 'tf_questions': {
+      const qs = (result.questions as Array<{num:number;answer:string}>) || [];
+      return flat([qs.map(q => `${q.num}.${q.answer}`).join('  ')]);
+    }
+    case 'title_summary':
+      return flat(['(제목/요약문 참조)']);
     case 'combo_vocab_grammar': {
       const s1 = (result.section1 ?? {}) as WorkbookResult;
       const s2 = (result.section2 ?? {}) as WorkbookResult;
@@ -3324,6 +3451,15 @@ export default function WorkbookPage() {
                     <PdfSummarySentence result={result} isAnswer={true} title={fullTitle} id={answerId} />
                   </React.Fragment>
                 );
+              case 'tf_questions':
+                return (
+                  <React.Fragment key={key}>
+                    <PdfTfQuestions result={result} isAnswer={false} title={fullTitle} id={problemId} />
+                    <PdfTfQuestions result={result} isAnswer={true} title={fullTitle} id={answerId} />
+                  </React.Fragment>
+                );
+              case 'title_summary':
+                return <PdfTitleSummary key={key} result={result} isAnswer={false} title={fullTitle} id={problemId} />;
               default:
                 return (
                   <React.Fragment key={key}>

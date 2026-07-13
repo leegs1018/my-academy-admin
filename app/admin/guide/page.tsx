@@ -438,8 +438,8 @@ const WB_TYPE_INFO: Record<string, { label: string; icon: string }> = {
   grammar_choice:      { label: '어법 고르기',        icon: '✏️' },
   grammar_correct:     { label: '어법 고치기',        icon: '✏️' },
   grammar_correct_adv: { label: '어법 고치기(심화)', icon: '✏️' },
-  combo_grammar_order: { label: '어법 서술형',        icon: '📋' },
-  combo_vocab_fill:    { label: '영작 서술형',        icon: '📋' },
+  combo_grammar_order: { label: '어법 서술형 + 순서배열', icon: '📋' },
+  combo_vocab_fill:    { label: '영작 서술형 + 어휘',   icon: '📋' },
   summary_sentence:    { label: '요약문 서술형',      icon: '📋' },
 };
 
