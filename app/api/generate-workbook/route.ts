@@ -854,7 +854,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, type, results });
   } catch (error: unknown) {
-    console.error('[generate-workbook] 오류:', JSON.stringify(error, Object.getOwnPropertyNames(error instanceof Error ? error : {})));
+    const e = error as Record<string, unknown>;
+    console.error('[generate-workbook] 오류:', JSON.stringify({
+      message: e.message,
+      status: e.status,
+      type: e.type,
+      code: e.code,
+      error: e.error,
+    }));
     const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
     return NextResponse.json({ error: message }, { status: 500 });
   }
