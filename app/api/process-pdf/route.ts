@@ -197,17 +197,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // T/F statement 130자 초과 시 단어 경계에서 강제 절단
-    if (Array.isArray(data.tf_questions)) {
-      data.tf_questions = data.tf_questions.map(q => {
-        if (!q.statement || q.statement.length <= 130) return q;
-        const cut = q.statement.slice(0, 130);
-        const lastSpace = cut.lastIndexOf(' ');
-        q.statement = (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[,;]$/, '') + '.';
-        return q;
-      });
-    }
-
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
     console.error('[process-pdf] 오류:', error);
