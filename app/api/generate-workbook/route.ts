@@ -817,8 +817,12 @@ export async function POST(request: Request) {
     const results: unknown[] = [];
     for (const text of validPassages) {
       const prompt = buildPrompt(text.trim(), type, diff);
+      // passage_translation·combo_vocab_fill은 출력량이 많아 gpt-5.6-luna에서 401 발생 → gpt-5.1 사용
+      const useModel = (type === 'passage_translation' || type === 'combo_vocab_fill')
+        ? 'gpt-5.1'
+        : 'gpt-5.6-luna';
       const response = await client.chat.completions.create({
-        model: 'gpt-5.6-luna',
+        model: useModel,
         max_completion_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       });
@@ -855,12 +859,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, type, results });
   } catch (error: unknown) {
     const e = error as Record<string, unknown>;
+    const inner = e.error as Record<string, unknown> | null | undefined;
     console.error('[generate-workbook] 오류:', JSON.stringify({
       message: e.message,
       status: e.status,
       type: e.type,
       code: e.code,
-      error: e.error,
+      inner_message: inner?.message,
+      inner_type: inner?.type,
+      inner_code: inner?.code,
+      inner_param: inner?.param,
     }));
     const message = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
     return NextResponse.json({ error: message }, { status: 500 });
