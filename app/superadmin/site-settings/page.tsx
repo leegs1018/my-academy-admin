@@ -24,13 +24,13 @@ const SECTIONS = [
     ],
   },
   {
-    title: '💬 카카오 알림톡 설정 (알리고)',
+    title: '💬 카카오 알림톡 설정 (뿌리오)',
     fields: [
-      { key: 'ALIGO_API_KEY',                 label: '알리고 API Key' },
-      { key: 'ALIGO_USER_ID',                 label: '알리고 User ID' },
-      { key: 'KAKAO_SENDER_KEY',              label: '카카오 발신프로파일 키 (senderkey)' },
-      { key: 'KAKAO_TEMPLATE_ATTENDANCE_ID',  label: '출결 알림 템플릿 코드 (tpl_code)' },
-      { key: 'KAKAO_TEMPLATE_GRADE_ID',       label: '성적 알림 템플릿 코드 (tpl_code)' },
+      { key: 'PPURIO_ACCOUNT',               label: '뿌리오 계정 아이디' },
+      { key: 'PPURIO_API_KEY',               label: '뿌리오 API Key' },
+      { key: 'KAKAO_SENDER_KEY',             label: '카카오 발신프로파일 키 (senderKey)' },
+      { key: 'KAKAO_TEMPLATE_ATTENDANCE_ID', label: '출결 알림 템플릿 코드 (tplCode)' },
+      { key: 'KAKAO_TEMPLATE_GRADE_ID',      label: '성적 알림 템플릿 코드 (tplCode)' },
     ],
   },
 ];

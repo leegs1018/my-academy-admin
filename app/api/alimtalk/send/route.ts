@@ -26,33 +26,33 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function getAlimtalkConfig() {
+async function getPpurioConfig() {
   const { data } = await supabaseAdmin
     .from('site_settings')
     .select('key, value')
-    .in('key', ['ALIGO_API_KEY', 'ALIGO_USER_ID', 'KAKAO_SENDER_KEY', 'KAKAO_TEMPLATE_ATTENDANCE_ID', 'KAKAO_TEMPLATE_GRADE_ID']);
+    .in('key', ['PPURIO_API_KEY', 'PPURIO_ACCOUNT', 'KAKAO_SENDER_KEY', 'KAKAO_TEMPLATE_ATTENDANCE_ID', 'KAKAO_TEMPLATE_GRADE_ID']);
   const map: Record<string, string> = {};
   (data ?? []).forEach(row => { if (row.value) map[row.key] = row.value; });
   return {
-    apiKey:               map['ALIGO_API_KEY']                 || process.env.ALIGO_API_KEY,
-    userId:               map['ALIGO_USER_ID']                 || process.env.ALIGO_USER_ID,
-    senderKey:            map['KAKAO_SENDER_KEY']              || process.env.KAKAO_SENDER_KEY,
-    attendanceTplCode:    map['KAKAO_TEMPLATE_ATTENDANCE_ID']  || process.env.KAKAO_TEMPLATE_ATTENDANCE_ID,
-    gradeTplCode:         map['KAKAO_TEMPLATE_GRADE_ID']       || process.env.KAKAO_TEMPLATE_GRADE_ID,
+    apiKey:            map['PPURIO_API_KEY']               || process.env.PPURIO_API_KEY,
+    account:           map['PPURIO_ACCOUNT']               || process.env.PPURIO_ACCOUNT,
+    senderKey:         map['KAKAO_SENDER_KEY']             || process.env.KAKAO_SENDER_KEY,
+    attendanceTplCode: map['KAKAO_TEMPLATE_ATTENDANCE_ID'] || process.env.KAKAO_TEMPLATE_ATTENDANCE_ID,
+    gradeTplCode:      map['KAKAO_TEMPLATE_GRADE_ID']      || process.env.KAKAO_TEMPLATE_GRADE_ID,
   };
 }
 
 export async function POST(req: Request) {
   const payload = await req.json() as AlimtalkPayload;
 
-  const sender = process.env.SOLAPI_SENDER_NUMBER;
+  const sender = process.env.PPURIO_SENDER_NUMBER || process.env.SOLAPI_SENDER_NUMBER;
   if (!sender) {
     return NextResponse.json({ ok: false, error: '발신번호 환경변수 누락' }, { status: 500 });
   }
 
-  const cfg = await getAlimtalkConfig();
+  const cfg = await getPpurioConfig();
 
-  if (!cfg.apiKey || !cfg.userId || !cfg.senderKey) {
+  if (!cfg.apiKey || !cfg.account || !cfg.senderKey) {
     return NextResponse.json({
       ok: false,
       error: 'ALIMTALK_NOT_CONFIGURED',
@@ -69,36 +69,37 @@ export async function POST(req: Request) {
     }, { status: 503 });
   }
 
-  // 메시지 내용 구성 (템플릿 변수 치환)
   let message = '';
-  let subject = '';
   if (payload.type === 'attendance') {
-    subject = `[${payload.academyName}] 출결 알림`;
     message = `[${payload.academyName}]\n${payload.studentName} 학생이 ${payload.date} 수업에 ${payload.status}하였습니다.`;
   } else {
-    subject = `[${payload.academyName}] 성적 알림`;
     message = payload.content;
   }
 
-  const params = new URLSearchParams();
-  params.append('apikey', cfg.apiKey);
-  params.append('userid', cfg.userId);
-  params.append('senderkey', cfg.senderKey);
-  params.append('tpl_code', tplCode);
-  params.append('sender', sender.replace(/-/g, ''));
-  params.append('receiver_1', payload.to.replace(/-/g, ''));
-  params.append('subject_1', subject);
-  params.append('message_1', message);
+  // 뿌리오 알림톡 REST API
+  // 문서: https://www.ppurio.com/api/document/kakao
+  const token = Buffer.from(`${cfg.account}:${cfg.apiKey}`).toString('base64');
 
   try {
-    const res = await fetch('https://kakaoapi.aligo.in/akv10/alimtalk/send/', {
+    const res = await fetch('https://api.ppurio.com/v1/kakao/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: params.toString(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${token}`,
+      },
+      body: JSON.stringify({
+        account:    cfg.account,
+        senderKey:  cfg.senderKey,
+        tplCode:    tplCode,
+        sender:     sender.replace(/-/g, ''),
+        receiver:   payload.to.replace(/-/g, ''),
+        message,
+      }),
     });
     const result = await res.json();
-    if (result.code !== 0) {
-      return NextResponse.json({ ok: false, error: result.message || `code: ${result.code}` });
+    // 뿌리오 성공 응답: { result_code: '1', ... }
+    if (result.result_code !== '1' && result.result_code !== 1) {
+      return NextResponse.json({ ok: false, error: result.result_message || `code: ${result.result_code}` });
     }
     return NextResponse.json({ ok: true });
   } catch (e: any) {
