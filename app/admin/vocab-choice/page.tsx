@@ -220,10 +220,14 @@ async function captureAllToPdf(elementIds: string[]): Promise<Blob> {
 
 // ─── result renderers (screen) ────────────────────────────────────────────────
 
-function RenderVocabChoicePassage({ passage, answerKey, showAnswer }: { passage: string; answerKey: string; showAnswer: boolean }) {
-  const chunks = parseVocabPassage(passage, answerKey);
+function splitBySentence(passage: string): string[] {
+  const parts = passage.split(/\. /);
+  return parts.map((p, i) => i < parts.length - 1 ? p + '.' : p).filter(s => s.trim());
+}
+
+function VocabChoiceChunks({ chunks, showAnswer }: { chunks: VocabChunk[]; showAnswer: boolean }) {
   return (
-    <p className="text-sm font-medium leading-8 text-slate-800">
+    <>
       {chunks.map((c, i) => {
         if (c.type === 'text') return <span key={i}>{c.text}</span>;
         const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
@@ -243,7 +247,20 @@ function RenderVocabChoicePassage({ passage, answerKey, showAnswer }: { passage:
           </span>
         );
       })}
-    </p>
+    </>
+  );
+}
+
+function RenderVocabChoicePassage({ passage, answerKey, showAnswer }: { passage: string; answerKey: string; showAnswer: boolean }) {
+  const sentences = splitBySentence(passage);
+  return (
+    <div className="space-y-2">
+      {sentences.map((sentence, si) => (
+        <p key={si} className="text-sm font-medium text-slate-800" style={{ lineHeight: 1.35 }}>
+          <VocabChoiceChunks chunks={parseVocabPassage(sentence, answerKey)} showAnswer={showAnswer} />
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -1231,33 +1248,41 @@ function PdfPageHeader({ children, mb }: { children: React.ReactNode; mb?: numbe
 }
 
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
-  const chunks = parseVocabPassage(result.passage as string, result.answer_key as string);
+  const sentences = splitBySentence(result.passage as string || '');
   const choiceBase: React.CSSProperties = { borderRadius: 4, padding: '2px 6px', margin: '0 2px', fontWeight: 900, fontSize: 14 };
+  const sentStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.35, wordBreak: 'break-word', margin: '0 0 10px' };
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title}</PdfPageHeader>
-      <p style={PDF_P}>
-        {chunks.map((c, i) => {
-          if (c.type === 'text') return <span key={i}>{c.text}</span>;
-          const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
-          if (isAnswer) {
-            return (
-              <span key={i} style={choiceBase}>
-                {c.num}[{opts.map((opt, j) => (
-                  <span key={j}>
-                    {j > 0 && ' / '}
-                    {j === c.correctIdx
-                      ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
-                      : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>
-                    }
-                  </span>
-                ))}]
-              </span>
-            );
-          }
-          return <span key={i} style={choiceBase}>{c.num}[{opts.join(' / ')}]</span>;
+      <div>
+        {sentences.map((sentence, si) => {
+          const chunks = parseVocabPassage(sentence, result.answer_key as string || '');
+          return (
+            <p key={si} style={sentStyle}>
+              {chunks.map((c, i) => {
+                if (c.type === 'text') return <span key={i}>{c.text}</span>;
+                const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
+                if (isAnswer) {
+                  return (
+                    <span key={i} style={choiceBase}>
+                      {c.num}[{opts.map((opt, j) => (
+                        <span key={j}>
+                          {j > 0 && ' / '}
+                          {j === c.correctIdx
+                            ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
+                            : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>
+                          }
+                        </span>
+                      ))}]
+                    </span>
+                  );
+                }
+                return <span key={i} style={choiceBase}>{c.num}[{opts.join(' / ')}]</span>;
+              })}
+            </p>
+          );
         })}
-      </p>
+      </div>
       {isAnswer && (
         <div style={{ marginTop: 16, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
           <strong>정답:</strong> {result.answer_key as string}
@@ -2206,19 +2231,26 @@ function PdfResultContent({ result, type, isAnswer, title, id, embedded }: {
   switch (type) {
     case 'vocab_choice':
     case 'grammar_choice': {
-      const chunks = parseVocabPassage(result.passage as string || '', result.answer_key as string || '');
       const cb: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 4px', margin: '0 1px' };
-      return wrap(<>{h2}<p style={PDF_P}>{chunks.map((c, i) => {
-        if (c.type === 'text') return <span key={i}>{c.text}</span>;
-        const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
-        if (isAnswer) return <span key={i} style={cb}>{c.num}[{opts.map((opt, j) => (
-          <span key={j}>{j > 0 && ' / '}{j === c.correctIdx
-            ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
-            : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>}
-          </span>
-        ))}]</span>;
-        return <span key={i} style={cb}>{c.num}[{opts.join(' / ')}]</span>;
-      })}</p>{isAnswer && <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}><strong>정답:</strong> {result.answer_key as string}</div>}</>);
+      const sStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.35, wordBreak: 'break-word', margin: '0 0 10px' };
+      const sentences2 = splitBySentence(result.passage as string || '');
+      return wrap(<>{h2}
+        <div>{sentences2.map((sentence, si) => {
+          const chunks = parseVocabPassage(sentence, result.answer_key as string || '');
+          return <p key={si} style={sStyle}>{chunks.map((c, i) => {
+            if (c.type === 'text') return <span key={i}>{c.text}</span>;
+            const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
+            if (isAnswer) return <span key={i} style={cb}>{c.num}[{opts.map((opt, j) => (
+              <span key={j}>{j > 0 && ' / '}{j === c.correctIdx
+                ? <span style={{ fontWeight: 900, textDecoration: 'underline' }}>{opt}</span>
+                : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>}
+              </span>
+            ))}]</span>;
+            return <span key={i} style={cb}>{c.num}[{opts.join(' / ')}]</span>;
+          })}</p>;
+        })}</div>
+        {isAnswer && <div style={{ marginTop: 14, padding: '10px 14px', background: '#f8f8f8', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}><strong>정답:</strong> {result.answer_key as string}</div>}
+      </>);
     }
     case 'word_order': {
       const sentences = (result.sentences ?? []) as Array<{num:number;ko:string;scrambled:string[];answer:string}>;
@@ -2652,7 +2684,7 @@ export default function WorkbookPage() {
       const title = activeTab === 'input' ? inputTitle : mockTitle;
       const typeLabel = TYPE_LABELS[typeResult.type];
       const passageLabel = typeResult.results.length > 1 ? `_지문${activeResultTab + 1}` : '';
-      a.download = `${title || typeLabel}${passageLabel}${withAnswer ? '_정답' : '_문제'}.pdf`;
+      a.download = `${title ? `${title}_${typeLabel}` : typeLabel}${passageLabel}${withAnswer ? '_정답' : '_문제'}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
