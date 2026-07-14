@@ -256,7 +256,7 @@ function RenderVocabChoicePassage({ passage, answerKey, showAnswer }: { passage:
   return (
     <div className="space-y-2">
       {sentences.map((sentence, si) => (
-        <p key={si} className="text-sm font-medium text-slate-800" style={{ lineHeight: 1.35 }}>
+        <p key={si} className="text-sm font-medium text-slate-800" style={{ lineHeight: 1.9, marginBottom: 4 }}>
           <VocabChoiceChunks chunks={parseVocabPassage(sentence, answerKey)} showAnswer={showAnswer} />
         </p>
       ))}
@@ -1250,7 +1250,7 @@ function PdfPageHeader({ children, mb }: { children: React.ReactNode; mb?: numbe
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const sentences = splitBySentence(result.passage as string || '');
   const choiceBase: React.CSSProperties = { borderRadius: 4, padding: '2px 6px', margin: '0 2px', fontWeight: 900, fontSize: 14 };
-  const sentStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.35, wordBreak: 'break-word', margin: '0 0 10px' };
+  const sentStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.9, wordBreak: 'break-word', margin: '0 0 10px' };
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title}</PdfPageHeader>
@@ -1307,7 +1307,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
             const rawParts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
             return (
               <div key={si} style={{ marginBottom: 4 }}>
-                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.9 }}>
                   {rawParts.map((part, i) => {
                     if (i % 3 === 0) return <span key={i}>{part}</span>;
                     if (i % 3 === 1) {
@@ -1433,7 +1433,7 @@ function PdfGrammarCorrectAdv({ result, isAnswer, title, id }: { result: Workboo
           <div key={i} style={{ display: 'flex', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 900, color: '#888', minWidth: 20 }}>{s.num}.</span>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>{s.text}</p>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.9 }}>{s.text}</p>
               {isAnswer && answerMap[s.num]
                 ? <p style={{ margin: '2px 0 0', fontSize: 11, color: '#DC2626', fontWeight: 700 }}>{answerMap[s.num]}</p>
                 : !isAnswer && <div style={{ height: 16, borderBottom: '1px dashed #ccc', marginTop: 4 }}></div>
@@ -1459,7 +1459,7 @@ function PdfTranslation({ result, isAnswer, title, id }: { result: WorkbookResul
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#000', lineHeight: 1.7 }}>{s.en}</p>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#000', lineHeight: 1.9 }}>{s.en}</p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
               {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.ko}</span>}
@@ -1504,7 +1504,7 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
           <div key={i}>
-            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#000', lineHeight: 1.7 }}>{s.ko}</p>
+            <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600, color: '#000', lineHeight: 1.9 }}>{s.ko}</p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
               {isAnswer && <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>{s.answer}</span>}
@@ -1547,7 +1547,7 @@ function PdfPassageTranslation({ result, id, title }: { result: WorkbookResult; 
         <tbody>
           {(sentences || []).map((s, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-              <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.7, verticalAlign: 'top' }}>
+              <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.9, verticalAlign: 'top' }}>
                 {renderHighlighted(s.en, s.key_words || [])}
               </td>
               <td style={{ padding: '4px 0 4px 8px', fontSize: 12, color: '#000', fontWeight: 700, lineHeight: 1.6, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
@@ -1604,11 +1604,11 @@ function PdfParagraphOrder({ result, isAnswer, title, id }: { result: WorkbookRe
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
-      <div style={{ background: '#fff', border: '2px solid #0F172A', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, lineHeight: 1.7 }}>
+      <div style={{ background: '#fff', border: '2px solid #0F172A', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, lineHeight: 1.9 }}>
         <strong>제시 단락</strong><br />{data.fixed_paragraph}
       </div>
       {(data.shuffled_paragraphs || []).map((p, i) => (
-        <div key={i} style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '10px 14px', marginBottom: 10, fontSize: 13, lineHeight: 1.7 }}>
+        <div key={i} style={{ border: '1px solid #E5E7EB', borderRadius: 6, padding: '10px 14px', marginBottom: 10, fontSize: 13, lineHeight: 1.9 }}>
           <strong>({p.label})</strong> {p.text}
         </div>
       ))}
@@ -1626,7 +1626,7 @@ function PdfSentenceInsertion({ result, isAnswer, title, id }: { result: Workboo
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
-      <div style={{ background: '#F5F3FF', border: '2px solid #A78BFA', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontStyle: 'italic', lineHeight: 1.7 }}>
+      <div style={{ background: '#F5F3FF', border: '2px solid #A78BFA', borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontStyle: 'italic', lineHeight: 1.9 }}>
         {data.insert_sentence}
       </div>
       <p style={PDF_P}>{data.passage}</p>
@@ -1864,7 +1864,7 @@ function PdfTfQuestions({ result, isAnswer, title, id }: { result: WorkbookResul
           <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
             <span style={{ flexShrink: 0, minWidth: 24, fontSize: 12, fontWeight: 900, color: '#64748B' }}>{q.num}.</span>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.7 }}>{q.statement}</p>
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.9 }}>{q.statement}</p>
               {isAnswer ? (
                 <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 900, padding: '1px 8px', borderRadius: 4, background: q.answer === 'T' ? '#D1FAE5' : '#FEE2E2', color: q.answer === 'T' ? '#065F46' : '#991B1B' }}>{q.answer}</span>
@@ -1911,7 +1911,7 @@ function PdfTitleSummary({ result, isAnswer, title, id }: { result: WorkbookResu
           {summaries.map((s, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
               <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 900, color: '#94A3B8', minWidth: 18 }}>{i+1}.</span>
-              <span style={{ fontSize: 12, lineHeight: 1.7 }}>{s}</span>
+              <span style={{ fontSize: 12, lineHeight: 1.9 }}>{s}</span>
             </div>
           ))}
         </div>
@@ -2130,7 +2130,7 @@ function PdfComboVocabFill({ result, isAnswer, title, id }: { result: WorkbookRe
               </p>
             )}
             <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 900, color: '#6D28D9' }}>{item.blank} &lt;보기&gt;</p>
-            <p style={{ margin: '0 0 4px', fontSize: 11, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 4, padding: '4px 8px', lineHeight: 1.7 }}>
+            <p style={{ margin: '0 0 4px', fontSize: 11, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 4, padding: '4px 8px', lineHeight: 1.9 }}>
               {item.words.join(' / ')}
             </p>
             {isAnswer && <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>정답: {item.answer}</div>}
@@ -2232,7 +2232,7 @@ function PdfResultContent({ result, type, isAnswer, title, id, embedded }: {
     case 'vocab_choice':
     case 'grammar_choice': {
       const cb: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 4px', margin: '0 1px' };
-      const sStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.35, wordBreak: 'break-word', margin: '0 0 10px' };
+      const sStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.9, wordBreak: 'break-word', margin: '0 0 10px' };
       const sentences2 = splitBySentence(result.passage as string || '');
       return wrap(<>{h2}
         <div>{sentences2.map((sentence, si) => {
@@ -2379,7 +2379,7 @@ function PdfSimpleAnswerAll({ allResults, passageIndex, title, id }: {
                 <div key={si} style={{ marginBottom: si < sections.length - 1 ? 8 : 0 }}>
                   {sec.label && <p style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', marginBottom: 3 }}>{sec.label}</p>}
                   {sec.lines.map((line, li) => (
-                    <p key={li} style={{ fontSize: 12, lineHeight: 1.7, color: '#374151', margin: '0 0 2px', whiteSpace: 'pre-wrap' }}>{line || '—'}</p>
+                    <p key={li} style={{ fontSize: 12, lineHeight: 1.9, color: '#374151', margin: '0 0 2px', whiteSpace: 'pre-wrap' }}>{line || '—'}</p>
                   ))}
                 </div>
               ))}
