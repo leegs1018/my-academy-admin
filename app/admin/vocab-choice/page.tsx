@@ -3324,9 +3324,12 @@ export default function WorkbookPage() {
         {allResults.map(({ type, results: typeResults }, ti) =>
           typeResults.map((result, pi) => {
             if (result.error) return null;
-            const baseTitle = (activeTab === 'input' ? inputTitle : mockTitle) || TYPE_LABELS[type];
+            const rawTitle = (activeTab === 'input' ? inputTitle : mockTitle) || '';
+            const baseTitle = rawTitle || TYPE_LABELS[type];
             const passageLabel = typeResults.length > 1 ? ` (지문 ${pi + 1})` : '';
-            const fullTitle = `${baseTitle}${passageLabel}`;
+            const fullTitle = rawTitle
+              ? `${rawTitle}_${TYPE_LABELS[type]}${passageLabel}`
+              : `${TYPE_LABELS[type]}${passageLabel}`;
             const problemId = `wb-pdf-problem-${ti}-${pi}`;
             const answerId = `wb-pdf-answer-${ti}-${pi}`;
             const key = `${ti}-${pi}`;
