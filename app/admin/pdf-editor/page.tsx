@@ -1331,7 +1331,7 @@ export default function PdfEditorPage() {
                       <thead>
                         <tr className="bg-slate-800 text-white">
                           {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                            <th key={i} className={`px-2 py-2 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
+                            <th key={i} className={`px-2 py-1 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -1345,7 +1345,7 @@ export default function PdfEditorPage() {
                           });
                           return (
                           <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
-                            <td className="px-2 py-2 border-b border-slate-100">
+                            <td className="px-2 py-1 border-b border-slate-100">
                               {editMode ? (
                                 <div className="flex flex-col gap-0.5">
                                   <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
@@ -1356,7 +1356,7 @@ export default function PdfEditorPage() {
                               )}
                             </td>
                             {([['syn1','syn1_m'], ['syn2','syn2_m'], ['syn3','syn3_m']] as const).map(([wk, mk], j) => (
-                              <td key={j} className="px-2 py-2 border-b border-slate-100">
+                              <td key={j} className="px-2 py-1 border-b border-slate-100">
                                 {editMode ? (
                                   <div className="flex flex-col gap-0.5">
                                     <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
@@ -1367,7 +1367,7 @@ export default function PdfEditorPage() {
                                 )}
                               </td>
                             ))}
-                            <td className="px-2 py-2 border-b border-slate-100">
+                            <td className="px-2 py-1 border-b border-slate-100">
                               {editMode ? (
                                 <div className="flex flex-col gap-0.5">
                                   <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
@@ -1762,7 +1762,7 @@ export default function PdfEditorPage() {
                           <thead>
                             <tr className="bg-slate-800 text-white">
                               {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                                <th key={i} className={`px-2 py-2 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
+                                <th key={i} className={`px-2 py-1 text-left font-black ${i === 0 ? 'rounded-tl-lg' : ''} ${i === 4 ? 'rounded-tr-lg' : ''}`}>{h}</th>
                               ))}
                             </tr>
                           </thead>
@@ -1775,7 +1775,7 @@ export default function PdfEditorPage() {
                               });
                               return (
                                 <tr key={i} className={mockPrintTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
-                                  <td className="px-2 py-2 border-b border-slate-100">
+                                  <td className="px-2 py-1 border-b border-slate-100">
                                     {mockEditModeIdx === activeMockResultTab ? (
                                       <div className="flex flex-col gap-0.5">
                                         <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
@@ -1784,7 +1784,7 @@ export default function PdfEditorPage() {
                                     ) : (<><span className="font-black text-indigo-700">{row.word}</span><span className="text-slate-900 text-base ml-1">({row.meaning})</span></>)}
                                   </td>
                                   {([['syn1', 'syn1_m'], ['syn2', 'syn2_m'], ['syn3', 'syn3_m']] as const).map(([wk, mk], j) => (
-                                    <td key={j} className="px-2 py-2 border-b border-slate-100">
+                                    <td key={j} className="px-2 py-1 border-b border-slate-100">
                                       {mockEditModeIdx === activeMockResultTab ? (
                                         <div className="flex flex-col gap-0.5">
                                           <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
@@ -1793,7 +1793,7 @@ export default function PdfEditorPage() {
                                       ) : (<><span className="font-bold text-slate-700">{row[wk]}</span><span className="text-slate-900 text-base ml-1">({row[mk]})</span></>)}
                                     </td>
                                   ))}
-                                  <td className="px-2 py-2 border-b border-slate-100">
+                                  <td className="px-2 py-1 border-b border-slate-100">
                                     {mockEditModeIdx === activeMockResultTab ? (
                                       <div className="flex flex-col gap-0.5">
                                         <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
