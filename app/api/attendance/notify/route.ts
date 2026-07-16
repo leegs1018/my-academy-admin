@@ -27,10 +27,8 @@ export async function POST(req: Request) {
       .select('notification_method')
       .eq('user_id', academy_id)
       .single();
-    method = cfg?.notification_method ?? 'sms';
+    method = (cfg?.notification_method ?? 'sms').trim();
   }
-
-  console.log('[attendance/notify] method:', method);
 
   if (method === 'alimtalk') {
     try {

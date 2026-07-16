@@ -151,7 +151,7 @@ export async function POST(req: Request) {
     .select('notification_method')
     .eq('user_id', academy_id)
     .single();
-  const notificationMethod = academyCfg?.notification_method ?? 'sms';
+  const notificationMethod = (academyCfg?.notification_method ?? 'sms').trim();
 
   // 학부모 알림 발송 + CON 차감
   let smsResult: { ok: boolean; error?: string } = { ok: true };

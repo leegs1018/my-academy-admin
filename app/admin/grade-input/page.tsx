@@ -544,7 +544,11 @@ export default function GradeInputPage() {
                   const parts = sendSelectedSession.split('-');
                   return `${parseInt(parts[1])}월 ${parseInt(parts[2])}일`;
                 })() : '',
-                content: preview.message,
+                content: (() => {
+                  const scores = preview.message?.split('\n\n').slice(1).join('\n\n') ?? '';
+                  const compact = scores.split('\n').join(' / ');
+                  return compact.length > 95 ? compact.slice(0, 92) + '...' : compact;
+                })(),
               }),
             });
             const result = await res.json();
