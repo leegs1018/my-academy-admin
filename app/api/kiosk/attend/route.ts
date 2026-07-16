@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import CryptoJS from 'crypto-js';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
+import { sendAlimtalk } from '@/lib/ppurio';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -160,22 +161,16 @@ export async function POST(req: Request) {
     if (notificationMethod === 'alimtalk') {
       // 알림톡 발송
       try {
-        const alimRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/alimtalk/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'attendance',
-            to: student.parent_phone,
-            academyName: academy_name,
-            studentName: student.name,
-            date: `${today.slice(5, 7)}월 ${today.slice(8, 10)}일`,
-            status: action,
-          }),
+        smsResult = await sendAlimtalk({
+          type: 'attendance',
+          to: student.parent_phone,
+          academyName: academy_name,
+          studentName: student.name,
+          date: `${today.slice(5, 7)}월 ${today.slice(8, 10)}일`,
+          status: action as '등원' | '하원',
         });
-        const alimResult = await alimRes.json();
-        smsResult = { ok: alimResult.ok === true, error: alimResult.error };
-      } catch (e: any) {
-        smsResult = { ok: false, error: e.message };
+      } catch (e: unknown) {
+        smsResult = { ok: false, error: e instanceof Error ? e.message : '알림톡 발송 오류' };
       }
     } else {
       // SMS 발송

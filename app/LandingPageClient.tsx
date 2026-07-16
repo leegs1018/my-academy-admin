@@ -160,9 +160,21 @@ function DemoScreen({ tab }: { tab: typeof DEMO_TABS[number] }) {
   );
 }
 
+interface SiteInfo {
+  business_name?: string;
+  business_number?: string;
+  ceo_name?: string;
+  company_address?: string;
+  customer_service_phone?: string;
+  privacy_manager_name?: string;
+  privacy_manager_phone?: string;
+  privacy_manager_email?: string;
+}
+
 export default function LandingPageClient() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [demoTab, setDemoTab] = useState<typeof DEMO_TABS[number]>('실전 변형 문제');
+  const [siteInfo, setSiteInfo] = useState<SiteInfo>({});
 
   useEffect(() => {
     const checkUser = async () => {
@@ -170,6 +182,19 @@ export default function LandingPageClient() {
       setIsLoggedIn(!!session);
     };
     checkUser();
+  }, []);
+
+  useEffect(() => {
+    const loadSiteInfo = async () => {
+      const keys = ['business_name','business_number','ceo_name','company_address','customer_service_phone','privacy_manager_name','privacy_manager_phone','privacy_manager_email'];
+      const { data } = await supabase.from('site_settings').select('key, value').in('key', keys);
+      if (data) {
+        const map: SiteInfo = {};
+        data.forEach((r: { key: string; value: string }) => { (map as Record<string, string>)[r.key] = r.value; });
+        setSiteInfo(map);
+      }
+    };
+    loadSiteInfo();
   }, []);
 
   return (
@@ -461,21 +486,40 @@ export default function LandingPageClient() {
       </section>
 
       {/* 푸터 */}
-      <footer className="max-w-7xl mx-auto px-8 py-12 border-t border-slate-100">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-slate-400 text-sm font-bold">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-slate-900 rounded flex items-center justify-center">
-              <span className="text-yellow-400 text-[10px] font-black">C</span>
+      <footer className="border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-8 py-12">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-slate-400 text-sm font-bold mb-8">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-slate-900 rounded flex items-center justify-center">
+                <span className="text-yellow-400 text-[10px] font-black">C</span>
+              </div>
+              <span>CON EDU</span>
             </div>
-            <span>CON EDU</span>
+            <div className="flex gap-8">
+              <Link href="/terms" className="hover:text-slate-900 transition-colors">이용약관</Link>
+              <Link href="/privacy" className="text-slate-900 underline decoration-2 underline-offset-4">개인정보처리방침</Link>
+              <Link href="/support" className="hover:text-slate-900 transition-colors">고객센터</Link>
+              <Link href="/guide" className="hover:text-slate-900 transition-colors">서비스 가이드</Link>
+            </div>
+            <p>© 2026 CON EDU. All rights reserved.</p>
           </div>
-          <div className="flex gap-8">
-            <Link href="/terms" className="hover:text-slate-900 transition-colors">이용약관</Link>
-            <Link href="/privacy" className="text-slate-900 underline decoration-2 underline-offset-4">개인정보처리방침</Link>
-            <Link href="/support" className="hover:text-slate-900 transition-colors">고객센터</Link>
-            <Link href="/guide" className="hover:text-slate-900 transition-colors">서비스 가이드</Link>
+          {/* 사업자 정보 */}
+          <div className="border-t border-slate-100 pt-6 text-xs text-slate-400 font-medium space-y-1.5">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              {siteInfo.business_name    && <span>사업자명: {siteInfo.business_name}</span>}
+              {siteInfo.business_number  && <span>사업자 등록번호: {siteInfo.business_number}</span>}
+              {siteInfo.ceo_name         && <span>대표자: {siteInfo.ceo_name}</span>}
+              {siteInfo.customer_service_phone && <span>고객센터: {siteInfo.customer_service_phone}</span>}
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              {siteInfo.company_address  && <span>주소: {siteInfo.company_address}</span>}
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              {siteInfo.privacy_manager_name  && <span>개인정보 보호책임자: {siteInfo.privacy_manager_name}</span>}
+              {siteInfo.privacy_manager_phone && <span>연락처: {siteInfo.privacy_manager_phone}</span>}
+              {siteInfo.privacy_manager_email && <span>이메일: {siteInfo.privacy_manager_email}</span>}
+            </div>
           </div>
-          <p>© 2026 CON EDU. All rights reserved.</p>
         </div>
       </footer>
     </div>
