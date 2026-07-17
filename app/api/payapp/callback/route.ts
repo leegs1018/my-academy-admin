@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-// pay_state=4: 결제 완료, pay_state=3: 취소, pay_state=5: 환불
-const REFUND_STATES = new Set(['3', '5']);
+// pay_state=4: 결제 완료, pay_state=64: 환불/취소
+const REFUND_STATES = new Set(['3', '5', '64']);
 
 export async function POST(req: NextRequest) {
   let body: Record<string, string> = {};
