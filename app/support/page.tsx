@@ -27,12 +27,12 @@ export default function SupportPage() {
           현재는 아래 이메일로 문의해 주세요.
         </p>
         <a
-          href="mailto:contact@bfai.ai"
+          href="mailto:con_edu@naver.com"
           className="inline-block px-10 py-4 bg-slate-900 text-white font-black rounded-full text-lg hover:bg-slate-800 transition-all hover:-translate-y-0.5"
         >
-          contact@bfai.ai
+          con_edu@naver.com
         </a>
-        <p className="mt-6 text-sm text-slate-400 font-medium">운영시간: 평일 10:00 ~ 18:00 (주말·공휴일 제외)</p>
+        <p className="mt-6 text-sm text-slate-400 font-medium">운영시간: 평일 10:00 ~ 17:00 (주말·공휴일 제외)</p>
       </div>
 
       <footer className="border-t border-slate-100 py-8 text-center text-sm text-slate-400 font-medium">
