@@ -6,15 +6,15 @@ import { supabase } from '@/lib/supabase';
 
 const PACKAGES = [
   { amount: 1000,  price: '10,000원',  bonus: 0 },
-  { amount: 3000,  price: '30,000원',  bonus: 2 },
-  { amount: 5000,  price: '50,000원',  bonus: 3 },
-  { amount: 10000, price: '100,000원', bonus: 5 },
+  { amount: 3000,  price: '30,000원',  bonus: 5 },
+  { amount: 5000,  price: '50,000원',  bonus: 7 },
+  { amount: 10000, price: '100,000원', bonus: 10 },
 ];
 
 const getBonus = (amount: number) => {
-  if (amount >= 10000) return 5;
-  if (amount >= 5000)  return 3;
-  if (amount >= 3000)  return 2;
+  if (amount >= 10000) return 10;
+  if (amount >= 5000)  return 7;
+  if (amount >= 3000)  return 5;
   return 0;
 };
 
@@ -31,7 +31,7 @@ function ConChargeContent() {
   const [isCustom, setIsCustom] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  const [payTab, setPayTab] = useState<'bank' | 'card'>('bank');
+  const [payTab, setPayTab] = useState<'card' | 'bank'>('card');
   const [cardLoading, setCardLoading] = useState(false);
   const [cardError, setCardError] = useState('');
   const [cardSuccess, setCardSuccess] = useState(false);
@@ -41,21 +41,17 @@ function ConChargeContent() {
   const totalCon = selectedAmount + bonusCon;
   const bonusPct = getBonus(selectedAmount);
 
-  // 팝업에서 결제 완료 후 이 페이지로 돌아올 때 처리
   useEffect(() => {
     if (searchParams.get('payment') === 'complete' && typeof window !== 'undefined') {
       if (window.opener) {
-        // 팝업 창: 부모에게 알리고 닫기
         window.opener.postMessage('payapp_payment_complete', '*');
         window.close();
       } else {
-        // 직접 리디렉션된 경우: 성공 메시지 표시
         setCardSuccess(true);
       }
     }
   }, [searchParams]);
 
-  // 부모 창: 팝업에서 보내는 메시지 수신
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data === 'payapp_payment_complete') {
@@ -115,7 +111,6 @@ function ConChargeContent() {
         return;
       }
 
-      // 결제창 팝업
       const popup = window.open(
         data.payurl,
         'payapp_payment',
@@ -128,7 +123,6 @@ function ConChargeContent() {
         return;
       }
 
-      // 팝업이 닫히면 로딩 종료 (사용자가 수동 닫기 시)
       const timer = setInterval(() => {
         if (popup.closed) {
           clearInterval(timer);
@@ -197,8 +191,8 @@ function ConChargeContent() {
             <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
               <input
                 type="number"
-                min="1"
-                placeholder="충전할 CON 입력"
+                min="100"
+                placeholder="충전할 CON 입력 (최소 100C)"
                 value={customInput}
                 onFocus={() => { setIsCustom(true); setSelected(null); }}
                 onChange={e => { setCustomInput(e.target.value); setIsCustom(true); setSelected(null); }}
@@ -207,27 +201,27 @@ function ConChargeContent() {
               <span className="font-black text-gray-600 dark:text-slate-400 text-sm">C</span>
             </div>
             {isCustom && parseInt(customInput) >= 10000 && (
+              <p className="text-[11px] font-black text-yellow-500 mt-1.5">+{getBonusCon(parseInt(customInput)).toLocaleString()}C 추가 적립 (10%)</p>
+            )}
+            {isCustom && parseInt(customInput) >= 5000 && parseInt(customInput) < 10000 && (
+              <p className="text-[11px] font-black text-yellow-500 mt-1.5">+{getBonusCon(parseInt(customInput)).toLocaleString()}C 추가 적립 (7%)</p>
+            )}
+            {isCustom && parseInt(customInput) >= 3000 && parseInt(customInput) < 5000 && (
               <p className="text-[11px] font-black text-yellow-500 mt-1.5">+{getBonusCon(parseInt(customInput)).toLocaleString()}C 추가 적립 (5%)</p>
             )}
           </button>
         </div>
-        <p className="text-xs text-gray-400 dark:text-slate-500 font-bold mt-4">1,000 CON = 10,000원 · 부가세 포함</p>
+        <div className="mt-4 space-y-1">
+          <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">1,000 CON = 10,000원 · 부가세 포함</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">최소 충전 금액은 100 CON 이상입니다.</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">직접 입력 시 10,000C 이상이면 +10% 추가 적립됩니다.</p>
+        </div>
       </div>
 
       {/* 결제 방법 탭 */}
       <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         {/* 탭 버튼 */}
         <div className="flex border-b border-gray-200 dark:border-slate-700">
-          <button
-            onClick={() => setPayTab('bank')}
-            className={`flex-1 py-3 text-sm font-black transition-colors ${
-              payTab === 'bank'
-                ? 'text-yellow-600 dark:text-yellow-400 border-b-2 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/10'
-                : 'text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300'
-            }`}
-          >
-            무통장 입금
-          </button>
           <button
             onClick={() => setPayTab('card')}
             className={`flex-1 py-3 text-sm font-black transition-colors ${
@@ -238,86 +232,19 @@ function ConChargeContent() {
           >
             💳 카드결제
           </button>
+          <button
+            onClick={() => setPayTab('bank')}
+            className={`flex-1 py-3 text-sm font-black transition-colors ${
+              payTab === 'bank'
+                ? 'text-yellow-600 dark:text-yellow-400 border-b-2 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/10'
+                : 'text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300'
+            }`}
+          >
+            무통장 입금
+          </button>
         </div>
 
         <div className="p-6 space-y-4">
-          {/* 무통장 입금 탭 */}
-          {payTab === 'bank' && (
-            <>
-              <h2 className="text-sm font-black text-gray-700 dark:text-slate-300">입금 계좌</h2>
-
-              {bankName || bankAccount ? (
-                <div className="bg-gray-50 dark:bg-slate-800 rounded-2xl p-5 space-y-3">
-                  {bankName && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-black text-gray-400 dark:text-slate-500">은행</span>
-                      <span className="text-sm font-black text-gray-900 dark:text-white">{bankName}</span>
-                    </div>
-                  )}
-                  {bankAccount && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-black text-gray-400 dark:text-slate-500">계좌번호</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-gray-900 dark:text-white tracking-widest">{bankAccount}</span>
-                        <button
-                          onClick={copyAccount}
-                          className="px-2.5 py-1 text-[10px] font-black bg-gray-200 dark:bg-slate-700 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-gray-600 dark:text-slate-300 rounded-lg transition-all"
-                        >
-                          {copied ? '복사됨 ✓' : '복사'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {bankHolder && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-black text-gray-400 dark:text-slate-500">예금주</span>
-                      <span className="text-sm font-black text-gray-900 dark:text-white">{bankHolder}</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm font-bold text-gray-400 dark:text-slate-500 text-center py-4">계좌 정보를 불러오는 중...</p>
-              )}
-
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-4 space-y-2">
-                <p className="text-xs font-black text-yellow-700 dark:text-yellow-400">입금 시 꼭 확인해주세요</p>
-                <ul className="text-xs font-bold text-yellow-600 dark:text-yellow-500 space-y-1">
-                  <li>• 입금자명을 <span className="font-black">학원명</span>으로 입력해주세요.</li>
-                  <li>• 입금 확인 후 <span className="font-black">1시간 이내</span> CON이 지급됩니다.</li>
-                  <li>• 3,000C 이상 <span className="font-black">+2%</span> · 5,000C 이상 <span className="font-black">+3%</span> · 10,000C 이상 <span className="font-black">+5%</span> 추가 적립</li>
-                  <li>• 직접 입력 시 10,000C 이상이면 <span className="font-black">+5%</span> 추가 적립됩니다.</li>
-                  <li>• 충전 관련 문의는 <a href="/admin/inquiries" className="underline font-black">문의하기</a>를 이용해주세요.</li>
-                </ul>
-              </div>
-
-              {packageSummary && (
-                <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2">
-                  <p className="text-xs font-black text-gray-500 dark:text-slate-400 mb-2">선택한 패키지</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-gray-500 dark:text-slate-400">충전 CON</span>
-                    <span className="text-sm font-black text-gray-900 dark:text-white">{selectedAmount.toLocaleString()} C</span>
-                  </div>
-                  {bonusCon > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-yellow-500">추가 적립 (+{bonusPct}%)</span>
-                      <span className="text-sm font-black text-yellow-500">+{bonusCon.toLocaleString()} C</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center border-t border-gray-200 dark:border-slate-700 pt-2 mt-1">
-                    <span className="text-xs font-black text-gray-700 dark:text-slate-300">최종 지급 CON</span>
-                    <span className="text-base font-black text-gray-900 dark:text-white">{totalCon.toLocaleString()} C</span>
-                  </div>
-                  {!isCustom && (
-                    <p className="text-xs font-bold text-gray-400 dark:text-slate-500">
-                      입금 금액: {PACKAGES.find(p => p.amount === selected)?.price}
-                    </p>
-                  )}
-                  <p className="text-xs font-bold text-gray-400 dark:text-slate-500 mt-1">위 계좌로 해당 금액을 입금해주세요.</p>
-                </div>
-              )}
-            </>
-          )}
-
           {/* 카드결제 탭 */}
           {payTab === 'card' && (
             <div className="space-y-4">
@@ -399,6 +326,82 @@ function ConChargeContent() {
                 </>
               )}
             </div>
+          )}
+
+          {/* 무통장 입금 탭 */}
+          {payTab === 'bank' && (
+            <>
+              <h2 className="text-sm font-black text-gray-700 dark:text-slate-300">입금 계좌</h2>
+
+              {bankName || bankAccount ? (
+                <div className="bg-gray-50 dark:bg-slate-800 rounded-2xl p-5 space-y-3">
+                  {bankName && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-gray-400 dark:text-slate-500">은행</span>
+                      <span className="text-sm font-black text-gray-900 dark:text-white">{bankName}</span>
+                    </div>
+                  )}
+                  {bankAccount && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-gray-400 dark:text-slate-500">계좌번호</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-gray-900 dark:text-white tracking-widest">{bankAccount}</span>
+                        <button
+                          onClick={copyAccount}
+                          className="px-2.5 py-1 text-[10px] font-black bg-gray-200 dark:bg-slate-700 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-gray-600 dark:text-slate-300 rounded-lg transition-all"
+                        >
+                          {copied ? '복사됨 ✓' : '복사'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {bankHolder && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-gray-400 dark:text-slate-500">예금주</span>
+                      <span className="text-sm font-black text-gray-900 dark:text-white">{bankHolder}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm font-bold text-gray-400 dark:text-slate-500 text-center py-4">계좌 정보를 불러오는 중...</p>
+              )}
+
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-4 space-y-2">
+                <p className="text-xs font-black text-yellow-700 dark:text-yellow-400">입금 시 꼭 확인해주세요</p>
+                <ul className="text-xs font-bold text-yellow-600 dark:text-yellow-500 space-y-1">
+                  <li>• 입금자명을 <span className="font-black">학원명</span>으로 입력해주세요.</li>
+                  <li>• 입금 확인 후 <span className="font-black">1시간 이내</span> CON이 지급됩니다.</li>
+                  <li>• 3,000C 이상 <span className="font-black">+5%</span> · 5,000C 이상 <span className="font-black">+7%</span> · 10,000C 이상 <span className="font-black">+10%</span> 추가 적립</li>
+                  <li>• 충전 관련 문의는 <a href="/admin/inquiries" className="underline font-black">문의하기</a>를 이용해주세요.</li>
+                </ul>
+              </div>
+
+              {packageSummary && (
+                <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-2">
+                  <p className="text-xs font-black text-gray-500 dark:text-slate-400 mb-2">선택한 패키지</p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-gray-500 dark:text-slate-400">충전 CON</span>
+                    <span className="text-sm font-black text-gray-900 dark:text-white">{selectedAmount.toLocaleString()} C</span>
+                  </div>
+                  {bonusCon > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-yellow-500">추가 적립 (+{bonusPct}%)</span>
+                      <span className="text-sm font-black text-yellow-500">+{bonusCon.toLocaleString()} C</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center border-t border-gray-200 dark:border-slate-700 pt-2 mt-1">
+                    <span className="text-xs font-black text-gray-700 dark:text-slate-300">최종 지급 CON</span>
+                    <span className="text-base font-black text-gray-900 dark:text-white">{totalCon.toLocaleString()} C</span>
+                  </div>
+                  {!isCustom && (
+                    <p className="text-xs font-bold text-gray-400 dark:text-slate-500">
+                      입금 금액: {PACKAGES.find(p => p.amount === selected)?.price}
+                    </p>
+                  )}
+                  <p className="text-xs font-bold text-gray-400 dark:text-slate-500 mt-1">위 계좌로 해당 금액을 입금해주세요.</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

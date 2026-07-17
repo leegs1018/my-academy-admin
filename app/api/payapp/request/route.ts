@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 function getBonus(amount: number) {
-  if (amount >= 10000) return 5;
-  if (amount >= 5000) return 3;
-  if (amount >= 3000) return 2;
+  if (amount >= 10000) return 10;
+  if (amount >= 5000) return 7;
+  if (amount >= 3000) return 5;
   return 0;
 }
 
