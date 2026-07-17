@@ -674,7 +674,7 @@ export default function GuidePage() {
           ))}
         </div>
         <p className="text-xs font-bold text-yellow-700 dark:text-yellow-400">
-          CON이 부족하면 슈퍼어드민에게 충전을 요청하거나, 메뉴 하단의 CON 사용 이력에서 잔액을 확인하세요.
+          CON 충전 메뉴에서 카드결제 또는 무통장입금으로 직접 충전할 수 있습니다. 3,000C 이상 충전 시 +5% · 5,000C 이상 +7% · 10,000C 이상 +10% 보너스가 적립됩니다. 충전 및 환불 문의는 문의하기 게시판을 이용해주세요.
         </p>
       </div>
 
