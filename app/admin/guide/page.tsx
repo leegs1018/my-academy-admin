@@ -292,6 +292,17 @@ function AiSample({ typeKey }: { typeKey: string }) {
           <div className="flex flex-wrap gap-1 text-[9px]">{['① (A)-(C)-(B)','② (B)-(A)-(C)','③ (B)-(C)-(A)','④ (C)-(A)-(B)','⑤ (C)-(B)-(A)'].map((o,i)=><span key={i} className={i===0?'font-black text-indigo-600':'text-slate-500'}>{o}</span>)}</div>
         </div>
       );
+    case 'sentence_insertion':
+      return (
+        <div className="text-[10px] space-y-1.5">
+          <p className="font-black text-slate-700">주어진 문장이 들어가기에 가장 적절한 곳은?</p>
+          <p className="text-[9px] bg-slate-50 p-1 rounded italic text-slate-600">But evolution kept these models deliberately imperfect.</p>
+          <div className="text-[9px] space-y-0.5">
+            <p>① Humans excel at visual imagery. ②Our brains evolved this ability. ③ This allows us to rehearse actions. ④ We can practice without real risks. ⑤ The result is remarkable foresight.</p>
+          </div>
+          <p className="text-[9px] font-black text-indigo-600">정답: ③</p>
+        </div>
+      );
     default:
       return <p className="text-[10px] text-slate-400">예시 준비 중</p>;
   }
@@ -343,8 +354,8 @@ const AI_GUIDES: Record<SubTab, { title: string; steps: { title: string; desc: s
     steps: [
       { title: '실전 변형 문제 메뉴 클릭', desc: '좌측 메뉴에서 AI 문제 생성 → 실전 변형 문제를 선택합니다.' },
       { title: '지문 입력', desc: '하나 또는 여러 개의 지문을 입력합니다. 지문 추가 버튼으로 다중 지문 처리가 가능합니다.' },
-      { title: '유형 선택', desc: '슈퍼어드민이 활성화한 유형만 표시됩니다. 원하는 유형을 체크합니다.' },
-      { title: '난이도·문항 수 설정', desc: '각 유형마다 난이도(B1~C2)와 문항 수(1~3)를 개별 조정할 수 있습니다.' },
+      { title: '유형 선택', desc: '슈퍼어드민이 활성화한 유형만 표시됩니다. 원하는 유형(최대 10가지)을 체크하고 드래그로 순서를 조정할 수 있습니다.' },
+      { title: '난이도·문항 수 설정', desc: '각 유형마다 난이도(A2~C2)와 문항 수(1~3)를 개별 조정할 수 있습니다.' },
       { title: '\'AI 문제 생성하기\' 클릭', desc: '지문 수×유형별 CON 합산 금액이 버튼 위에 표시됩니다.' },
       { title: '결과 확인 및 PDF 저장', desc: '생성된 문제를 확인하고 인라인 편집 후 PDF로 저장합니다.' },
     ],
@@ -382,7 +393,7 @@ const WB_GUIDES: Record<SubTab, { title: string; steps: { title: string; desc: s
       { title: '워크북 메뉴 클릭', desc: '좌측 메뉴에서 워크북을 선택합니다.' },
       { title: '직접 입력 탭 확인', desc: '\'직접 입력\' 탭이 기본 선택되어 있습니다.' },
       { title: '지문 입력', desc: '영어 지문을 텍스트 입력창에 붙여넣거나 직접 타이핑합니다. 여러 지문을 동시에 입력할 수 있습니다.' },
-      { title: '유형 선택', desc: '생성할 워크북 유형을 선택합니다. 슈퍼어드민이 활성화한 유형만 표시됩니다.' },
+      { title: '유형 선택', desc: '지문 드릴 · 어휘 어법 · 서술형 대비 카테고리에서 원하는 유형을 복수 선택합니다. 슈퍼어드민이 활성화한 유형만 표시됩니다.' },
       { title: '난이도 선택', desc: '지문 수준에 맞는 난이도(B1~C2)를 선택합니다.' },
       { title: '\'워크북 생성하기\' 클릭', desc: '지문 수×유형 수만큼 CON이 차감됩니다. 생성 중 진행 상황이 실시간으로 표시됩니다.' },
       { title: 'PDF 다운로드', desc: '문제지 PDF와 정답지 PDF를 각각 다운로드합니다. 배치 방식(지문별/유형별/무작위)을 선택할 수 있습니다.' },
@@ -416,37 +427,41 @@ const WB_GUIDES: Record<SubTab, { title: string; steps: { title: string; desc: s
 // ── 유형 메타데이터 ──────────────────────────────────────────────────────────
 
 const AI_TYPE_INFO: Record<string, { label: string; icon: string }> = {
-  topic_title:      { label: '주제/제목 유형',     icon: '💬' },
-  grammar:          { label: '어법 유형',          icon: '✏️' },
-  vocab_paraphrase: { label: '어휘 낱말 쓰임',     icon: '📖' },
-  vocab_blank:      { label: '어휘 (a)(b) 빈칸',  icon: '🔤' },
-  fill_blank:       { label: '빈칸 추론 유형',     icon: '🔲' },
-  summary:          { label: '요약문 완성 유형',   icon: '📋' },
-  flow:             { label: '흐름 유형',          icon: '🌊' },
-  phrase_meaning:   { label: '어구 의미 추론',     icon: '🔍' },
-  sentence_order:   { label: '순서 배열 유형',     icon: '🔀' },
+  topic_title:        { label: '주제/제목 유형',   icon: '💬' },
+  grammar:            { label: '어법 유형',        icon: '✏️' },
+  vocab_paraphrase:   { label: '어휘 낱말 쓰임',   icon: '📖' },
+  vocab_blank:        { label: '어휘 (a)(b) 빈칸', icon: '🔤' },
+  fill_blank:         { label: '빈칸 추론 유형',   icon: '🔲' },
+  summary:            { label: '요약문 완성 유형', icon: '📋' },
+  flow:               { label: '흐름 유형',        icon: '🌊' },
+  phrase_meaning:     { label: '어구 의미 추론',   icon: '🔍' },
+  sentence_order:     { label: '순서 배열 유형',   icon: '🔀' },
+  sentence_insertion: { label: '문장 삽입 유형',   icon: '📍' },
 };
 
 const WB_TYPE_INFO: Record<string, { label: string; icon: string }> = {
-  passage_analysis:    { label: '지문 구문분석',      icon: '🔬' },
-  passage_translation: { label: '지문 해석지',        icon: '📄' },
-  translation:         { label: '문장 해석',          icon: '🇰🇷' },
-  word_order:          { label: '단어 배열',          icon: '🔀' },
-  english_writing:     { label: '영작 하기',          icon: '✍️' },
-  vocab_choice:        { label: '어휘 고르기',        icon: '📝' },
-  vocab_fill:          { label: '어휘 채우기',        icon: '📝' },
-  grammar_choice:      { label: '어법 고르기',        icon: '✏️' },
-  grammar_correct:     { label: '어법 고치기',        icon: '✏️' },
-  grammar_correct_adv: { label: '어법 고치기(심화)', icon: '✏️' },
+  // 지문 드릴
+  passage_translation: { label: '지문 해석지',            icon: '📄' },
+  passage_analysis:    { label: '지문 구문분석',           icon: '🔬' },
+  translation:         { label: '문장 해석',              icon: '🇰🇷' },
+  word_order:          { label: '단어 배열',              icon: '🔀' },
+  english_writing:     { label: '영작 하기',              icon: '✍️' },
+  // 어휘 어법
+  vocab_choice:        { label: '어휘 고르기',            icon: '📝' },
+  vocab_fill:          { label: '어휘 채우기',            icon: '📝' },
+  grammar_choice:      { label: '어법 고르기',            icon: '✏️' },
+  grammar_correct:     { label: '어법 고치기',            icon: '✏️' },
+  grammar_correct_adv: { label: '어법 고치기(심화)',      icon: '✏️' },
+  // 서술형 대비
   combo_grammar_order: { label: '어법 서술형 + 순서배열', icon: '📋' },
-  combo_vocab_fill:    { label: '영작 서술형 + 어휘',   icon: '📋' },
-  summary_sentence:    { label: '요약문 서술형',      icon: '📋' },
+  combo_vocab_fill:    { label: '영작 서술형 + 어휘',     icon: '📋' },
+  summary_sentence:    { label: '요약문 서술형',          icon: '📋' },
 };
 
 const MAIN_TABS = [
   { key: 'pdf' as MainTab, label: '지문분석',       icon: '📝', href: '/admin/pdf-editor',   color: 'bg-teal-600' },
-  { key: 'ai'  as MainTab, label: '실전 변형 문제', icon: '🎯', href: '/admin/ai-questions', color: 'bg-indigo-600' },
   { key: 'wb'  as MainTab, label: '워크북',         icon: '📌', href: '/admin/vocab-choice', color: 'bg-violet-600' },
+  { key: 'ai'  as MainTab, label: '실전 변형 문제', icon: '🎯', href: '/admin/ai-questions', color: 'bg-indigo-600' },
 ];
 
 const SUB_TABS = [
