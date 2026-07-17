@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
+// pay_state=4: 결제 완료, pay_state=3: 취소, pay_state=5: 환불
+const REFUND_STATES = new Set(['3', '5']);
+
 export async function POST(req: NextRequest) {
   let body: Record<string, string> = {};
 
@@ -24,75 +27,94 @@ export async function POST(req: NextRequest) {
     return new Response('FAIL', { status: 400 });
   }
 
-  // 결제 완료(pay_state=4)만 처리
-  if (pay_state !== '4') {
-    console.log('[payapp/callback] 결제 완료 아님, pay_state:', pay_state);
-    return new Response('SUCCESS', { status: 200 });
-  }
-
-  if (!userId || !conAmountStr || !mul_no) {
-    console.error('[payapp/callback] 필수 파라미터 누락');
-    return new Response('FAIL', { status: 400 });
-  }
-
-  const totalCon = parseInt(conAmountStr);
-  if (isNaN(totalCon) || totalCon <= 0) {
-    console.error('[payapp/callback] 잘못된 CON 금액:', conAmountStr);
-    return new Response('FAIL', { status: 400 });
-  }
-
   const supabase = createAdminClient();
-  const dupKey = `[카드결제] ${mul_no}`;
 
-  // 중복 결제 방지
-  const { data: existing } = await supabase
-    .from('con_transactions')
-    .select('id')
-    .eq('description', dupKey)
-    .maybeSingle();
+  // ── 결제 완료 처리 (pay_state=4) ──────────────────
+  if (pay_state === '4') {
+    if (!userId || !conAmountStr || !mul_no) {
+      return new Response('FAIL', { status: 400 });
+    }
 
-  if (existing) {
-    console.log('[payapp/callback] 중복 결제 무시:', mul_no);
+    const totalCon = parseInt(conAmountStr);
+    if (isNaN(totalCon) || totalCon <= 0) return new Response('FAIL', { status: 400 });
+
+    const dupKey = `[카드결제] ${mul_no}`;
+
+    // 중복 방지
+    const { data: existing } = await supabase
+      .from('con_transactions')
+      .select('id')
+      .eq('description', dupKey)
+      .maybeSingle();
+
+    if (existing) {
+      console.log('[payapp/callback] 중복 결제 무시:', mul_no);
+      return new Response('SUCCESS', { status: 200 });
+    }
+
+    const { error } = await supabase.rpc('charge_con', {
+      p_academy_id: userId,
+      p_amount: totalCon,
+      p_description: dupKey,
+      p_created_by: 'payapp',
+    });
+
+    if (error) {
+      console.error('[payapp/callback] charge_con 실패:', error);
+      return new Response('FAIL', { status: 500 });
+    }
+
+    console.log('[payapp/callback] CON 충전 완료:', userId, totalCon, 'CON');
     return new Response('SUCCESS', { status: 200 });
   }
 
-  // 현재 잔액 조회
-  const { data: cfg } = await supabase
-    .from('academy_config')
-    .select('points')
-    .eq('user_id', userId)
-    .single();
+  // ── 취소/환불 처리 (pay_state=3 or 5) ─────────────
+  if (REFUND_STATES.has(pay_state)) {
+    if (!mul_no) return new Response('FAIL', { status: 400 });
 
-  if (!cfg) {
-    console.error('[payapp/callback] 사용자 없음:', userId);
-    return new Response('FAIL', { status: 400 });
+    const chargeKey = `[카드결제] ${mul_no}`;
+    const refundKey = `[카드결제 환불] ${mul_no}`;
+
+    // 이미 환불 처리됐는지 확인
+    const { data: alreadyRefunded } = await supabase
+      .from('con_transactions')
+      .select('id')
+      .eq('description', refundKey)
+      .maybeSingle();
+
+    if (alreadyRefunded) {
+      return new Response('SUCCESS', { status: 200 });
+    }
+
+    // 원래 충전 내역 조회
+    const { data: originalCharge } = await supabase
+      .from('con_transactions')
+      .select('academy_id, amount')
+      .eq('description', chargeKey)
+      .maybeSingle();
+
+    if (!originalCharge) {
+      console.log('[payapp/callback] 원본 충전 내역 없음, 환불 스킵:', mul_no);
+      return new Response('SUCCESS', { status: 200 });
+    }
+
+    const { error } = await supabase.rpc('deduct_con', {
+      p_academy_id: originalCharge.academy_id,
+      p_amount: originalCharge.amount,
+      p_feature_key: 'payapp_refund',
+      p_description: refundKey,
+    });
+
+    if (error) {
+      console.error('[payapp/callback] deduct_con(환불) 실패:', error);
+      return new Response('FAIL', { status: 500 });
+    }
+
+    console.log('[payapp/callback] CON 환불 처리:', originalCharge.academy_id, originalCharge.amount, 'CON');
+    return new Response('SUCCESS', { status: 200 });
   }
 
-  const currentPoints = cfg.points ?? 0;
-  const newPoints = currentPoints + totalCon;
-
-  // 포인트 업데이트
-  const { error: updateError } = await supabase
-    .from('academy_config')
-    .update({ points: newPoints })
-    .eq('user_id', userId);
-
-  if (updateError) {
-    console.error('[payapp/callback] 포인트 업데이트 실패:', updateError);
-    return new Response('FAIL', { status: 500 });
-  }
-
-  // 거래 이력 기록
-  await supabase.from('con_transactions').insert({
-    academy_id: userId,
-    type: 'charge',
-    amount: totalCon,
-    balance_after: newPoints,
-    description: dupKey,
-    feature_key: 'payapp_charge',
-    is_free: false,
-  });
-
-  console.log('[payapp/callback] CON 충전 완료:', userId, totalCon, 'CON, 잔액:', newPoints);
+  // 그 외 상태는 무시
+  console.log('[payapp/callback] 처리 불필요한 pay_state:', pay_state);
   return new Response('SUCCESS', { status: 200 });
 }

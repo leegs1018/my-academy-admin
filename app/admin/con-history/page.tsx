@@ -32,6 +32,10 @@ const FEATURE_LABELS: Record<string, { label: string; color: string }> = {
   lms:                           { label: 'LMS',            color: 'text-teal-600 dark:text-teal-400' },
   // 키오스크
   kiosk:                         { label: '키오스크',       color: 'text-orange-500 dark:text-orange-400' },
+  // 카드결제
+  payapp_charge:                 { label: '카드결제',       color: 'text-blue-600 dark:text-blue-400' },
+  payapp_refund:                 { label: '카드결제 환불',  color: 'text-red-500 dark:text-red-400' },
+  admin_deduct:                  { label: '관리자 차감',    color: 'text-slate-500 dark:text-slate-400' },
 };
 
 const FEATURE_OPTIONS = [

@@ -29,6 +29,9 @@ const FEATURE_LABELS: Record<string, string> = {
   vocab_choice: '어휘 선택 문제',
   sms: 'SMS',
   lms: 'LMS',
+  payapp_charge: '카드결제',
+  payapp_refund: '카드결제 환불',
+  admin_deduct: '관리자 차감',
 };
 
 const FEATURE_FILTER_OPTIONS = [

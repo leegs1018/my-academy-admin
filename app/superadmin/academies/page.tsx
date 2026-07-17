@@ -37,11 +37,20 @@ interface ChargeModal {
   result: string;
 }
 
+interface DeductModal {
+  academy: Academy;
+  amount: string;
+  description: string;
+  loading: boolean;
+  result: string;
+}
+
 export default function AcademiesPage() {
   const [academies, setAcademies] = useState<Academy[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [chargeModal, setChargeModal] = useState<ChargeModal | null>(null);
+  const [deductModal, setDeductModal] = useState<DeductModal | null>(null);
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
   const [smsLoading, setSmsLoading] = useState<string | null>(null);
 
@@ -112,6 +121,46 @@ export default function AcademiesPage() {
 
   const openChargeModal = (academy: Academy) => {
     setChargeModal({ academy, amount: '', description: '', is_free: false, loading: false, result: '' });
+  };
+
+  const openDeductModal = (academy: Academy) => {
+    setDeductModal({ academy, amount: '', description: '', loading: false, result: '' });
+  };
+
+  const handleDeduct = async () => {
+    if (!deductModal || !deductModal.amount) return;
+    const amount = parseInt(deductModal.amount, 10);
+    if (isNaN(amount) || amount <= 0) return;
+
+    setDeductModal(prev => prev ? { ...prev, loading: true, result: '' } : null);
+
+    try {
+      const res = await fetch('/api/superadmin/credits/deduct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          academy_id: deductModal.academy.user_id,
+          amount,
+          description: deductModal.description,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setAcademies(prev =>
+          prev.map(a =>
+            a.user_id === deductModal.academy.user_id
+              ? { ...a, points: data.new_balance }
+              : a
+          )
+        );
+        setDeductModal(prev => prev ? { ...prev, loading: false, result: `차감 완료! 새 잔액: ${data.new_balance.toLocaleString()} CON` } : null);
+      } else {
+        setDeductModal(prev => prev ? { ...prev, loading: false, result: `오류: ${data.error}` } : null);
+      }
+    } catch {
+      setDeductModal(prev => prev ? { ...prev, loading: false, result: '서버 오류가 발생했습니다.' } : null);
+    }
   };
 
   const handleCharge = async () => {
@@ -282,12 +331,20 @@ export default function AcademiesPage() {
                     </td>
                     <td className="py-3 px-4 text-right text-xs font-bold text-slate-500">{dateStr}</td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => openChargeModal(a)}
-                        className="px-3 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all"
-                      >
-                        충전
-                      </button>
+                      <div className="flex gap-1.5 justify-center">
+                        <button
+                          onClick={() => openChargeModal(a)}
+                          className="px-3 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all"
+                        >
+                          충전
+                        </button>
+                        <button
+                          onClick={() => openDeductModal(a)}
+                          className="px-3 py-1.5 text-xs font-black bg-red-700 hover:bg-red-600 text-white rounded-lg transition-all"
+                        >
+                          차감
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -385,6 +442,72 @@ export default function AcademiesPage() {
                 className="flex-1 py-3 text-sm font-black text-slate-900 bg-yellow-500 hover:bg-yellow-400 rounded-xl transition-all disabled:opacity-50"
               >
                 {chargeModal.loading ? '처리 중...' : '충전하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CON 차감 모달 */}
+      {deductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !deductModal.loading && setDeductModal(null)} />
+          <div className="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-800">
+              <h3 className="text-base font-black text-red-400">💸 CON 차감</h3>
+              <p className="text-xs text-slate-400 mt-1 font-bold">{deductModal.academy.academy_name || deductModal.academy.email}</p>
+              <p className="text-xs text-slate-500 mt-0.5">현재 잔액: <span className="text-yellow-400 font-black">{(deductModal.academy.points || 0).toLocaleString()} C</span></p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-400 mb-2">차감량 (CON)</label>
+                <div className="flex gap-1.5 mb-2">
+                  {[100, 300, 500, 1000].map(n => (
+                    <button key={n}
+                      onClick={() => setDeductModal(prev => prev ? { ...prev, amount: String(n) } : null)}
+                      className="flex-1 py-1.5 text-xs font-black bg-slate-700 hover:bg-red-700 hover:text-white text-slate-300 rounded-lg transition-all">
+                      {n.toLocaleString()}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="차감할 CON"
+                  value={deductModal.amount}
+                  onChange={e => setDeductModal(prev => prev ? { ...prev, amount: e.target.value } : null)}
+                  className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-black focus:border-red-500 focus:outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-slate-400 mb-2">메모 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="예: 카드결제 환불 처리"
+                  value={deductModal.description}
+                  onChange={e => setDeductModal(prev => prev ? { ...prev, description: e.target.value } : null)}
+                  className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-bold focus:border-red-500 focus:outline-none text-sm placeholder:text-slate-600"
+                />
+              </div>
+              {deductModal.result && (
+                <div className={`rounded-xl px-4 py-3 text-sm font-bold ${deductModal.result.startsWith('오류') || deductModal.result.startsWith('서버') ? 'bg-red-900/30 text-red-400' : 'bg-green-900/30 text-green-400'}`}>
+                  {deductModal.result}
+                </div>
+              )}
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => setDeductModal(null)}
+                disabled={deductModal.loading}
+                className="flex-1 py-3 text-sm font-black text-slate-400 bg-slate-800 rounded-xl hover:bg-slate-700 transition-all disabled:opacity-50"
+              >
+                닫기
+              </button>
+              <button
+                onClick={handleDeduct}
+                disabled={deductModal.loading || !deductModal.amount}
+                className="flex-1 py-3 text-sm font-black text-white bg-red-700 hover:bg-red-600 rounded-xl transition-all disabled:opacity-50"
+              >
+                {deductModal.loading ? '처리 중...' : '차감하기'}
               </button>
             </div>
           </div>

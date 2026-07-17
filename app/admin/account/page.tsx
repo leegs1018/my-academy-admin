@@ -1,19 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
-interface ConTransaction {
-  id: string;
-  type: 'charge' | 'deduct';
-  amount: number;
-  balance_after: number;
-  feature_key: string | null;
-  description: string;
-  created_at: string;
-}
 
 export default function AccountPage() {
   const router = useRouter();
@@ -59,11 +50,6 @@ export default function AccountPage() {
   const [newPwConfirm, setNewPwConfirm] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
 
-  // CON 이력
-  const [conTransactions, setConTransactions] = useState<ConTransaction[]>([]);
-  const [conTxLoading, setConTxLoading] = useState(false);
-  const [conTxPage, setConTxPage] = useState(1);
-  const [conTxTotal, setConTxTotal] = useState(0);
 
   // VIP 알림 설정
   const [isVip, setIsVip] = useState(false);
@@ -136,7 +122,6 @@ export default function AccountPage() {
           }
         }
         setVerified(true);
-        loadConTransactions(1, session.user.id);
       }
     };
     init();
@@ -190,23 +175,7 @@ export default function AccountPage() {
 
     setVerifyLoading(false);
     setVerified(true);
-    loadConTransactions(1, userId);
   };
-
-  const loadConTransactions = useCallback(async (page: number, uid?: string) => {
-    const id = uid || userId;
-    if (!id) return;
-    setConTxLoading(true);
-    try {
-      const res = await fetch(`/api/credits/transactions?page=${page}`);
-      const data = await res.json();
-      setConTransactions(data.transactions || []);
-      setConTxTotal(data.total || 0);
-      setConTxPage(page);
-    } finally {
-      setConTxLoading(false);
-    }
-  }, [userId]);
 
   // ── 학원 정보 저장 ────────────────────────────────
   const handleSave = async () => {
@@ -691,75 +660,6 @@ export default function AccountPage() {
           )}
         </div>}
 
-        {/* CON 사용 이력 */}
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-black text-gray-600 uppercase tracking-wider">CON 사용 내역</h2>
-              <p className="text-xs text-gray-400 mt-0.5">충전 및 차감 이력</p>
-            </div>
-            {conTxTotal > 0 && (
-              <span className="text-xs font-black text-gray-400">총 {conTxTotal}건</span>
-            )}
-          </div>
-          <div className="overflow-x-auto">
-            {conTxLoading ? (
-              <div className="px-6 py-8 text-center text-sm text-gray-400 font-bold">불러오는 중...</div>
-            ) : conTransactions.length === 0 ? (
-              <div className="px-6 py-8 text-center text-sm text-gray-400 font-bold">사용 내역이 없습니다.</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="py-3 px-4 text-left text-xs font-black text-gray-400">일시</th>
-                    <th className="py-3 px-4 text-left text-xs font-black text-gray-400">내용</th>
-                    <th className="py-3 px-4 text-right text-xs font-black text-gray-400">금액</th>
-                    <th className="py-3 px-4 text-right text-xs font-black text-gray-400">잔액</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {conTransactions.map(tx => {
-                    const d = new Date(tx.created_at);
-                    const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                    return (
-                      <tr key={tx.id} className="border-t border-gray-50 hover:bg-gray-50/50">
-                        <td className="py-3 px-4 text-xs text-gray-400 font-bold whitespace-nowrap">{dateStr}</td>
-                        <td className="py-3 px-4 text-sm font-bold text-gray-700">{tx.description}</td>
-                        <td className="py-3 px-4 text-right font-black whitespace-nowrap">
-                          <span className={tx.type === 'charge' ? 'text-blue-600' : 'text-red-500'}>
-                            {tx.type === 'charge' ? '+' : '-'}{tx.amount.toLocaleString()} C
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right text-sm font-black text-gray-900 whitespace-nowrap">
-                          {tx.balance_after.toLocaleString()} C
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-          {conTxTotal > 20 && (
-            <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between">
-              <button
-                disabled={conTxPage <= 1}
-                onClick={() => loadConTransactions(conTxPage - 1)}
-                className="px-4 py-2 text-xs font-black text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-40 transition-all"
-              >
-                ← 이전
-              </button>
-              <span className="text-xs font-bold text-gray-400">{conTxPage} / {Math.ceil(conTxTotal / 20)}</span>
-              <button
-                disabled={conTxPage >= Math.ceil(conTxTotal / 20)}
-                onClick={() => loadConTransactions(conTxPage + 1)}
-                className="px-4 py-2 text-xs font-black text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-40 transition-all"
-              >
-                다음 →
-              </button>
-            </div>
-          )}
-        </div>
         {/* 회원 탈퇴 */}
         <div className="bg-white rounded-3xl border border-red-100 overflow-hidden shadow-sm">
           <div className="px-6 py-5 flex items-center justify-between">
