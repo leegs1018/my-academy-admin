@@ -65,6 +65,20 @@ export default function AccountPage() {
   const [conTxPage, setConTxPage] = useState(1);
   const [conTxTotal, setConTxTotal] = useState(0);
 
+  // VIP 알림 설정
+  const [isVip, setIsVip] = useState(false);
+  const [vipConfig, setVipConfig] = useState({
+    ppurio_account: '',
+    ppurio_api_key: '',
+    ppurio_sender_number: '',
+    kakao_sender_key: '',
+    kakao_template_arrival: '',
+    kakao_template_departure: '',
+    kakao_template_grade: '',
+  });
+  const [vipSaving, setVipSaving] = useState(false);
+  const [vipMsg, setVipMsg] = useState('');
+
   // 회원 탈퇴
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawConfirm, setWithdrawConfirm] = useState('');
@@ -94,7 +108,7 @@ export default function AccountPage() {
         // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url')
+          .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
           .eq('user_id', session.user.id)
           .single();
         if (data) {
@@ -104,6 +118,16 @@ export default function AccountPage() {
           setPoints(data.points || 0);
           setKioskCode(data.kiosk_code || '');
           setLogoUrl(data.logo_url || '');
+          setIsVip(data.sms_enabled ?? false);
+          setVipConfig({
+            ppurio_account:        data.ppurio_account        || '',
+            ppurio_api_key:        data.ppurio_api_key        || '',
+            ppurio_sender_number:  data.ppurio_sender_number  || '',
+            kakao_sender_key:      data.kakao_sender_key      || '',
+            kakao_template_arrival:   data.kakao_template_arrival   || '',
+            kakao_template_departure: data.kakao_template_departure || '',
+            kakao_template_grade:     data.kakao_template_grade     || '',
+          });
           if (data.logo_url) {
             const { data: signedData } = await supabase.storage
               .from('academy-logos')
@@ -134,7 +158,7 @@ export default function AccountPage() {
 
     const { data } = await supabase
       .from('academy_config')
-      .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url')
+      .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
       .eq('user_id', userId)
       .single();
 
@@ -145,6 +169,16 @@ export default function AccountPage() {
       setPoints(data.points || 0);
       setKioskCode(data.kiosk_code || '');
       setLogoUrl(data.logo_url || '');
+      setIsVip(data.sms_enabled ?? false);
+      setVipConfig({
+        ppurio_account:           data.ppurio_account           || '',
+        ppurio_api_key:           data.ppurio_api_key           || '',
+        ppurio_sender_number:     data.ppurio_sender_number     || '',
+        kakao_sender_key:         data.kakao_sender_key         || '',
+        kakao_template_arrival:   data.kakao_template_arrival   || '',
+        kakao_template_departure: data.kakao_template_departure || '',
+        kakao_template_grade:     data.kakao_template_grade     || '',
+      });
 
       if (data.logo_url) {
         const { data: signedData } = await supabase.storage
@@ -252,6 +286,19 @@ export default function AccountPage() {
     setLogoPreview(null);
     setLogoMsg('로고가 삭제되었습니다.');
     setTimeout(() => setLogoMsg(''), 3000);
+  };
+
+  // ── VIP 설정 저장 ────────────────────────────────
+  const handleVipSave = async () => {
+    setVipSaving(true);
+    setVipMsg('');
+    const { error } = await supabase
+      .from('academy_config')
+      .update(vipConfig)
+      .eq('user_id', userId);
+    setVipSaving(false);
+    setVipMsg(error ? '저장 중 오류가 발생했습니다.' : '저장되었습니다.');
+    setTimeout(() => setVipMsg(''), 3000);
   };
 
   // ── 키오스크 코드 재발급 ──────────────────────────
@@ -548,6 +595,52 @@ export default function AccountPage() {
             </button>
           </div>
         </div>
+
+        {/* VIP 알림 설정 — sms_enabled 계정만 표시 */}
+        {isVip && (
+          <div className="bg-white rounded-3xl border border-yellow-200 overflow-hidden shadow-sm">
+            <div className="px-6 py-4 border-b border-yellow-100 flex items-center gap-2">
+              <span className="text-base">⭐</span>
+              <div>
+                <h2 className="text-sm font-black text-gray-700">VIP 알림 설정</h2>
+                <p className="text-xs text-gray-400 mt-0.5">뿌리오 계정으로 SMS / 카카오 알림톡 발송</p>
+              </div>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {[
+                { key: 'ppurio_sender_number',     label: 'SMS 발신번호' },
+                { key: 'kakao_sender_key',         label: '카카오 발신프로파일 키 (senderKey)' },
+                { key: 'kakao_template_arrival',   label: '등원 알림 템플릿 코드' },
+                { key: 'kakao_template_departure', label: '하원 알림 템플릿 코드' },
+                { key: 'kakao_template_grade',     label: '성적 알림 템플릿 코드' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs font-black text-gray-400 mb-1.5">{f.label}</label>
+                  <input
+                    type="text"
+                    value={vipConfig[f.key as keyof typeof vipConfig]}
+                    onChange={e => setVipConfig(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-yellow-400 focus:bg-white outline-none transition-all font-bold text-gray-900 text-sm"
+                  />
+                </div>
+              ))}
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={handleVipSave}
+                  disabled={vipSaving}
+                  className="px-6 py-3 bg-yellow-400 text-gray-900 font-black rounded-2xl hover:bg-yellow-300 transition-all disabled:opacity-50 text-sm"
+                >
+                  {vipSaving ? '저장 중...' : '저장'}
+                </button>
+                {vipMsg && (
+                  <span className={`text-sm font-bold ${vipMsg.includes('오류') ? 'text-red-500' : 'text-green-500'}`}>
+                    {vipMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 비밀번호 변경 - SNS 사용자는 숨김 */}
         {!SNS_PROVIDERS.includes(provider) && <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">

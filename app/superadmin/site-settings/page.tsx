@@ -31,6 +31,7 @@ const SECTIONS = [
     fields: [
       { key: 'PPURIO_ACCOUNT',               label: '뿌리오 계정 아이디' },
       { key: 'PPURIO_API_KEY',               label: '뿌리오 API Key' },
+      { key: 'PPURIO_SENDER_NUMBER',         label: 'SMS 발신번호 (뿌리오 등록번호)' },
       { key: 'KAKAO_SENDER_KEY',             label: '카카오 발신프로파일 키 (senderKey)' },
       { key: 'KAKAO_TEMPLATE_ARRIVAL_ID',   label: '등원 알림 템플릿 코드 (tplCode)' },
       { key: 'KAKAO_TEMPLATE_DEPARTURE_ID', label: '하원 알림 템플릿 코드 (tplCode)' },

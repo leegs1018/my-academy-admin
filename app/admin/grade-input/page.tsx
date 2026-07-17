@@ -538,6 +538,7 @@ export default function GradeInputPage() {
               body: JSON.stringify({
                 type: 'grade',
                 to: phone,
+                academy_id: userId,
                 academyName,
                 studentName: preview.studentName,
                 date: sendSelectedSession ? (() => {

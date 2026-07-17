@@ -196,7 +196,7 @@ export default function AcademiesPage() {
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">잔여 콘</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">학생수</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS발송수</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS권한</th>
+                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">VIP</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">역할</th>
                 <th className="py-3 px-4 text-right text-xs font-black text-slate-500">가입일</th>
                 <th className="py-3 px-4 text-center text-xs font-black text-slate-500">CON</th>
@@ -246,13 +246,14 @@ export default function AcademiesPage() {
                       <button
                         onClick={() => handleSmsToggle(a)}
                         disabled={smsLoading === a.user_id}
-                        className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors duration-200 disabled:opacity-50 focus:outline-none ${
-                          a.sms_enabled ? 'bg-emerald-500' : 'bg-slate-600'
+                        title={a.sms_enabled ? 'VIP 해제' : 'VIP 지정'}
+                        className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all disabled:opacity-50 ${
+                          a.sms_enabled
+                            ? 'bg-yellow-500 text-slate-900 hover:bg-yellow-400'
+                            : 'bg-slate-700 text-slate-500 hover:bg-slate-600 hover:text-slate-300'
                         }`}
                       >
-                        <span className={`inline-block w-3.5 h-3.5 bg-white rounded-full shadow transition-transform duration-200 ${
-                          a.sms_enabled ? 'translate-x-5' : 'translate-x-1'
-                        }`} />
+                        {a.sms_enabled ? '⭐ VIP' : '—'}
                       </button>
                     </td>
                     <td className="py-3 px-4 text-center">

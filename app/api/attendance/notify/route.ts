@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         studentName,
         date: displayDate,
         status: status as '등원' | '하원',
-      });
+      }, academy_id);
       console.log('[attendance/notify] 알림톡 결과:', JSON.stringify(result));
       return NextResponse.json(result);
     } catch (e: unknown) {

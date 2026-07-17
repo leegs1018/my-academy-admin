@@ -27,6 +27,7 @@ export default function SuperAdminSmsPage() {
   const [academies, setAcademies] = useState<Academy[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
+  const [provider, setProvider] = useState<'solapi' | 'ppurio'>('solapi');
   const [isSending, setIsSending] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [logs, setLogs] = useState<SmsLog[]>([]);
@@ -76,7 +77,7 @@ export default function SuperAdminSmsPage() {
       const res = await fetch('/api/superadmin/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, recipients }),
+        body: JSON.stringify({ message, recipients, provider }),
       });
       const result = await res.json();
       alert(`발송 완료 — 성공 ${result.success}건 / 실패 ${result.fail}건`);
@@ -107,9 +108,21 @@ export default function SuperAdminSmsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-black text-white">📱 SMS 발송</h1>
-        <p className="text-sm text-slate-500 mt-1 font-bold">등록된 학원 원장님들에게 SMS를 발송합니다</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-white">📱 SMS 발송</h1>
+          <p className="text-sm text-slate-500 mt-1 font-bold">등록된 학원 원장님들에게 SMS를 발송합니다</p>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl p-1">
+          <button
+            onClick={() => setProvider('solapi')}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${provider === 'solapi' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+          >솔라피</button>
+          <button
+            onClick={() => setProvider('ppurio')}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${provider === 'ppurio' ? 'bg-yellow-500 text-black' : 'text-slate-400 hover:text-slate-200'}`}
+          >뿌리오</button>
+        </div>
       </div>
 
       {/* 탭 */}

@@ -168,7 +168,7 @@ export async function POST(req: Request) {
           studentName: student.name,
           date: `${today.slice(5, 7)}월 ${today.slice(8, 10)}일`,
           status: action as '등원' | '하원',
-        });
+        }, academy_id);
       } catch (e: unknown) {
         smsResult = { ok: false, error: e instanceof Error ? e.message : '알림톡 발송 오류' };
       }

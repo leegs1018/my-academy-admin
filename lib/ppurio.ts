@@ -25,27 +25,46 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function getPpurioConfig() {
-  const { data } = await supabaseAdmin
+async function getPpurioConfig(academy_id?: string) {
+  // 전역 설정 (site_settings)
+  const { data: globalData } = await supabaseAdmin
     .from('site_settings')
     .select('key, value')
     .in('key', [
-      'PPURIO_API_KEY',
-      'PPURIO_ACCOUNT',
-      'KAKAO_SENDER_KEY',
-      'KAKAO_TEMPLATE_ARRIVAL_ID',
-      'KAKAO_TEMPLATE_DEPARTURE_ID',
-      'KAKAO_TEMPLATE_GRADE_ID',
+      'PPURIO_API_KEY', 'PPURIO_ACCOUNT', 'PPURIO_SENDER_NUMBER',
+      'KAKAO_SENDER_KEY', 'KAKAO_TEMPLATE_ARRIVAL_ID',
+      'KAKAO_TEMPLATE_DEPARTURE_ID', 'KAKAO_TEMPLATE_GRADE_ID',
     ]);
-  const map: Record<string, string> = {};
-  (data ?? []).forEach(row => { if (row.value) map[row.key] = row.value; });
+  const g: Record<string, string> = {};
+  (globalData ?? []).forEach(row => { if (row.value) g[row.key] = row.value; });
+
+  // 학원별 설정 (academy_config) — 전역보다 우선
+  const a: Record<string, string> = {};
+  if (academy_id) {
+    const { data: ac } = await supabaseAdmin
+      .from('academy_config')
+      .select('ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+      .eq('user_id', academy_id)
+      .single();
+    if (ac) {
+      if (ac.ppurio_account)         a['PPURIO_ACCOUNT']              = ac.ppurio_account;
+      if (ac.ppurio_api_key)         a['PPURIO_API_KEY']              = ac.ppurio_api_key;
+      if (ac.ppurio_sender_number)   a['PPURIO_SENDER_NUMBER']        = ac.ppurio_sender_number;
+      if (ac.kakao_sender_key)       a['KAKAO_SENDER_KEY']            = ac.kakao_sender_key;
+      if (ac.kakao_template_arrival) a['KAKAO_TEMPLATE_ARRIVAL_ID']   = ac.kakao_template_arrival;
+      if (ac.kakao_template_departure) a['KAKAO_TEMPLATE_DEPARTURE_ID'] = ac.kakao_template_departure;
+      if (ac.kakao_template_grade)   a['KAKAO_TEMPLATE_GRADE_ID']     = ac.kakao_template_grade;
+    }
+  }
+
   return {
-    apiKey:           map['PPURIO_API_KEY']              || process.env.PPURIO_API_KEY,
-    account:          map['PPURIO_ACCOUNT']              || process.env.PPURIO_ACCOUNT,
-    senderProfile:    map['KAKAO_SENDER_KEY']            || process.env.KAKAO_SENDER_KEY,
-    arrivalTplCode:   map['KAKAO_TEMPLATE_ARRIVAL_ID']   || process.env.KAKAO_TEMPLATE_ARRIVAL_ID,
-    departureTplCode: map['KAKAO_TEMPLATE_DEPARTURE_ID'] || process.env.KAKAO_TEMPLATE_DEPARTURE_ID,
-    gradeTplCode:     map['KAKAO_TEMPLATE_GRADE_ID']     || process.env.KAKAO_TEMPLATE_GRADE_ID,
+    apiKey:           a['PPURIO_API_KEY']              || g['PPURIO_API_KEY']              || process.env.PPURIO_API_KEY,
+    account:          a['PPURIO_ACCOUNT']              || g['PPURIO_ACCOUNT']              || process.env.PPURIO_ACCOUNT,
+    senderNumber:     a['PPURIO_SENDER_NUMBER']        || g['PPURIO_SENDER_NUMBER']        || process.env.PPURIO_SENDER_NUMBER,
+    senderProfile:    a['KAKAO_SENDER_KEY']            || g['KAKAO_SENDER_KEY']            || process.env.KAKAO_SENDER_KEY,
+    arrivalTplCode:   a['KAKAO_TEMPLATE_ARRIVAL_ID']   || g['KAKAO_TEMPLATE_ARRIVAL_ID']   || process.env.KAKAO_TEMPLATE_ARRIVAL_ID,
+    departureTplCode: a['KAKAO_TEMPLATE_DEPARTURE_ID'] || g['KAKAO_TEMPLATE_DEPARTURE_ID'] || process.env.KAKAO_TEMPLATE_DEPARTURE_ID,
+    gradeTplCode:     a['KAKAO_TEMPLATE_GRADE_ID']     || g['KAKAO_TEMPLATE_GRADE_ID']     || process.env.KAKAO_TEMPLATE_GRADE_ID,
   };
 }
 
@@ -63,8 +82,46 @@ async function getToken(account: string, apiKey: string): Promise<string> {
   return data.token;
 }
 
-export async function sendAlimtalk(payload: AlimtalkPayload): Promise<{ ok: boolean; error?: string }> {
-  const cfg = await getPpurioConfig();
+export async function sendPpurioSms(to: string, content: string, academy_id?: string): Promise<{ ok: boolean; error?: string }> {
+  const cfg = await getPpurioConfig(academy_id);
+
+  if (!cfg.apiKey || !cfg.account) {
+    return { ok: false, error: '뿌리오 설정이 없습니다.' };
+  }
+  if (!cfg.senderNumber) {
+    return { ok: false, error: '뿌리오 SMS 발신번호(PPURIO_SENDER_NUMBER)가 설정되지 않았습니다.' };
+  }
+
+  const token = await getToken(cfg.account, cfg.apiKey);
+  const byteLen = Buffer.byteLength(content, 'utf8');
+  const messageType = byteLen <= 90 ? 'SMS' : 'LMS';
+
+  const res = await fetch(`${PPURIO_BASE}/message`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      account:       cfg.account,
+      messageType,
+      content,
+      from:          cfg.senderNumber.replace(/-/g, ''),
+      duplicateFlag: 'Y',
+      targetCount:   1,
+      targets:       [{ to: to.replace(/-/g, '') }],
+      refKey:        `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    }),
+  });
+
+  const result = await res.json() as { code?: string; description?: string };
+  console.log('[ppurio] SMS 응답:', JSON.stringify({ httpStatus: res.status, body: result }));
+
+  if (result.code !== '1000') {
+    return { ok: false, error: result.description || `code: ${result.code}` };
+  }
+  return { ok: true };
+}
+
+export async function sendAlimtalk(payload: AlimtalkPayload, academy_id?: string): Promise<{ ok: boolean; error?: string }> {
+  const cfg = await getPpurioConfig(academy_id);
 
   if (!cfg.apiKey || !cfg.account || !cfg.senderProfile) {
     return { ok: false, error: '알림톡 채널이 아직 설정되지 않았습니다. 슈퍼어드민 사이트 설정에서 설정해주세요.' };
