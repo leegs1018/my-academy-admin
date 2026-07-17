@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 
 
 export default function AccountPage() {
@@ -32,12 +31,9 @@ export default function AccountPage() {
     naver: '네이버',
   };
 
-  // 로고
-  const [logoUrl, setLogoUrl] = useState('');
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [logoMsg, setLogoMsg] = useState('');
-  const logoInputRef = useRef<HTMLInputElement>(null);
+  // 추천인 코드
+  const [ownReferralCode, setOwnReferralCode] = useState('');
+  const [referralCopied, setReferralCopied] = useState(false);
 
   // 수정 상태
   const [saving, setSaving] = useState(false);
@@ -94,7 +90,7 @@ export default function AccountPage() {
         // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+          .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
           .eq('user_id', session.user.id)
           .single();
         if (data) {
@@ -103,7 +99,7 @@ export default function AccountPage() {
           setMobile(data.mobile || '');
           setPoints(data.points || 0);
           setKioskCode(data.kiosk_code || '');
-          setLogoUrl(data.logo_url || '');
+          setOwnReferralCode(data.own_referral_code || '');
           setIsVip(data.sms_enabled ?? false);
           setVipConfig({
             ppurio_account:        data.ppurio_account        || '',
@@ -114,12 +110,6 @@ export default function AccountPage() {
             kakao_template_departure: data.kakao_template_departure || '',
             kakao_template_grade:     data.kakao_template_grade     || '',
           });
-          if (data.logo_url) {
-            const { data: signedData } = await supabase.storage
-              .from('academy-logos')
-              .createSignedUrl(data.logo_url, 3600);
-            if (signedData?.signedUrl) setLogoPreview(signedData.signedUrl);
-          }
         }
         setVerified(true);
       }
@@ -143,7 +133,7 @@ export default function AccountPage() {
 
     const { data } = await supabase
       .from('academy_config')
-      .select('academy_name, academy_phone, mobile, points, kiosk_code, logo_url, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+      .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
       .eq('user_id', userId)
       .single();
 
@@ -153,7 +143,7 @@ export default function AccountPage() {
       setMobile(data.mobile || '');
       setPoints(data.points || 0);
       setKioskCode(data.kiosk_code || '');
-      setLogoUrl(data.logo_url || '');
+      setOwnReferralCode(data.own_referral_code || '');
       setIsVip(data.sms_enabled ?? false);
       setVipConfig({
         ppurio_account:           data.ppurio_account           || '',
@@ -164,13 +154,6 @@ export default function AccountPage() {
         kakao_template_departure: data.kakao_template_departure || '',
         kakao_template_grade:     data.kakao_template_grade     || '',
       });
-
-      if (data.logo_url) {
-        const { data: signedData } = await supabase.storage
-          .from('academy-logos')
-          .createSignedUrl(data.logo_url, 3600);
-        if (signedData?.signedUrl) setLogoPreview(signedData.signedUrl);
-      }
     }
 
     setVerifyLoading(false);
@@ -189,72 +172,6 @@ export default function AccountPage() {
     setSaving(false);
     setSaveMsg(error ? '저장 중 오류가 발생했습니다.' : '저장되었습니다.');
     setTimeout(() => setSaveMsg(''), 3000);
-  };
-
-  // ── 로고 업로드 ──────────────────────────────────
-  const handleLogoUpload = async (file: File) => {
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
-      setLogoMsg('JPG, PNG, WebP, GIF 형식만 지원합니다.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setLogoMsg('파일 크기는 5MB 이하여야 합니다.');
-      return;
-    }
-
-    setLogoUploading(true);
-    setLogoMsg('');
-
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
-    const path = `${userId}/logo.${ext}`;
-
-    // Remove existing logo if different extension
-    if (logoUrl && logoUrl !== path) {
-      await supabase.storage.from('academy-logos').remove([logoUrl]);
-    }
-
-    const { error: uploadErr } = await supabase.storage
-      .from('academy-logos')
-      .upload(path, file, { contentType: file.type, upsert: true });
-
-    if (uploadErr) {
-      setLogoMsg(`업로드 실패: ${uploadErr.message}`);
-      setLogoUploading(false);
-      return;
-    }
-
-    const { error: updateErr } = await supabase
-      .from('academy_config')
-      .update({ logo_url: path })
-      .eq('user_id', userId);
-
-    if (updateErr) {
-      setLogoMsg(`저장 실패: ${updateErr.message}`);
-      setLogoUploading(false);
-      return;
-    }
-
-    setLogoUrl(path);
-    const { data: signedData } = await supabase.storage
-      .from('academy-logos')
-      .createSignedUrl(path, 3600);
-    if (signedData?.signedUrl) setLogoPreview(signedData.signedUrl);
-
-    setLogoUploading(false);
-    setLogoMsg('로고가 저장되었습니다.');
-    setTimeout(() => setLogoMsg(''), 3000);
-  };
-
-  const handleLogoDelete = async () => {
-    if (!logoUrl) return;
-    if (!confirm('로고를 삭제하시겠습니까?')) return;
-
-    await supabase.storage.from('academy-logos').remove([logoUrl]);
-    await supabase.from('academy_config').update({ logo_url: null }).eq('user_id', userId);
-    setLogoUrl('');
-    setLogoPreview(null);
-    setLogoMsg('로고가 삭제되었습니다.');
-    setTimeout(() => setLogoMsg(''), 3000);
   };
 
   // ── VIP 설정 저장 ────────────────────────────────
@@ -391,7 +308,7 @@ export default function AccountPage() {
           <div>
             <p className="text-xs font-black text-gray-400 tracking-wider">MY CON</p>
             <p className="text-3xl font-black text-white mt-1">{points.toLocaleString()}<span className="text-lg text-gray-400 ml-1">C</span></p>
-            <p className="text-xs text-gray-500 mt-1.5">100 CON = 10,000원 · 충전 문의: 031-903-8205</p>
+            <p className="text-xs text-gray-500 mt-1.5">1,000 CON = 10,000원 · 충전 및 환불 문의는 문의하기 게시판을 이용해주세요</p>
           </div>
           <div className="w-14 h-14 bg-yellow-400 rounded-2xl flex items-center justify-center text-2xl">⭐</div>
         </div>
@@ -479,72 +396,6 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* 학원 로고 */}
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-50">
-            <h2 className="text-sm font-black text-gray-600 uppercase tracking-wider">학원 로고</h2>
-            <p className="text-xs text-gray-400 mt-0.5">영어 문제지 PDF에 표시됩니다</p>
-          </div>
-          <div className="px-6 py-5">
-            <div className="flex items-start gap-5">
-              {/* 로고 미리보기 */}
-              <div className="w-32 h-32 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center bg-gray-50 shrink-0 overflow-hidden">
-                {logoPreview ? (
-                  <Image
-                    src={logoPreview}
-                    alt="학원 로고"
-                    width={128}
-                    height={128}
-                    className="w-full h-full object-contain p-2"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="text-center">
-                    <div className="text-3xl mb-1">🏫</div>
-                    <p className="text-xs text-gray-400 font-bold">로고 없음</p>
-                  </div>
-                )}
-              </div>
-
-              {/* 업로드 버튼 영역 */}
-              <div className="flex flex-col gap-3 flex-1">
-                <p className="text-xs font-bold text-gray-500">
-                  JPG · PNG · WebP · GIF · 최대 5MB
-                </p>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => logoInputRef.current?.click()}
-                    disabled={logoUploading}
-                    className="px-5 py-2.5 bg-gray-900 text-white font-black rounded-2xl hover:bg-gray-800 transition-all disabled:bg-gray-300 text-sm"
-                  >
-                    {logoUploading ? '업로드 중...' : logoPreview ? '🔄 로고 변경' : '📤 로고 업로드'}
-                  </button>
-                  {logoPreview && (
-                    <button
-                      onClick={handleLogoDelete}
-                      className="px-5 py-2.5 bg-red-50 text-red-500 font-black rounded-2xl hover:bg-red-100 transition-all text-sm border border-red-100"
-                    >
-                      삭제
-                    </button>
-                  )}
-                </div>
-                {logoMsg && (
-                  <span className={`text-sm font-bold ${logoMsg.includes('실패') || logoMsg.includes('오류') ? 'text-red-500' : 'text-green-500'}`}>
-                    {logoMsg}
-                  </span>
-                )}
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ''; }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* 키오스크 코드 */}
         <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
           <div className="px-6 py-4 border-b border-gray-50">
@@ -562,6 +413,37 @@ export default function AccountPage() {
             >
               {kioskResetting ? '재발급 중...' : '🔄 재발급'}
             </button>
+          </div>
+        </div>
+
+        {/* 내 추천인 코드 */}
+        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h2 className="text-sm font-black text-gray-600 uppercase tracking-wider">내 추천인 코드</h2>
+          </div>
+          <div className="px-6 py-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-gray-400 mb-1">내 코드</p>
+                <p className="text-3xl font-black text-gray-900 tracking-[0.2em]">{ownReferralCode || '------'}</p>
+              </div>
+              {ownReferralCode && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(ownReferralCode);
+                    setReferralCopied(true);
+                    setTimeout(() => setReferralCopied(false), 2000);
+                  }}
+                  className="px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black rounded-2xl transition-all text-sm"
+                >
+                  {referralCopied ? '✅ 복사됨' : '📋 복사'}
+                </button>
+              )}
+            </div>
+            <div className="bg-yellow-50 rounded-2xl px-4 py-3 border border-yellow-100">
+              <p className="text-xs font-black text-yellow-700 mb-1">추천인 보상 안내</p>
+              <p className="text-xs font-bold text-yellow-600">신규 회원이 가입 시 내 추천인 코드를 입력하면, 신규 회원에게 추가 CON이 지급됩니다.</p>
+            </div>
           </div>
         </div>
 
