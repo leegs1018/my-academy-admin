@@ -19,11 +19,14 @@ export async function POST(req: NextRequest) {
     return new Response('FAIL', { status: 400 });
   }
 
+  // 모든 파라미터 로그 (페이앱이 어떤 데이터를 보내는지 확인용)
+  console.log('[payapp/callback] 수신 데이터:', JSON.stringify(body));
+
   const { linkkey, linkval, pay_state, mul_no, var1: userId, var2: conAmountStr } = body;
 
   // 연동 KEY/VALUE 검증
   if (linkkey !== process.env.PAYAPP_LINKKEY || linkval !== process.env.PAYAPP_LINKVAL) {
-    console.error('[payapp/callback] 인증 실패 - linkkey 불일치');
+    console.error('[payapp/callback] 인증 실패 - 수신 linkkey:', linkkey, '/ 수신 linkval:', linkval);
     return new Response('FAIL', { status: 400 });
   }
 
