@@ -442,7 +442,7 @@ export default function AccountPage() {
             </div>
             <div className="bg-yellow-50 rounded-2xl px-4 py-3 border border-yellow-100">
               <p className="text-xs font-black text-yellow-700 mb-1">추천인 보상 안내</p>
-              <p className="text-xs font-bold text-yellow-600">신규 회원이 가입 시 내 추천인 코드를 입력하면, 신규 회원에게 추가 CON이 지급됩니다.</p>
+              <p className="text-xs font-bold text-yellow-600">신규 회원이 가입 시 내 추천인 코드를 입력하면, 신규 회원과 나에게 추가 CON이 지급됩니다.</p>
             </div>
           </div>
         </div>
