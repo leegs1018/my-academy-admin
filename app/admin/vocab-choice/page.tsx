@@ -18,7 +18,7 @@ type WorkbookType =
   | 'combo_vocab_grammar' | 'combo_vocab_fill'
   | 'combo_grammar_order' | 'combo_grammar_insert';
 
-type Difficulty = 'b1' | 'b2' | 'c1' | 'c2';
+type Difficulty = 'a2' | 'b1' | 'b2' | 'c1' | 'c2';
 
 interface PassageCard {
   id: string;
@@ -105,16 +105,18 @@ const TYPE_LABELS: Record<WorkbookType, string> = {
 };
 
 const DIFF_CARDS = [
-  { key: 'b1' as Difficulty, level: 'B1', label: '중등/고등 하', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
-  { key: 'b2' as Difficulty, level: 'B2', label: '고등 중',      icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
-  { key: 'c1' as Difficulty, level: 'C1', label: '고등 상',      icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-  { key: 'c2' as Difficulty, level: 'C2', label: '고등 최상',    icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+  { key: 'a2' as Difficulty, level: 'A2', label: '최하', icon: '🌰', active: 'border-lime-400 bg-lime-50 text-lime-700' },
+  { key: 'b1' as Difficulty, level: 'B1', label: '하',   icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+  { key: 'b2' as Difficulty, level: 'B2', label: '중',   icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+  { key: 'c1' as Difficulty, level: 'C1', label: '상',   icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+  { key: 'c2' as Difficulty, level: 'C2', label: '최상', icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
 ];
 
 const DIFF_COLORS: Record<string, string> = {
-  b1: 'bg-emerald-100 text-emerald-700',
-  b2: 'bg-sky-100 text-sky-700',
-  c1: 'bg-violet-100 text-violet-700',
+  a2: 'bg-lime-100 text-lime-700',
+  b1: 'bg-sky-100 text-sky-700',
+  b2: 'bg-emerald-100 text-emerald-700',
+  c1: 'bg-orange-100 text-orange-700',
   c2: 'bg-rose-100 text-rose-700',
 };
 

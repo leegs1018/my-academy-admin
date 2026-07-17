@@ -255,6 +255,7 @@ const TYPE_COLORS: Record<string, string> = {
   '문제': 'bg-rose-100 text-rose-700',
 };
 const DIFF_COLORS: Record<string, string> = {
+  'a2': 'bg-lime-100 text-lime-700',
   'b1': 'bg-sky-100 text-sky-700',
   'b2': 'bg-emerald-100 text-emerald-700',
   'c1': 'bg-orange-100 text-orange-700',
@@ -277,7 +278,7 @@ export default function PdfEditorPage() {
   const [ocrDone, setOcrDone] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  const [difficulty, setDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
+  const [difficulty, setDifficulty] = useState<'a2' | 'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
   const [result, setResult] = useState<GeneratedMaterials | null>(null);
@@ -309,7 +310,7 @@ export default function PdfEditorPage() {
   const [mockSelectedNumbers, setMockSelectedNumbers] = useState<string[]>([]);
   const [mockPassageMap, setMockPassageMap] = useState<Record<string, string>>({});
   const [mockLoadingNumbers, setMockLoadingNumbers] = useState<Set<string>>(new Set());
-  const [mockDifficulty, setMockDifficulty] = useState<'b1' | 'b2' | 'c1' | 'c2'>('b2');
+  const [mockDifficulty, setMockDifficulty] = useState<'a2' | 'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [mockLoading, setMockLoading] = useState(false);
   const [mockLoadingMsg, setMockLoadingMsg] = useState('');
   const [mockError, setMockError] = useState<string | null>(null);
@@ -1061,10 +1062,11 @@ export default function PdfEditorPage() {
               <span className="font-black text-slate-700 text-lg block mb-3">난이도 선택:</span>
               <div className="flex gap-2">
                 {([
-                  { key: 'b1', level: 'B1', label: '중등/고등 하', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
-                  { key: 'b2', level: 'B2', label: '고등 중',      icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
-                  { key: 'c1', level: 'C1', label: '고등 상',      icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-                  { key: 'c2', level: 'C2', label: '고등 최상',    icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+                  { key: 'a2', level: 'A2', label: '최하', icon: '🌰', active: 'border-lime-400 bg-lime-50 text-lime-700' },
+                  { key: 'b1', level: 'B1', label: '하',   icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+                  { key: 'b2', level: 'B2', label: '중',   icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+                  { key: 'c1', level: 'C1', label: '상',   icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                  { key: 'c2', level: 'C2', label: '최상', icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
                 ] as const).map(d => (
                   <button key={d.key} onClick={() => setDifficulty(d.key)}
                     className={`flex-1 py-4 rounded-xl font-black transition-all border-2
@@ -1549,10 +1551,11 @@ export default function PdfEditorPage() {
               <p className="text-base font-black text-slate-700 mb-3">STEP 2 — 난이도 선택 (전체 적용)</p>
               <div className="flex gap-2">
                 {([
-                  { key: 'b1', level: 'B1', label: '중등/고등 하', icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
-                  { key: 'b2', level: 'B2', label: '고등 중',      icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
-                  { key: 'c1', level: 'C1', label: '고등 상',      icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-                  { key: 'c2', level: 'C2', label: '고등 최상',    icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
+                  { key: 'a2', level: 'A2', label: '최하', icon: '🌰', active: 'border-lime-400 bg-lime-50 text-lime-700' },
+                  { key: 'b1', level: 'B1', label: '하',   icon: '🌱', active: 'border-sky-400 bg-sky-50 text-sky-700' },
+                  { key: 'b2', level: 'B2', label: '중',   icon: '🌳', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+                  { key: 'c1', level: 'C1', label: '상',   icon: '🔥', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                  { key: 'c2', level: 'C2', label: '최상', icon: '⚡', active: 'border-rose-500 bg-rose-50 text-rose-700' },
                 ] as const).map(d => (
                   <button key={d.key} onClick={() => setMockDifficulty(d.key)}
                     className={`flex-1 py-4 rounded-xl font-black transition-all border-2 ${mockDifficulty === d.key ? d.active : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600'}`}>
