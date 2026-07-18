@@ -22,9 +22,11 @@ export default function SupportPage() {
       <div className="max-w-2xl mx-auto px-8 py-32 text-center">
         <div className="text-6xl mb-8">💬</div>
         <h1 className="text-3xl font-black text-slate-900 mb-4">고객센터</h1>
-        <p className="text-slate-400 font-medium text-lg mb-10 leading-relaxed">
-          채팅 문의 서비스를 준비 중입니다.<br />
-          현재는 아래 이메일로 문의해 주세요.
+        <p className="text-slate-600 font-medium text-lg mb-2 leading-relaxed">
+          서비스 이용 중 문의사항이 있으시면
+        </p>
+        <p className="text-slate-600 font-medium text-lg mb-10 leading-relaxed">
+          아래 이메일로 연락 주시면 성실히 답변 드리겠습니다.
         </p>
         <a
           href="mailto:con_edu@naver.com"
