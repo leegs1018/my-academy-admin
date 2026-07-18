@@ -148,14 +148,16 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     router.replace('/');
   };
 
-  // 채널톡 부트 (어드민 페이지 + 로그인 상태일 때만)
-  useEffect(() => {
-    const isAdminPage = pathname.startsWith('/admin');
-    if (!isAdminPage || !userId) return;
+  const channelBootedRef = useRef(false);
+  type CIO = (...args: unknown[]) => void;
+  type CIOWindow = Window & { ChannelIO?: CIO; ChannelIOInitialized?: boolean };
 
-    const w = window as Window & { ChannelIO?: (...args: unknown[]) => void; ChannelIOInitialized?: boolean };
+  // 채널톡 최초 부트 (userId 확보 시 1회)
+  useEffect(() => {
+    if (!userId) return;
+    const w = window as CIOWindow;
     if (!w.ChannelIO) {
-      const ch = (...args: unknown[]) => { (ch as unknown as { q: unknown[][] }).q.push(args); };
+      const ch: CIO = (...args) => { (ch as unknown as { q: unknown[][] }).q.push(args); };
       (ch as unknown as { q: unknown[][] }).q = [];
       w.ChannelIO = ch;
     }
@@ -167,34 +169,49 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       s.src = 'https://cdn.channel.io/plugin/ch-plugin-web.js';
       document.head.appendChild(s);
     }
+    if (channelBootedRef.current) return;
+    channelBootedRef.current = true;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       const token = session?.access_token;
-      const bootChannel = (memberHash?: string) => {
+      const boot = (memberHash?: string) => {
         w.ChannelIO?.('boot', {
           pluginKey: '726879dd-d88e-45b4-9be0-d5783785e361',
           memberId: userId,
           memberHash,
-          profile: { name: academyName || undefined, email: userEmail || undefined },
         });
       };
       if (token) {
-        fetch('/api/channel-talk/member-hash', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+        fetch('/api/channel-talk/member-hash', { headers: { Authorization: `Bearer ${token}` } })
           .then(r => r.ok ? r.json() : null)
-          .then(d => bootChannel(d?.memberHash))
-          .catch(() => bootChannel());
+          .then(d => boot(d?.memberHash))
+          .catch(() => boot());
       } else {
-        bootChannel();
+        boot();
       }
     });
-
-    return () => {
-      w.ChannelIO?.('shutdown');
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, userId, academyName]);
+  }, [userId]);
+
+  // 채널톡 프로필 업데이트 (학원명·이메일 로드 후)
+  useEffect(() => {
+    if (!channelBootedRef.current || !academyName) return;
+    const w = window as CIOWindow;
+    w.ChannelIO?.('updateUser', {
+      profile: { name: academyName, email: userEmail || undefined },
+    });
+  }, [academyName, userEmail]);
+
+  // 어드민 이탈 시 숨김 / 복귀 시 표시
+  useEffect(() => {
+    if (!channelBootedRef.current) return;
+    const w = window as CIOWindow;
+    if (pathname.startsWith('/admin')) {
+      w.ChannelIO?.('show');
+    } else {
+      w.ChannelIO?.('hide');
+    }
+  }, [pathname]);
 
   const isLandingPage = pathname === '/';
   const isLoginPage = pathname === '/login';
