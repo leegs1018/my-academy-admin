@@ -48,6 +48,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [notifyMethodSaving, setNotifyMethodSaving] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [userId, setUserId] = useState('');
+  const [userEmail, setUserEmail] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -77,6 +79,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     const getAcademyInfo = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
+        setUserId(session.user.id);
+        setUserEmail(session.user.email ?? '');
         const { data } = await supabase
           .from('academy_config')
           .select('academy_name, kiosk_code, points, role, own_referral_code, sms_enabled, notification_method')
@@ -143,6 +147,37 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     localStorage.removeItem('con-edu-auto-login');
     router.replace('/');
   };
+
+  // 채널톡 부트 (어드민 페이지 + 로그인 상태일 때만)
+  useEffect(() => {
+    const isAdminPage = pathname.startsWith('/admin');
+    if (!isAdminPage || !userId) return;
+
+    const w = window as Window & { ChannelIO?: (...args: unknown[]) => void; ChannelIOInitialized?: boolean };
+    if (!w.ChannelIO) {
+      const ch = (...args: unknown[]) => { (ch as unknown as { q: unknown[][] }).q.push(args); };
+      (ch as unknown as { q: unknown[][] }).q = [];
+      w.ChannelIO = ch;
+    }
+    if (!w.ChannelIOInitialized) {
+      w.ChannelIOInitialized = true;
+      const s = document.createElement('script');
+      s.type = 'text/javascript';
+      s.async = true;
+      s.src = 'https://cdn.channel.io/plugin/ch-plugin-web.js';
+      document.head.appendChild(s);
+    }
+    w.ChannelIO?.('boot', {
+      pluginKey: '726879dd-d88e-45b4-9be0-d5783785e361',
+      memberId: userId,
+      profile: { name: academyName || undefined, email: userEmail || undefined },
+    });
+
+    return () => {
+      w.ChannelIO?.('shutdown');
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, userId, academyName]);
 
   const isLandingPage = pathname === '/';
   const isLoginPage = pathname === '/login';
