@@ -167,10 +167,27 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       s.src = 'https://cdn.channel.io/plugin/ch-plugin-web.js';
       document.head.appendChild(s);
     }
-    w.ChannelIO?.('boot', {
-      pluginKey: '726879dd-d88e-45b4-9be0-d5783785e361',
-      memberId: userId,
-      profile: { name: academyName || undefined, email: userEmail || undefined },
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const token = session?.access_token;
+      const bootChannel = (memberHash?: string) => {
+        w.ChannelIO?.('boot', {
+          pluginKey: '726879dd-d88e-45b4-9be0-d5783785e361',
+          memberId: userId,
+          memberHash,
+          profile: { name: academyName || undefined, email: userEmail || undefined },
+        });
+      };
+      if (token) {
+        fetch('/api/channel-talk/member-hash', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => bootChannel(d?.memberHash))
+          .catch(() => bootChannel());
+      } else {
+        bootChannel();
+      }
     });
 
     return () => {
