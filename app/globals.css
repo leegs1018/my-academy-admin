@@ -18,6 +18,15 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ── 채널톡 위젯 ── */
+#ch-plugin,
+#ch-plugin-core,
+.ch-messenger-btn,
+[id^="ch-plugin"] {
+  z-index: 9999 !important;
+  overflow: visible !important;
+}
+
 /* ── 스크롤바 스타일 ── */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
