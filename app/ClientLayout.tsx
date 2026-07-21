@@ -207,9 +207,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     if (!channelBootedRef.current) return;
     const w = window as CIOWindow;
     if (pathname.startsWith('/admin')) {
-      w.ChannelIO?.('show');
+      w.ChannelIO?.('showMessenger');
     } else {
-      w.ChannelIO?.('hide');
+      w.ChannelIO?.('hideMessenger');
     }
   }, [pathname]);
 
