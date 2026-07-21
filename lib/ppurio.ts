@@ -73,14 +73,18 @@ const PPURIO_BASE = process.env.PPURIO_PROXY_URL ?? 'http://49.247.137.90:3000';
 // Ppurio changeWord 변수: 한글 2바이트 기준 100바이트 한도
 function truncate100(str: string): string {
   let bytes = 0;
+  for (const ch of str) bytes += ch.charCodeAt(0) > 127 ? 2 : 1;
+  if (bytes <= 100) return str;
+  // 97바이트까지 자르고 '...' 추가
   let result = '';
+  bytes = 0;
   for (const ch of str) {
     const cb = ch.charCodeAt(0) > 127 ? 2 : 1;
-    if (bytes + cb > 100) break;
+    if (bytes + cb > 97) break;
     bytes += cb;
     result += ch;
   }
-  return result;
+  return result + '...';
 }
 
 async function getToken(account: string, apiKey: string): Promise<string> {
