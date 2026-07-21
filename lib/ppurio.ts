@@ -174,7 +174,7 @@ export async function sendAlimtalk(payload: AlimtalkPayload, academy_id?: string
       senderProfile: cfg.senderProfile,
       templateCode:  tplCode,
       duplicateFlag: 'N',
-      isResend:      'N',
+      isResend:      'Y',
       refKey:        `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       targetCount:   1,
       targets: [
