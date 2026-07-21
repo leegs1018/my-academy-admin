@@ -248,9 +248,9 @@ export default function GradeInputPage() {
           .replace('{학원}', academyName || '학원')
           .replace('{이름}', student.name)
           .replace('{날짜}', dateLabel);
-        const scoreLines = scoreEntries.map((e, i) => {
+        const scoreLines = scoreEntries.map(e => {
           const scoreStr = sendShowMaxScore ? `${e.score}/${e.maxScore}점` : `${e.score}점`;
-          return i === scoreEntries.length - 1 ? `${e.name}: ${scoreStr} 입니다.` : `${e.name}: ${scoreStr}`;
+          return `${e.name}: ${scoreStr}`;
         }).join('\n');
         return {
           studentId: student.id,
@@ -545,21 +545,7 @@ export default function GradeInputPage() {
                   const parts = sendSelectedSession.split('-');
                   return `${parseInt(parts[1])}월 ${parseInt(parts[2])}일`;
                 })() : '',
-                content: (() => {
-                  const scores = preview.message?.split('\n\n').slice(1).join('\n\n') ?? '';
-                  const compact = scores.split('\n').join(' / ');
-                  if (getKoreanByteLength(compact) <= 100) return compact;
-                  // 한글 2바이트 기준 97바이트까지 자르고 '...' 추가
-                  let result = '';
-                  let bytes = 0;
-                  for (const ch of compact) {
-                    const cb = ch.charCodeAt(0) > 127 ? 2 : 1;
-                    if (bytes + cb > 97) break;
-                    bytes += cb;
-                    result += ch;
-                  }
-                  return result + '...';
-                })(),
+                content: preview.message?.split('\n\n').slice(1).join('\n') ?? '',
               }),
             });
             const result = await res.json();
