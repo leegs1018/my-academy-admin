@@ -15,7 +15,8 @@ export interface GradePayload {
   academyName: string;
   studentName: string;
   date: string;
-  content: string;
+  content: string;   // 1~3과목
+  content2?: string; // 4~6과목
 }
 
 export type AlimtalkPayload = AttendancePayload | GradePayload;
@@ -160,9 +161,12 @@ export async function sendAlimtalk(payload: AlimtalkPayload, academy_id?: string
 
   // attendance: var1=[*1*](학원명), var2=[*2*](날짜), name=[*이름*](학생명)
   // grade:      var1=[*1*](학원명), var2=[*2*](날짜), var3=[*3*](성적내역), name=[*이름*](학생명)
-  const changeWord = payload.type === 'attendance'
+  const changeWord: Record<string, string> = payload.type === 'attendance'
     ? { var1: truncate100(payload.academyName), var2: truncate100(payload.date) }
     : { var1: truncate100(payload.academyName), var2: truncate100(payload.date), var3: truncate100(payload.content) };
+  if (payload.type === 'grade' && payload.content2) {
+    changeWord.var4 = truncate100(payload.content2);
+  }
 
   const token = await getToken(cfg.account, cfg.apiKey);
 
