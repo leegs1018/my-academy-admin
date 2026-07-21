@@ -162,6 +162,12 @@ export async function sendAlimtalk(payload: AlimtalkPayload, academy_id?: string
 
   const token = await getToken(cfg.account, cfg.apiKey);
 
+  // 알림톡 실패 시 SMS 대체 발송 내용
+  const resendContent = payload.type === 'attendance'
+    ? `[${payload.academyName}] ${payload.studentName} ${payload.status} 알림\n${payload.date}`
+    : `[${payload.academyName}]\n${payload.date} ${payload.studentName} 성적 리포트\n\n${payload.content}`;
+  const useResend = !!cfg.senderNumber;
+
   const res = await fetch(`${PPURIO_BASE}/kakao`, {
     method: 'POST',
     headers: {
@@ -174,7 +180,14 @@ export async function sendAlimtalk(payload: AlimtalkPayload, academy_id?: string
       senderProfile: cfg.senderProfile,
       templateCode:  tplCode,
       duplicateFlag: 'N',
-      isResend:      'Y',
+      isResend:      useResend ? 'Y' : 'N',
+      ...(useResend && {
+        resend: {
+          messageType: Buffer.byteLength(resendContent, 'utf8') > 90 ? 'LMS' : 'SMS',
+          from:        cfg.senderNumber!.replace(/-/g, ''),
+          content:     resendContent,
+        },
+      }),
       refKey:        `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       targetCount:   1,
       targets: [
