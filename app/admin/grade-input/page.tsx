@@ -548,7 +548,7 @@ export default function GradeInputPage() {
                 content: (() => {
                   const scores = preview.message?.split('\n\n').slice(1).join('\n\n') ?? '';
                   const compact = scores.split('\n').join(' / ');
-                  if (getByteLen(compact) <= 100) return compact;
+                  if (getKoreanByteLength(compact) <= 100) return compact;
                   // 한글 2바이트 기준 97바이트까지 자르고 '...' 추가
                   let result = '';
                   let bytes = 0;
