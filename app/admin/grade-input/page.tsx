@@ -547,11 +547,11 @@ export default function GradeInputPage() {
                 })() : '',
                 content: (() => {
                   const lines = (preview.message?.split('\n\n').slice(1).join('\n') ?? '').split('\n').filter(Boolean);
-                  return lines.slice(0, 3).join('\n');
+                  return lines.slice(0, 4).join('\n');
                 })(),
                 content2: (() => {
                   const lines = (preview.message?.split('\n\n').slice(1).join('\n') ?? '').split('\n').filter(Boolean);
-                  return lines.length > 3 ? lines.slice(3, 6).join('\n') : undefined;
+                  return lines.length > 4 ? lines.slice(4, 8).join('\n') : undefined;
                 })(),
               }),
             });
