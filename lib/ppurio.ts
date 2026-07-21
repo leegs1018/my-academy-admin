@@ -70,6 +70,19 @@ async function getPpurioConfig(academy_id?: string) {
 
 const PPURIO_BASE = process.env.PPURIO_PROXY_URL ?? 'http://49.247.137.90:3000';
 
+// Ppurio changeWord 변수: 한글 2바이트 기준 100바이트 한도
+function truncate100(str: string): string {
+  let bytes = 0;
+  let result = '';
+  for (const ch of str) {
+    const cb = ch.charCodeAt(0) > 127 ? 2 : 1;
+    if (bytes + cb > 100) break;
+    bytes += cb;
+    result += ch;
+  }
+  return result;
+}
+
 async function getToken(account: string, apiKey: string): Promise<string> {
   const res = await fetch(`${PPURIO_BASE}/token`, {
     method: 'POST',
@@ -144,8 +157,8 @@ export async function sendAlimtalk(payload: AlimtalkPayload, academy_id?: string
   // attendance: var1=[*1*](학원명), var2=[*2*](날짜), name=[*이름*](학생명)
   // grade:      var1=[*1*](학원명), var2=[*2*](날짜), var3=[*3*](성적내역), name=[*이름*](학생명)
   const changeWord = payload.type === 'attendance'
-    ? { var1: payload.academyName, var2: payload.date }
-    : { var1: payload.academyName, var2: payload.date, var3: payload.content };
+    ? { var1: truncate100(payload.academyName), var2: truncate100(payload.date) }
+    : { var1: truncate100(payload.academyName), var2: truncate100(payload.date), var3: truncate100(payload.content) };
 
   const token = await getToken(cfg.account, cfg.apiKey);
 
