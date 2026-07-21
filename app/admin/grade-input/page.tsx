@@ -548,7 +548,17 @@ export default function GradeInputPage() {
                 content: (() => {
                   const scores = preview.message?.split('\n\n').slice(1).join('\n\n') ?? '';
                   const compact = scores.split('\n').join(' / ');
-                  return compact.length > 95 ? compact.slice(0, 92) + '...' : compact;
+                  if (getByteLen(compact) <= 100) return compact;
+                  // 한글 2바이트 기준 97바이트까지 자르고 '...' 추가
+                  let result = '';
+                  let bytes = 0;
+                  for (const ch of compact) {
+                    const cb = ch.charCodeAt(0) > 127 ? 2 : 1;
+                    if (bytes + cb > 97) break;
+                    bytes += cb;
+                    result += ch;
+                  }
+                  return result + '...';
                 })(),
               }),
             });
