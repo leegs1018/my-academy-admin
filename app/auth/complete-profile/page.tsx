@@ -20,7 +20,7 @@ export default function CompleteProfilePage() {
   const router = useRouter();
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    const checkSession = async (session: import('@supabase/supabase-js').Session | null) => {
       if (!session) { router.replace('/login'); return; }
       const { data } = await supabase
         .from('academy_config')
@@ -32,10 +32,21 @@ export default function CompleteProfilePage() {
         router.replace(role === 'admin' ? '/admin' : '/admin/pdf-editor');
         return;
       }
-      // 로그인 플랫폼 감지
       const p = session.user.user_metadata?.provider ?? session.user.app_metadata?.provider ?? '';
       setProvider(p);
       setChecking(false);
+    };
+
+    // getSession 먼저 시도, 없으면 onAuthStateChange로 대기
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        checkSession(session);
+      } else {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          subscription.unsubscribe();
+          checkSession(session);
+        });
+      }
     });
   }, [router]);
 
