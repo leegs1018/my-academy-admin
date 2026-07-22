@@ -71,9 +71,18 @@ export default function LoginContent() {
   }, [router]);
 
   const handleSocialLogin = async (provider: 'google' | 'kakao') => {
+    const justWithdrew = localStorage.getItem('just-withdrew') === '1';
+    if (justWithdrew) localStorage.removeItem('just-withdrew');
+
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        // 탈퇴 직후 재로그인 시 카카오에서 계정 재인증 강제
+        ...(justWithdrew && provider === 'kakao' && {
+          queryParams: { prompt: 'login' },
+        }),
+      },
     });
   };
 

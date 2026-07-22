@@ -222,9 +222,10 @@ export default function AccountPage() {
       return;
     }
 
-    await supabase.auth.signOut();
     localStorage.removeItem('con-edu-auto-login');
-    router.replace('/?withdrawn=1');
+    localStorage.setItem('just-withdrew', '1');
+    // 서버사이드 쿠키 삭제를 위해 signout 라우트 경유
+    window.location.href = '/api/auth/signout?withdrawn=1';
   };
 
   // ── 비밀번호 변경 ────────────────────────────────
