@@ -1,64 +1,132 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 export const metadata: Metadata = {
   title: 'CON 가격 안내 | CON EDU',
   description: 'CON EDU의 AI 문제 생성 서비스 요금 안내. 가입 즉시 300C 지급, 사용한 만큼만 차감.',
 };
 
-const PRICING = [
-  {
-    category: '지문분석',
-    icon: '📝',
-    color: 'bg-teal-50 border-teal-200',
-    iconBg: 'bg-teal-100',
-    textColor: 'text-teal-700',
-    items: [
-      { name: '지문분석 (지문 1개)', con: 10, desc: '변형 지문·T/F·요약·어휘표 6종 자동 생성' },
-    ],
-  },
-  {
-    category: '워크북',
-    icon: '📚',
-    color: 'bg-purple-50 border-purple-200',
-    iconBg: 'bg-purple-100',
-    textColor: 'text-purple-700',
-    items: [
-      { name: '워크북 생성 (지문 1개)', con: 10, desc: '어법·어휘·서술형·드릴 등 최대 10종 동시 생성' },
-    ],
-  },
-  {
-    category: '실전 변형 문제',
-    icon: '🎯',
-    color: 'bg-indigo-50 border-indigo-200',
-    iconBg: 'bg-indigo-100',
-    textColor: 'text-indigo-700',
-    items: [
-      { name: '주제/제목 유형', con: 20, desc: '' },
-      { name: '어법 유형', con: 20, desc: '' },
-      { name: '어휘 (낱말 쓰임) 유형', con: 20, desc: '' },
-      { name: '어휘 (a)(b) 빈칸 유형', con: 20, desc: '' },
-      { name: '빈칸 추론 유형', con: 20, desc: '' },
-      { name: '요약문 완성 유형', con: 20, desc: '' },
-      { name: '흐름 유형', con: 20, desc: '' },
-      { name: '어구 의미 추론 유형', con: 20, desc: '' },
-      { name: '순서 배열 유형', con: 20, desc: '' },
-    ],
-  },
-  {
-    category: '문자 발송',
-    icon: '📱',
-    color: 'bg-sky-50 border-sky-200',
-    iconBg: 'bg-sky-100',
-    textColor: 'text-sky-700',
-    items: [
-      { name: 'SMS (단문, 90자 이내)', con: 3, desc: '출결 알림 자동 발송 가능' },
-      { name: 'LMS (장문, 90자 초과)', con: 15, desc: '' },
-    ],
-  },
-];
+// feature_key → 표시 이름 매핑
+const FEATURE_NAMES: Record<string, string> = {
+  pdf_analysis:              '지문분석 (지문 1개)',
+  vocab_choice:              '워크북 생성 (지문 1개)',
+  ai_type_topic_title:       '주제/제목 유형',
+  ai_type_grammar:           '어법 유형',
+  ai_type_vocab_paraphrase:  '어휘 (낱말 쓰임) 유형',
+  ai_type_vocab_blank:       '어휘 (a)(b) 빈칸 유형',
+  ai_type_fill_blank:        '빈칸 추론 유형',
+  ai_type_summary:           '요약문 완성 유형',
+  ai_type_flow:              '흐름 유형',
+  ai_type_phrase_meaning:    '어구 의미 추론 유형',
+  ai_type_sentence_order:    '순서 배열 유형',
+  sms:                       'SMS (단문, 90자 이내)',
+  lms:                       'LMS (장문, 90자 초과)',
+  signup_bonus:              '신규 가입 기본 CON',
+  signup_bonus_referral:     '추천인 코드 입력 시 추가 CON',
+  mock_exam_question_per_type: '모의고사 변형 문제 (유형 1개)',
+  mock_workbook:             '모의고사 워크북',
+};
 
-export default function PricingPage() {
+// feature_key → 설명
+const FEATURE_DESC: Record<string, string> = {
+  pdf_analysis:  '변형 지문·T/F·요약·어휘표 6종 자동 생성',
+  vocab_choice:  '어법·어휘·서술형·드릴 등 최대 10종 동시 생성',
+  sms:           '출결·성적 알림 자동 발송 가능',
+};
+
+// 기본값 (DB에 해당 key가 없을 때)
+const FALLBACK: Record<string, number> = {
+  pdf_analysis: 10,
+  vocab_choice: 10,
+  ai_type_topic_title: 20,
+  ai_type_grammar: 20,
+  ai_type_vocab_paraphrase: 20,
+  ai_type_vocab_blank: 20,
+  ai_type_fill_blank: 20,
+  ai_type_summary: 20,
+  ai_type_flow: 20,
+  ai_type_phrase_meaning: 20,
+  ai_type_sentence_order: 20,
+  sms: 3,
+  lms: 15,
+  signup_bonus: 300,
+  signup_bonus_referral: 400,
+};
+
+async function getPricing(): Promise<Record<string, number>> {
+  try {
+    const db = createAdminClient();
+    const { data } = await db
+      .from('con_pricing')
+      .select('feature_key, cost_per_use')
+      .eq('is_active', true);
+    const map: Record<string, number> = { ...FALLBACK };
+    (data ?? []).forEach((row: { feature_key: string; cost_per_use: number }) => {
+      map[row.feature_key] = row.cost_per_use;
+    });
+    return map;
+  } catch {
+    return { ...FALLBACK };
+  }
+}
+
+function price(map: Record<string, number>, key: string) {
+  return map[key] ?? FALLBACK[key] ?? '?';
+}
+
+export const revalidate = 60; // 1분 캐시
+
+export default async function PricingPage() {
+  const pricing = await getPricing();
+
+  const signupBonus = (pricing['signup_bonus'] ?? 300) + (pricing['signup_bonus_referral'] ?? 400);
+
+  const GROUPS = [
+    {
+      category: '지문분석',
+      icon: '📝',
+      color: 'bg-teal-50 border-teal-200',
+      iconBg: 'bg-teal-100',
+      textColor: 'text-teal-700',
+      items: [{ key: 'pdf_analysis' }],
+    },
+    {
+      category: '워크북',
+      icon: '📚',
+      color: 'bg-purple-50 border-purple-200',
+      iconBg: 'bg-purple-100',
+      textColor: 'text-purple-700',
+      items: [{ key: 'vocab_choice' }],
+    },
+    {
+      category: '실전 변형 문제',
+      icon: '🎯',
+      color: 'bg-indigo-50 border-indigo-200',
+      iconBg: 'bg-indigo-100',
+      textColor: 'text-indigo-700',
+      items: [
+        { key: 'ai_type_topic_title' },
+        { key: 'ai_type_grammar' },
+        { key: 'ai_type_vocab_paraphrase' },
+        { key: 'ai_type_vocab_blank' },
+        { key: 'ai_type_fill_blank' },
+        { key: 'ai_type_summary' },
+        { key: 'ai_type_flow' },
+        { key: 'ai_type_phrase_meaning' },
+        { key: 'ai_type_sentence_order' },
+      ],
+    },
+    {
+      category: '문자 발송',
+      icon: '📱',
+      color: 'bg-sky-50 border-sky-200',
+      iconBg: 'bg-sky-100',
+      textColor: 'text-sky-700',
+      items: [{ key: 'sms' }, { key: 'lms' }],
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       {/* GNB */}
@@ -101,9 +169,9 @@ export default function PricingPage() {
         </h1>
         <p className="text-xl text-slate-400 font-medium max-w-2xl mx-auto mb-4">
           CON(콘)은 CON EDU의 서비스 이용 크레딧입니다.<br />
-          가입 즉시 <strong className="text-slate-700">300C</strong>를 무료로 드립니다.
+          가입 즉시 <strong className="text-slate-700">{pricing['signup_bonus'] ?? 300}C</strong>를 무료로 드립니다.
         </p>
-        <p className="text-sm text-slate-400 font-bold">추천인 코드 입력 시 총 700C 지급</p>
+        <p className="text-sm text-slate-400 font-bold">추천인 코드 입력 시 총 {signupBonus}C 지급</p>
       </section>
 
       {/* CON 설명 카드 */}
@@ -112,19 +180,19 @@ export default function PricingPage() {
           {[
             {
               icon: '🎁',
-              title: '가입 즉시 300C 무료 지급',
-              desc: '회원가입만 해도 300C가 자동으로 지급됩니다. 결제 없이 바로 서비스를 경험해보세요.',
+              title: `가입 즉시 ${pricing['signup_bonus'] ?? 300}C 무료 지급`,
+              desc: '회원가입만 해도 자동으로 지급됩니다. 결제 없이 바로 서비스를 경험해보세요.',
               color: 'bg-yellow-50 border-yellow-200',
             },
             {
               icon: '💰',
               title: '사용한 만큼만 차감',
-              desc: '월정액이 없습니다. 실전 변형 문제 1유형 생성에 20C, 지문분석 1회에 10C만 차감됩니다.',
+              desc: `월정액이 없습니다. 실전 변형 문제 1유형 생성에 ${price(pricing, 'ai_type_topic_title')}C, 지문분석 1회에 ${price(pricing, 'pdf_analysis')}C만 차감됩니다.`,
               color: 'bg-slate-50 border-slate-200',
             },
             {
               icon: '🔄',
-              title: '품질 불만족 시 CON 환불',
+              title: 'CON 환불 보장',
               desc: '생성된 문제 품질이 낮다고 판단되면 신고 후 운영팀 검토를 통해 CON을 환불받을 수 있습니다.',
               color: 'bg-emerald-50 border-emerald-200',
             },
@@ -148,22 +216,24 @@ export default function PricingPage() {
           </div>
 
           <div className="space-y-6">
-            {PRICING.map(group => (
+            {GROUPS.map(group => (
               <div key={group.category} className={`${group.color} border-2 rounded-3xl overflow-hidden`}>
                 <div className={`${group.iconBg} px-6 py-4 flex items-center gap-3`}>
                   <span className="text-2xl">{group.icon}</span>
                   <span className={`text-base font-black ${group.textColor}`}>{group.category}</span>
                 </div>
                 <div className="bg-white divide-y divide-slate-100">
-                  {group.items.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between px-6 py-4">
+                  {group.items.map((item) => (
+                    <div key={item.key} className="flex items-center justify-between px-6 py-4">
                       <div>
-                        <p className="text-sm font-black text-slate-900">{item.name}</p>
-                        {item.desc && <p className="text-xs text-slate-400 font-medium mt-0.5">{item.desc}</p>}
+                        <p className="text-sm font-black text-slate-900">{FEATURE_NAMES[item.key] ?? item.key}</p>
+                        {FEATURE_DESC[item.key] && (
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">{FEATURE_DESC[item.key]}</p>
+                        )}
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
-                        <span className="text-lg font-black text-slate-900">{item.con}C</span>
-                        <p className="text-[10px] text-slate-400 font-bold">≈ {item.con * 10}원</p>
+                        <span className="text-lg font-black text-slate-900">{price(pricing, item.key)}C</span>
+                        <p className="text-[10px] text-slate-400 font-bold">≈ {Number(price(pricing, item.key)) * 10}원</p>
                       </div>
                     </div>
                   ))}
@@ -174,7 +244,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* CON 충전 안내 */}
+      {/* CTA */}
       <section className="max-w-4xl mx-auto px-8 py-20">
         <div className="bg-slate-900 rounded-[3rem] p-12 text-center relative overflow-hidden">
           <div className="relative z-10">
@@ -189,7 +259,7 @@ export default function PricingPage() {
                 href="/register"
                 className="px-10 py-4 bg-yellow-400 text-slate-900 font-black rounded-full hover:bg-yellow-300 transition-all shadow-xl shadow-yellow-400/20 text-base"
               >
-                무료로 시작하기 (300C 지급)
+                무료로 시작하기 ({pricing['signup_bonus'] ?? 300}C 지급)
               </Link>
               <Link
                 href="/login"
