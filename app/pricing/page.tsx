@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 // feature_key → 표시 이름 매핑
 const FEATURE_NAMES: Record<string, string> = {
-  pdf_analysis:              '지문분석 (지문 1개)',
-  vocab_choice:              '워크북 생성 (지문 1개)',
+  pdf_analysis_direct:       '지문분석 (직접 입력)',
+  wb_direct_vocab_choice:    '워크북 생성 (직접 입력)',
   ai_type_topic_title:       '주제/제목 유형',
   ai_type_grammar:           '어법 유형',
   ai_type_vocab_paraphrase:  '어휘 (낱말 쓰임) 유형',
@@ -24,21 +24,19 @@ const FEATURE_NAMES: Record<string, string> = {
   lms:                       'LMS (장문, 90자 초과)',
   signup_bonus:              '신규 가입 기본 CON',
   signup_bonus_referral:     '추천인 코드 입력 시 추가 CON',
-  mock_exam_question_per_type: '모의고사 변형 문제 (유형 1개)',
-  mock_workbook:             '모의고사 워크북',
 };
 
 // feature_key → 설명
 const FEATURE_DESC: Record<string, string> = {
-  pdf_analysis:  '변형 지문·T/F·요약·어휘표 6종 자동 생성',
-  vocab_choice:  '어법·어휘·서술형·드릴 등 최대 10종 동시 생성',
-  sms:           '출결·성적 알림 자동 발송 가능',
+  pdf_analysis_direct:     '변형 지문·T/F·요약·어휘표 6종 자동 생성',
+  wb_direct_vocab_choice:  '어법·어휘·서술형·드릴 등 최대 10종 동시 생성',
+  sms:                     '출결·성적 알림 자동 발송 가능',
 };
 
 // 기본값 (DB에 해당 key가 없을 때)
 const FALLBACK: Record<string, number> = {
-  pdf_analysis: 10,
-  vocab_choice: 10,
+  pdf_analysis_direct: 10,
+  wb_direct_vocab_choice: 10,
   ai_type_topic_title: 20,
   ai_type_grammar: 20,
   ai_type_vocab_paraphrase: 20,
@@ -75,7 +73,7 @@ function price(map: Record<string, number>, key: string) {
   return map[key] ?? FALLBACK[key] ?? '?';
 }
 
-export const revalidate = 60; // 1분 캐시
+export const dynamic = 'force-dynamic';
 
 export default async function PricingPage() {
   const pricing = await getPricing();
@@ -89,7 +87,7 @@ export default async function PricingPage() {
       color: 'bg-teal-50 border-teal-200',
       iconBg: 'bg-teal-100',
       textColor: 'text-teal-700',
-      items: [{ key: 'pdf_analysis' }],
+      items: [{ key: 'pdf_analysis_direct' }],
     },
     {
       category: '워크북',
@@ -97,7 +95,7 @@ export default async function PricingPage() {
       color: 'bg-purple-50 border-purple-200',
       iconBg: 'bg-purple-100',
       textColor: 'text-purple-700',
-      items: [{ key: 'vocab_choice' }],
+      items: [{ key: 'wb_direct_vocab_choice' }],
     },
     {
       category: '실전 변형 문제',
@@ -187,7 +185,7 @@ export default async function PricingPage() {
             {
               icon: '💰',
               title: '사용한 만큼만 차감',
-              desc: `월정액이 없습니다. 실전 변형 문제 1유형 생성에 ${price(pricing, 'ai_type_topic_title')}C, 지문분석 1회에 ${price(pricing, 'pdf_analysis')}C만 차감됩니다.`,
+              desc: `월정액이 없습니다. 실전 변형 문제 1유형 생성에 ${price(pricing, 'ai_type_topic_title')}C, 지문분석 1회에 ${price(pricing, 'pdf_analysis_direct')}C만 차감됩니다.`,
               color: 'bg-slate-50 border-slate-200',
             },
             {
