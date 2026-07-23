@@ -1,23 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../../lib/supabase';
+
+interface Notice {
+  id: number;
+  title: string;
+  content: string;
+  is_important: boolean;
+  created_at: string;
+}
 
 export default function NoticePage() {
-  const [notices, setNotices] = useState<any[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
-        .from('system_notices')
-        .select('*')
-        .order('is_important', { ascending: false })
-        .order('created_at', { ascending: false });
-      if (data) setNotices(data);
-      setLoading(false);
-    };
-    fetch();
+    fetch('/api/notices')
+      .then(r => r.json())
+      .then(d => { setNotices(d.notices || []); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -32,30 +33,43 @@ export default function NoticePage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8 pb-20">
-      <div className="border-b border-gray-200 pb-5">
+    <div className="max-w-3xl mx-auto space-y-6 pb-20">
+      <div className="border-b border-gray-100 pb-5">
         <h1 className="text-2xl font-black text-gray-900">공지사항</h1>
-        <p className="text-gray-400 font-bold mt-1">관리자로부터 전달되는 공지사항을 확인하세요.</p>
+        <p className="text-gray-400 font-bold mt-1 text-sm">관리팀에서 전달하는 공지사항입니다.</p>
       </div>
 
-      <div className="space-y-4">
-        {notices.length > 0 ? notices.map((n) => (
-          <div key={n.id} className={`bg-white p-6 rounded-xl border transition-all ${n.is_important ? 'border-gray-900' : 'border-gray-200 hover:border-gray-300'}`}>
-            <div className="flex justify-between items-start mb-3">
-              <div className="flex items-center gap-2">
-                {n.is_important && (
-                  <span className="bg-gray-900 text-white px-2 py-1 rounded-lg text-[10px] font-black">중요 공지</span>
-                )}
-                <h3 className="text-xl font-black text-gray-800">{n.title}</h3>
+      {notices.length === 0 ? (
+        <div className="text-center py-24 text-gray-300 font-bold">등록된 공지사항이 없습니다.</div>
+      ) : (
+        <div className="space-y-4">
+          {notices.map(n => (
+            <div
+              key={n.id}
+              className={`bg-white rounded-2xl border-2 p-6 transition-all ${
+                n.is_important
+                  ? 'border-amber-400 shadow-md shadow-amber-50'
+                  : 'border-gray-100 hover:border-gray-200'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {n.is_important && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-600 border border-amber-300 rounded-full text-[11px] font-black">
+                      ⚠ 중요 공지
+                    </span>
+                  )}
+                  <h3 className="text-base font-black text-gray-900">{n.title}</h3>
+                </div>
+                <span className="text-xs font-bold text-gray-300 flex-shrink-0 mt-0.5">
+                  {new Date(n.created_at).toLocaleDateString('ko-KR')}
+                </span>
               </div>
-              <span className="text-xs font-bold text-gray-300">{new Date(n.created_at).toLocaleDateString()}</span>
+              <p className="text-sm text-gray-600 leading-relaxed font-medium whitespace-pre-wrap">{n.content}</p>
             </div>
-            <p className="text-gray-600 leading-relaxed font-medium whitespace-pre-wrap">{n.content}</p>
-          </div>
-        )) : (
-          <div className="text-center py-20 text-gray-300 font-bold italic">등록된 공지사항이 없습니다.</div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

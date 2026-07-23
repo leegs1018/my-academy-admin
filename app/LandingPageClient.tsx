@@ -177,6 +177,14 @@ function DemoScreen({ tab }: { tab: typeof DEMO_TABS[number] }) {
   );
 }
 
+interface Notice {
+  id: number;
+  title: string;
+  content: string;
+  is_important: boolean;
+  created_at: string;
+}
+
 interface SiteInfo {
   business_name?: string;
   business_number?: string;
@@ -192,6 +200,7 @@ export default function LandingPageClient() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [demoTab, setDemoTab] = useState<typeof DEMO_TABS[number]>('실전 변형 문제');
   const [siteInfo, setSiteInfo] = useState<SiteInfo>({});
+  const [notices, setNotices] = useState<Notice[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setIsLoggedIn(!!session));
@@ -206,6 +215,13 @@ export default function LandingPageClient() {
         setSiteInfo(map);
       }
     });
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/notices')
+      .then(r => r.json())
+      .then(d => setNotices((d.notices ?? []).slice(0, 3)))
+      .catch(() => {});
   }, []);
 
   return (
@@ -225,7 +241,13 @@ export default function LandingPageClient() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <Link href="/kiosk" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-200 text-slate-500 rounded-full hover:border-slate-400 hover:text-slate-700 transition-all">
+          <Link href="/notices" className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors hidden md:block">
+            공지사항
+          </Link>
+          <Link href="/pricing" className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors hidden md:block">
+            가격 안내
+          </Link>
+          <Link href="/kiosk" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-200 text-slate-500 rounded-full hover:border-slate-400 hover:text-slate-700 transition-all hidden sm:block">
             출결 키오스크
           </Link>
           {isLoggedIn ? (
@@ -472,6 +494,46 @@ export default function LandingPageClient() {
           ))}
         </div>
       </section>
+
+      {/* 공지사항 섹션 */}
+      {notices.length > 0 && (
+        <section className="max-w-7xl mx-auto px-8 py-16">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <p className="text-yellow-600 font-black text-xs uppercase tracking-widest mb-2">Announcements</p>
+              <h2 className="text-3xl font-black text-slate-900">공지사항</h2>
+            </div>
+            <Link href="/notices" className="text-sm font-black text-slate-400 hover:text-slate-900 transition-colors">
+              전체 보기 →
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {notices.map(n => (
+              <div
+                key={n.id}
+                className={`flex items-start gap-4 p-5 rounded-2xl border-2 ${
+                  n.is_important
+                    ? 'border-amber-300 bg-amber-50'
+                    : 'border-slate-100 bg-white hover:border-slate-200 transition-colors'
+                }`}
+              >
+                {n.is_important && (
+                  <span className="flex-shrink-0 px-2.5 py-1 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-black whitespace-nowrap mt-0.5">
+                    ⚠ 중요
+                  </span>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900 text-sm">{n.title}</p>
+                  <p className="text-slate-500 text-xs font-medium mt-0.5 line-clamp-1">{n.content}</p>
+                </div>
+                <span className="text-xs text-slate-300 font-bold flex-shrink-0 mt-0.5">
+                  {new Date(n.created_at).toLocaleDateString('ko-KR')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 하단 CTA */}
       <section className="mx-8 mb-20">
