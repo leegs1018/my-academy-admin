@@ -241,12 +241,6 @@ export default function LandingPageClient() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <Link href="/notices" className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors hidden md:block">
-            공지사항
-          </Link>
-          <Link href="/pricing" className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors hidden md:block">
-            가격 안내
-          </Link>
           <Link href="/kiosk" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-200 text-slate-500 rounded-full hover:border-slate-400 hover:text-slate-700 transition-all hidden sm:block">
             출결 키오스크
           </Link>
@@ -303,18 +297,30 @@ export default function LandingPageClient() {
             ))}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex flex-wrap justify-center gap-3">
             <Link
-              href={isLoggedIn ? '/admin/ai-questions' : '/login'}
-              className="px-12 py-5 bg-slate-900 text-white font-black rounded-full text-lg shadow-2xl shadow-slate-300 hover:bg-slate-800 transition-all hover:-translate-y-1"
+              href="/notices"
+              className="px-7 py-3.5 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-sm"
             >
-              지금 시작하기
+              공지사항
             </Link>
             <Link
               href="/guide"
-              className="px-12 py-5 bg-white text-slate-900 font-black rounded-full text-lg border-2 border-slate-900 hover:bg-slate-50 transition-all"
+              className="px-7 py-3.5 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-sm"
             >
               서비스 가이드
+            </Link>
+            <Link
+              href="/pricing"
+              className="px-7 py-3.5 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-sm"
+            >
+              가격 안내
+            </Link>
+            <Link
+              href={isLoggedIn ? '/admin/ai-questions' : '/register'}
+              className="px-10 py-3.5 bg-slate-900 text-white font-black rounded-full text-sm shadow-2xl shadow-slate-300 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
+            >
+              지금 시작하기 →
             </Link>
           </div>
         </div>
