@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 // feature_key → 표시 이름 매핑
 const FEATURE_NAMES: Record<string, string> = {
   pdf_analysis_direct:       '지문분석 (직접 입력)',
-  wb_direct_vocab_choice:    '워크북 생성 (직접 입력)',
+  wb_direct_vocab_choice:    '워크북 생성 (직접 입력) — 각 유형당',
   ai_type_topic_title:       '주제/제목 유형',
   ai_type_grammar:           '어법 유형',
   ai_type_vocab_paraphrase:  '어휘 (낱말 쓰임) 유형',
@@ -20,8 +20,8 @@ const FEATURE_NAMES: Record<string, string> = {
   ai_type_flow:              '흐름 유형',
   ai_type_phrase_meaning:    '어구 의미 추론 유형',
   ai_type_sentence_order:    '순서 배열 유형',
-  sms:                       'SMS (단문, 90자 이내)',
-  lms:                       'LMS (장문, 90자 초과)',
+  ai_type_sentence_insertion: '문장 삽입 유형',
+  alimtalk:                  '카카오 알림톡',
   signup_bonus:              '신규 가입 기본 CON',
   signup_bonus_referral:     '추천인 코드 입력 시 추가 CON',
 };
@@ -29,8 +29,8 @@ const FEATURE_NAMES: Record<string, string> = {
 // feature_key → 설명
 const FEATURE_DESC: Record<string, string> = {
   pdf_analysis_direct:     '변형 지문·T/F·요약·어휘표 6종 자동 생성',
-  wb_direct_vocab_choice:  '어법·어휘·서술형·드릴 등 최대 10종 동시 생성',
-  sms:                     '출결·성적 알림 자동 발송 가능',
+  wb_direct_vocab_choice:  '드릴·어휘·어법·서술형 등 최대 13개 유형 생성',
+  alimtalk:                '카카오 알림톡 자동 발송 가능',
 };
 
 // 기본값 (DB에 해당 key가 없을 때)
@@ -46,8 +46,7 @@ const FALLBACK: Record<string, number> = {
   ai_type_flow: 20,
   ai_type_phrase_meaning: 20,
   ai_type_sentence_order: 20,
-  sms: 3,
-  lms: 15,
+  alimtalk: 5,
   signup_bonus: 300,
   signup_bonus_referral: 400,
 };
@@ -113,15 +112,16 @@ export default async function PricingPage() {
         { key: 'ai_type_flow' },
         { key: 'ai_type_phrase_meaning' },
         { key: 'ai_type_sentence_order' },
+        { key: 'ai_type_sentence_insertion' },
       ],
     },
     {
-      category: '문자 발송',
-      icon: '📱',
-      color: 'bg-sky-50 border-sky-200',
-      iconBg: 'bg-sky-100',
-      textColor: 'text-sky-700',
-      items: [{ key: 'sms' }, { key: 'lms' }],
+      category: '알림톡 발송',
+      icon: '💬',
+      color: 'bg-yellow-50 border-yellow-200',
+      iconBg: 'bg-yellow-100',
+      textColor: 'text-yellow-700',
+      items: [{ key: 'alimtalk' }],
     },
   ];
 

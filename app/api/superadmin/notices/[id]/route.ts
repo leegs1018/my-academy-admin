@@ -11,7 +11,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const db = createAdminClient();
   const { error } = await db
     .from('system_notices')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update(body)
     .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
