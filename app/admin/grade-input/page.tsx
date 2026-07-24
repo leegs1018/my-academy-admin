@@ -107,7 +107,7 @@ export default function GradeInputPage() {
       if (cfg?.academy_name) setAcademyName(cfg.academy_name);
       const enabled = cfg?.sms_enabled ?? false;
       setSmsEnabled(enabled);
-      setSendMethod('alimtalk');
+      setSendMethod(enabled ? 'sms' : 'alimtalk');
 
       const { data: logs } = await supabase.from('sms_logs').select('*').eq('academy_id', uid).order('created_at', { ascending: false });
       if (logs) setGradeLogs(logs);
