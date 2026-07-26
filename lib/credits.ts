@@ -42,10 +42,8 @@ export async function getConBalance(academyId: string): Promise<number> {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from('academy_config')
-    .select('points, daily_con_balance, daily_con_date')
+    .select('points')
     .eq('user_id', academyId)
     .single();
-  const today = new Date().toLocaleDateString('sv-SE');
-  const dailyCon = data?.daily_con_date === today ? (data?.daily_con_balance ?? 0) : 0;
-  return (data?.points ?? 0) + dailyCon;
+  return data?.points ?? 0;
 }
