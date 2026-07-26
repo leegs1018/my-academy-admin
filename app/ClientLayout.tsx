@@ -42,6 +42,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [copiedReferral, setCopiedReferral] = useState(false);
   const [referralRewardCon, setReferralRewardCon] = useState<number | null>(null);
   const [points, setPoints] = useState<number>(0);
+  const [dailyCon, setDailyCon] = useState<number>(0);
   const [userRole, setUserRole] = useState<string>('');
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [notificationMethod, setNotificationMethod] = useState<'sms' | 'alimtalk'>('sms');
@@ -90,6 +91,17 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         if (data?.kiosk_code) setKioskCode(data.kiosk_code);
         if (data?.points !== undefined) setPoints(data.points);
         setUserRole(data?.role ?? 'ai_only');
+
+        // 일일 무료 CON 갱신
+        fetch('/api/daily-con/refresh', { method: 'POST' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (d) {
+              setPoints(d.points);
+              setDailyCon(d.daily_con_balance ?? 0);
+            }
+          })
+          .catch(() => {});
         setSmsEnabled(data?.sms_enabled ?? false);
         setNotificationMethod((data?.notification_method ?? 'sms') as 'sms' | 'alimtalk');
         if (data?.own_referral_code) {
@@ -407,7 +419,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   {academyName || '내 학원'}
                 </span>
                 <span className="hidden sm:block text-xs font-black text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-lg whitespace-nowrap">
-                  {points.toLocaleString()}C
+                  {(points + dailyCon).toLocaleString()}C
+                  {dailyCon > 0 && <span className="ml-1 text-green-600">+무료</span>}
                 </span>
                 <span className="text-gray-400 text-xs">▼</span>
               </button>
@@ -416,6 +429,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50">
                   <div className="px-5 py-4 bg-gray-50 border-b border-gray-100">
                     <p className="font-black text-gray-900 text-sm">{academyName || '내 학원'}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-gray-500 font-bold">보유 CON</span>
+                      <span className="text-sm font-black text-yellow-600">{points.toLocaleString()}C</span>
+                      {dailyCon > 0 && (
+                        <span className="text-xs font-black text-green-600 bg-green-50 px-1.5 py-0.5 rounded-lg">
+                          +무료 {dailyCon}C
+                        </span>
+                      )}
+                    </div>
                     {kioskCode && (
                       <div className="mt-2">
                         <p className="text-[10px] text-gray-400 font-bold">출결 키오스크 코드</p>
