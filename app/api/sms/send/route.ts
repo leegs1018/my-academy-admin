@@ -100,14 +100,16 @@ export async function POST(req: Request) {
               to: recipient.phone.replace(/-/g, ''),
               from: sender.replace(/-/g, ''),
               text: message,
-              subject,
+              type: messageType === 'lms' ? 'LMS' : 'SMS',
+              ...(messageType === 'lms' && { subject }),
             },
           }),
         });
 
         const result = await res.json();
+        console.log('[sms/send] Solapi 응답:', JSON.stringify({ status: res.status, body: result }));
         if (result.errorCode) {
-          results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: result.errorMessage || result.errorCode });
+          results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: `${result.errorCode}: ${result.errorMessage || ''}` });
         } else {
           results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'success' });
         }
