@@ -52,10 +52,11 @@ export async function POST(req: Request) {
         });
 
         if (deductError) {
+          console.error('[sms/send] deduct_con 오류:', deductError.message);
           if (deductError.message?.includes('INSUFFICIENT_CON')) {
             return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance }, { status: 402 });
           }
-          return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
+          return NextResponse.json({ error: `CON 차감 오류: ${deductError.message}` }, { status: 500 });
         }
       }
     }
