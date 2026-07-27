@@ -569,6 +569,16 @@ export default function GradeInputPage() {
               }),
             });
             const result = await res.json();
+            if (!res.ok) {
+              if (result.error === 'INSUFFICIENT_CON') {
+                setSendIsSending(false);
+                alert('CON이 부족합니다. CON을 충전해주세요.');
+                return;
+              }
+              allResults.push({ student_id: preview.studentId, name: preview.studentName, phone, status: 'fail', error: result.error || `오류 (${res.status})`, message: preview.message });
+              totalFail++;
+              continue;
+            }
             if (result.results) {
               allResults.push(...result.results.map((r: any) => ({ ...r, message: preview.message })));
             }
