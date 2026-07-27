@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import CryptoJS from 'crypto-js';
-import { createClient } from '@supabase/supabase-js';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { sendPpurioSms } from '@/lib/ppurio';
 
 interface Recipient {
   student_id: string;
@@ -42,7 +41,6 @@ export async function POST(req: Request) {
         }, { status: 402 });
       }
 
-      // 원자적 차감 (RPC)
       const supabaseAdmin = createAdminClient();
       const { error: deductError } = await supabaseAdmin.rpc('deduct_con', {
         p_academy_id: academy_id,
@@ -53,76 +51,21 @@ export async function POST(req: Request) {
 
       if (deductError) {
         if (deductError.message?.includes('INSUFFICIENT_CON')) {
-          return NextResponse.json({
-            error: 'INSUFFICIENT_CON',
-            required: totalCost,
-            balance,
-            price_per_sms: pricePerMsg,
-            message_type: messageType,
-          }, { status: 402 });
+          return NextResponse.json({ error: 'INSUFFICIENT_CON', required: totalCost, balance }, { status: 402 });
         }
         return NextResponse.json({ error: 'CON 차감 중 오류가 발생했습니다.' }, { status: 500 });
       }
     }
   }
 
-  const apiKey = process.env.SOLAPI_API_KEY;
-  const apiSecret = process.env.SOLAPI_API_SECRET;
-  const sender = process.env.SOLAPI_SENDER_NUMBER;
-
-  if (!apiKey || !apiSecret || !sender) {
-    return NextResponse.json({ error: '서버 환경변수 설정 오류' }, { status: 500 });
-  }
-
-  // 학원 이름 조회
-  let subject = '알림';
-  if (academy_id) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    const { data: cfg } = await supabase
-      .from('academy_config')
-      .select('academy_name')
-      .eq('user_id', academy_id)
-      .single();
-    if (cfg?.academy_name) subject = cfg.academy_name;
-  }
-
   const results: { student_id: string; name: string; phone: string; status: 'success' | 'fail'; error?: string }[] = [];
 
   for (const recipient of recipients) {
-    const date = new Date().toISOString();
-    const salt = Math.random().toString(36).substring(2, 12);
-    const signature = CryptoJS.HmacSHA256(date + salt, apiSecret).toString();
-    const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
-
-    try {
-      const res = await fetch('https://api.solapi.com/messages/v4/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: {
-            to: recipient.phone.replace(/-/g, ''),
-            from: sender.replace(/-/g, ''),
-            text: message,
-            subject,
-          },
-        }),
-      });
-
-      const result = await res.json();
-
-      if (result.errorCode) {
-        results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: result.errorMessage || result.errorCode });
-      } else {
-        results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'success' });
-      }
-    } catch {
-      results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: '발송 서버 오류' });
+    const result = await sendPpurioSms(recipient.phone, message, academy_id);
+    if (result.ok) {
+      results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'success' });
+    } else {
+      results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: result.error });
     }
   }
 
