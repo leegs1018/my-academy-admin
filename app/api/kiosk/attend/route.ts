@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import CryptoJS from 'crypto-js';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
-import { sendAlimtalk } from '@/lib/ppurio';
+import { sendAlimtalk, sendPpurioSms } from '@/lib/ppurio';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,46 +13,11 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function sendSMS(to: string, studentName: string, status: string, attendanceDate: string, academyName: string): Promise<{ ok: boolean; error?: string }> {
-  const apiKey = process.env.SOLAPI_API_KEY;
-  const apiSecret = process.env.SOLAPI_API_SECRET;
-  const sender = process.env.SOLAPI_SENDER_NUMBER;
-
-  if (!apiKey || !apiSecret || !sender) {
-    return { ok: false, error: 'SOLAPI 환경변수 누락 (SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER_NUMBER)' };
-  }
-
-  const formatKoreanDate = (dateStr: string) => {
-    const dateObj = new Date(dateStr);
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    return `${month}월 ${day}일`;
-  };
-
-  const displayDate = formatKoreanDate(attendanceDate);
-  const date = new Date().toISOString();
-  const salt = Math.random().toString(36).substring(2, 12);
-  const signature = CryptoJS.HmacSHA256(date + salt, apiSecret).toString();
-  const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
-
-  try {
-    const res = await fetch('https://api.solapi.com/messages/v4/send', {
-      method: 'POST',
-      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: {
-          to: to.replace(/-/g, ''),
-          from: sender.replace(/-/g, ''), // 혹시 하이픈 포함돼도 제거
-          text: `[${academyName}] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`,
-        },
-      }),
-    });
-    const result = await res.json();
-    if (!res.ok) return { ok: false, error: JSON.stringify(result) };
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e.message };
-  }
+function formatKoreanDate(dateStr: string) {
+  const dateObj = new Date(dateStr);
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${month}월 ${day}일`;
 }
 
 export async function POST(req: Request) {
@@ -179,7 +143,7 @@ export async function POST(req: Request) {
       const balance = await getConBalance(academy_id);
       const canDeduct = balance >= pricePerMsg;
 
-      smsResult = await sendSMS(student.parent_phone, student.name, action, today, academy_name);
+      smsResult = await sendPpurioSms(student.parent_phone, smsMessage, academy_id);
       if (!smsResult.ok) console.error('[SMS 실패]', smsResult.error);
 
       if (smsResult.ok && canDeduct && pricePerMsg > 0) {
