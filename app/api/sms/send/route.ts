@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import CryptoJS from 'crypto-js';
-import { createClient } from '@supabase/supabase-js';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { sendPpurioSms } from '@/lib/ppurio';
 
 interface Recipient {
   student_id: string;
@@ -61,61 +60,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const apiKey = process.env.SOLAPI_API_KEY;
-    const apiSecret = process.env.SOLAPI_API_SECRET;
-    const sender = process.env.SOLAPI_SENDER_NUMBER;
-
-    if (!apiKey || !apiSecret || !sender) {
-      return NextResponse.json({ error: 'Solapi 환경변수 누락 (SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER_NUMBER)' }, { status: 500 });
-    }
-
-    // 학원 이름 조회 (LMS 제목용)
-    let subject = '알림';
-    if (academy_id) {
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
-      const { data: cfg } = await supabase
-        .from('academy_config')
-        .select('academy_name')
-        .eq('user_id', academy_id)
-        .single();
-      if (cfg?.academy_name) subject = cfg.academy_name;
-    }
-
     const results: { student_id: string; name: string; phone: string; status: 'success' | 'fail'; error?: string }[] = [];
 
     for (const recipient of recipients) {
-      const date = new Date().toISOString();
-      const salt = Math.random().toString(36).substring(2, 12);
-      const signature = CryptoJS.HmacSHA256(date + salt, apiSecret).toString();
-      const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
-
-      try {
-        const res = await fetch('https://api.solapi.com/messages/v4/send', {
-          method: 'POST',
-          headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: {
-              to: recipient.phone.replace(/-/g, ''),
-              from: sender.replace(/-/g, ''),
-              text: message,
-              type: messageType === 'lms' ? 'LMS' : 'SMS',
-              ...(messageType === 'lms' && { subject }),
-            },
-          }),
-        });
-
-        const result = await res.json();
-        console.log('[sms/send] Solapi 응답:', JSON.stringify({ status: res.status, body: result }));
-        if (result.errorCode) {
-          results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: `${result.errorCode}: ${result.errorMessage || ''}` });
-        } else {
-          results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'success' });
-        }
-      } catch (e) {
-        results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: e instanceof Error ? e.message : '발송 서버 오류' });
+      const result = await sendPpurioSms(recipient.phone, message, academy_id);
+      if (result.ok) {
+        results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'success' });
+      } else {
+        results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'fail', error: result.error });
       }
     }
 
