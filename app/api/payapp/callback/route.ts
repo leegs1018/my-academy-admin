@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { sendPpurioSms } from '@/lib/ppurio';
 
 // pay_state=4: 결제 완료, pay_state=64: 환불/취소
 const REFUND_STATES = new Set(['3', '5', '64']);
@@ -68,6 +69,28 @@ export async function POST(req: NextRequest) {
     }
 
     console.log('[payapp/callback] CON 충전 완료:', userId, totalCon, 'CON');
+
+    // 관리자 CON 결제 알림 SMS
+    try {
+      const { data: notifySetting } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'admin_notify_phone')
+        .single();
+      const adminPhone = notifySetting?.value?.trim();
+      if (adminPhone) {
+        const { data: academyData } = await supabase
+          .from('academy_config')
+          .select('academy_name')
+          .eq('user_id', userId)
+          .single();
+        const name = academyData?.academy_name || userId;
+        await sendPpurioSms(adminPhone, `[CON EDU] 콘 충전\n${name}\n${totalCon}콘 충전`);
+      }
+    } catch {
+      // 알림 실패는 결제 처리에 영향 없음
+    }
+
     return new Response('SUCCESS', { status: 200 });
   }
 
