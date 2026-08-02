@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         const name = academyData?.academy_name || user.email || '(미입력)';
         await sendPpurioSms(
           adminPhone,
-          `[CON EDU] 신규 가입\n학원명: ${name}\n이메일: ${user.email ?? '-'}`,
+          `[CON EDU] 신규 가입\n학원명: ${name}`,
         );
       }
     } catch {
