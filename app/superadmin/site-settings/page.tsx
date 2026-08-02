@@ -27,6 +27,12 @@ const SECTIONS = [
     ],
   },
   {
+    title: '🔔 관리자 알림 설정',
+    fields: [
+      { key: 'admin_notify_phone', label: '신규 가입 알림 수신 번호 (예: 01012345678)' },
+    ],
+  },
+  {
     title: '💬 카카오 알림톡 설정 (뿌리오)',
     fields: [
       { key: 'PPURIO_ACCOUNT',               label: '뿌리오 계정 아이디' },

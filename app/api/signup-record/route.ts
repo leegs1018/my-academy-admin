@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { sendPpurioSms } from '@/lib/ppurio';
 
 // 신규 가입 보너스 CON을 con_transactions에 기록
 // RegisterContent / complete-profile 에서 가입 직후 호출
@@ -56,6 +57,30 @@ export async function POST(request: NextRequest) {
         feature_key: 'signup_bonus_referral',
         description: '추천인 코드 입력 보너스',
       });
+    }
+
+    // 관리자 신규 가입 알림 SMS
+    try {
+      const { data: notifySetting } = await db
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'admin_notify_phone')
+        .single();
+      const adminPhone = notifySetting?.value?.trim();
+      if (adminPhone) {
+        const { data: academyData } = await db
+          .from('academy_config')
+          .select('academy_name')
+          .eq('user_id', user.id)
+          .single();
+        const name = academyData?.academy_name || user.email || '(미입력)';
+        await sendPpurioSms(
+          adminPhone,
+          `[CON EDU] 신규 가입\n학원명: ${name}\n이메일: ${user.email ?? '-'}`,
+        );
+      }
+    } catch {
+      // 알림 실패는 가입 자체에 영향 없음
     }
 
     return NextResponse.json({ success: true });
