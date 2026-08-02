@@ -66,6 +66,8 @@ export default function AccountPage() {
   const [withdrawConfirm, setWithdrawConfirm] = useState('');
   const [withdrawChecked, setWithdrawChecked] = useState(false);
   const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [showWithdrawSuccess, setShowWithdrawSuccess] = useState(false);
+  const [withdrawCountdown, setWithdrawCountdown] = useState(3);
 
   // ── 초기 세션 확인 ───────────────────────────────
   useEffect(() => {
@@ -224,8 +226,19 @@ export default function AccountPage() {
 
     localStorage.removeItem('con-edu-auto-login');
     localStorage.setItem('just-withdrew', '1');
-    // 서버사이드 쿠키 삭제를 위해 signout 라우트 경유
-    window.location.href = '/api/auth/signout?withdrawn=1';
+    setShowWithdrawModal(false);
+    setShowWithdrawSuccess(true);
+    setWithdrawCountdown(3);
+
+    let count = 3;
+    const timer = setInterval(() => {
+      count -= 1;
+      setWithdrawCountdown(count);
+      if (count <= 0) {
+        clearInterval(timer);
+        window.location.href = '/api/auth/signout?withdrawn=1';
+      }
+    }, 1000);
   };
 
   // ── 비밀번호 변경 ────────────────────────────────
@@ -636,6 +649,24 @@ export default function AccountPage() {
                 {withdrawLoading ? '처리 중...' : '탈퇴하기'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 탈퇴 완료 팝업 */}
+      {showWithdrawSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden text-center px-8 py-10">
+            <div className="text-5xl mb-4">👋</div>
+            <h3 className="text-xl font-black text-gray-900 mb-2">탈퇴가 완료되었습니다</h3>
+            <p className="text-sm font-bold text-gray-400 mb-8">그동안 CON EDU를 이용해 주셔서 감사합니다.</p>
+            <button
+              onClick={() => { window.location.href = '/api/auth/signout?withdrawn=1'; }}
+              className="w-full py-3 text-sm font-black text-white bg-gray-900 hover:bg-gray-700 rounded-2xl transition-all"
+            >
+              확인 ({withdrawCountdown})
+            </button>
           </div>
         </div>
       )}
