@@ -28,8 +28,7 @@ export default function CompleteProfilePage() {
         .eq('user_id', session.user.id)
         .single();
       if (data) {
-        const role = session.user.user_metadata?.role ?? 'ai_only';
-        router.replace(role === 'admin' ? '/admin' : '/admin/pdf-editor');
+        router.replace('/admin');
         return;
       }
       const p = session.user.user_metadata?.provider ?? session.user.app_metadata?.provider ?? '';
@@ -149,12 +148,12 @@ export default function CompleteProfilePage() {
     }
 
     await supabase.auth.updateUser({
-      data: { role: 'ai_only', academy_name: form.academyName },
+      data: { role: 'admin', academy_name: form.academyName },
     });
 
     const bonusMsg = referrerFound ? `추천인 코드 적용! 총 ${points}C` : `가입 기념 ${points}C`;
     alert(`환영합니다! ${bonusMsg}가 지급되었습니다.`);
-    router.replace('/admin/pdf-editor');
+    router.replace('/admin');
   };
 
   if (checking) {

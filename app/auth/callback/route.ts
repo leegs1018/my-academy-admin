@@ -58,11 +58,9 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: { user } } = await supabase.auth.getUser();
       const isSuperAdmin = user?.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;
-      const role = user?.user_metadata?.role ?? 'ai_only';
 
       if (isSuperAdmin) redirectTarget = `${origin}/superadmin`;
-      else if (role === 'admin') redirectTarget = `${origin}/admin`;
-      else redirectTarget = `${origin}/admin/pdf-editor`;
+      else redirectTarget = `${origin}/admin`;
     }
   }
 

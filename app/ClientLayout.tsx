@@ -253,12 +253,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
         <nav className="flex-1 overflow-y-auto custom-scrollbar py-4 px-3">
           <div className="space-y-0.5">
-            {(userRole === 'admin'
-              ? menuItems
-              : menuItems.filter(item =>
-                  item.label === 'AI 문제 생성' || item.label === '이용 가이드' || item.label === 'CON 충전' || item.label === 'CON 사용 이력' || item.label === '공지사항' || item.label === '문의하기'
-                )
-            ).filter(item =>
+            {menuItems.filter(item =>
               item.label !== '문자 발송' || smsEnabled
             ).map((item) => {
               if (item.children) {

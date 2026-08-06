@@ -50,7 +50,7 @@ export default function RegisterContent() {
         options: {
           data: {
             academy_name: formData.academyName,
-            role: 'ai_only',
+            role: 'admin',
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },

@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
   await admin.auth.admin.createUser({
     email,
     email_confirm: true,
-    user_metadata: { full_name: fullName, provider: 'naver', role: 'ai_only' },
+    user_metadata: { full_name: fullName, provider: 'naver', role: 'admin' },
   });
 
   // 4. 로그인용 magic link 생성
