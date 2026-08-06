@@ -27,6 +27,7 @@ const menuItems: MenuItem[] = [
       { href: '/admin/ai-questions',  label: '실전 변형 문제', icon: '🎯' },
     ],
   },
+  { href: '/admin/payments',     label: '청구·수납 관리',  icon: '💰' },
   { href: '/admin/guide',        label: '이용 가이드',     icon: '📖' },
   { href: '/admin/con-charge',   label: 'CON 충전',        icon: '💳' },
   { href: '/admin/con-history',  label: 'CON 사용 이력',   icon: '⭐' },
@@ -254,7 +255,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         <nav className="flex-1 overflow-y-auto custom-scrollbar py-4 px-3">
           <div className="space-y-0.5">
             {menuItems.filter(item =>
-              item.label !== '문자 발송' || smsEnabled
+              (item.label !== '문자 발송' || smsEnabled) &&
+              item.label !== '청구·수납 관리'
             ).map((item) => {
               if (item.children) {
                 const isAnyChildActive = item.children.some(c => pathname.startsWith(c.href));
