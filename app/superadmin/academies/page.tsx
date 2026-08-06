@@ -306,28 +306,9 @@ export default function AcademiesPage() {
                       </button>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <div className="flex flex-col items-center gap-1.5">
-                        {/* 현재 역할 뱃지 */}
-                        <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${
-                          a.role === 'admin'
-                            ? 'bg-indigo-900/60 text-indigo-300'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {a.role === 'admin' ? '전체기능' : 'AI전용'}
-                        </span>
-                        {/* 변경 버튼 */}
-                        <button
-                          onClick={() => handleRoleChange(a, a.role === 'admin' ? 'ai_only' : 'admin')}
-                          disabled={roleLoading === a.user_id}
-                          className={`px-2 py-0.5 text-[9px] font-black rounded-md transition-all disabled:opacity-50 ${
-                            a.role === 'admin'
-                              ? 'bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white'
-                              : 'bg-indigo-700 hover:bg-indigo-600 text-indigo-200'
-                          }`}
-                        >
-                          {roleLoading === a.user_id ? '변경 중...' : a.role === 'admin' ? '→ AI전용' : '→ 전체기능'}
-                        </button>
-                      </div>
+                      <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-indigo-900/60 text-indigo-300">
+                        전체기능
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-right text-xs font-bold text-slate-500">{dateStr}</td>
                     <td className="py-3 px-4 text-center">
