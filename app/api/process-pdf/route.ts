@@ -74,17 +74,17 @@ ${text}
   },
   "tf_questions": [
     {"number": 1, "statement": "English statement using vocabulary NOT in the passage", "answer": "T", "explanation": "한글로 왜 T인지 설명"},
-    {"number": 2, "statement": "...", "answer": "F", "explanation": "한글로 왜 F인지 설명"},
-    {"number": 3, "statement": "...", "answer": "T", "explanation": "..."},
+    {"number": 2, "statement": "...", "answer": "T", "explanation": "한글로 왜 T인지 설명"},
+    {"number": 3, "statement": "...", "answer": "F", "explanation": "..."},
     {"number": 4, "statement": "...", "answer": "F", "explanation": "..."},
     {"number": 5, "statement": "...", "answer": "T", "explanation": "..."},
     {"number": 6, "statement": "...", "answer": "F", "explanation": "..."},
-    {"number": 7, "statement": "...", "answer": "T", "explanation": "..."},
-    {"number": 8, "statement": "...", "answer": "F", "explanation": "..."},
+    {"number": 7, "statement": "...", "answer": "F", "explanation": "..."},
+    {"number": 8, "statement": "...", "answer": "T", "explanation": "..."},
     {"number": 9, "statement": "...", "answer": "T", "explanation": "..."},
     {"number": 10, "statement": "...", "answer": "F", "explanation": "..."}
   ],
-  "answer_key": "1. T  2. F  3. T  4. F  5. T  6. F  7. T  8. F  9. T  10. F",
+  "answer_key": "1. T  2. T  3. F  4. F  5. T  6. F  7. F  8. T  9. T  10. F",
   "english_titles": [
     "First Long Title For Exam Preparation (한글 번역)",
     "Second Title Covering the Main Theme (한글 번역)",
@@ -109,7 +109,7 @@ ${text}
      - 논쟁 지문 → rows 3개: label = "주장", "근거", "결론"
      - 문제 지문 → rows 3개: label = "현상", "문제", "해결"
    - content는 각 행당 한글 1~2문장으로 명확하게 작성. 원문 직역 금지.
-2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자. ${tfLengthRule} explanation은 해당 문장이 왜 T 또는 F인지 한글 1~2문장으로 설명. 지문의 어느 내용을 근거로 판단했는지 포함.
+2. tf_questions: 본문 내용에 따라 T/F 답하는 문제. T 5개, F 5개 (반드시 동수). 영어 서술문으로 작성. 특히 본문에 사용되지 않은 어휘를 많이 활용. 괄호 없음. 번호는 1~10 숫자. ${tfLengthRule} explanation은 해당 문장이 왜 T 또는 F인지 한글 1~2문장으로 설명. 지문의 어느 내용을 근거로 판단했는지 포함. 중요: T와 F가 T,F,T,F,T,F처럼 교대로 나오지 않게 반드시 불규칙하게 배치할 것 (예: T,T,F,T,F,F,T,F,T,F 또는 F,T,T,F,F,T,F,T,T,F).
 3. answer_key: "1. T  2. F ..." 형식. 괄호 없음. 번호 복사가 깔끔하게.
 4. english_titles: 지문 내용에 알맞은 영어 제목 3가지. 조금 길게 (시험 문제 대비용). 괄호 안에 한글 번역 포함. 총 3개.
 5. one_sentence_summaries: 본문에 쓰이지 않은 단어만 사용. 영어 1문장 요약 3가지. 한글 번역은 괄호(( ))나 이중 괄호 없이 순수 한글 텍스트로만 작성. 요약문에서 중요 어휘는 **볼드** 처리. 한글 번역에서 중요 어휘는 *이탤릭* 처리 (별표 1개). 총 3개.
@@ -189,6 +189,30 @@ export async function POST(request: Request) {
         { error: 'AI 응답 파싱에 실패했습니다. 다시 시도해주세요.' },
         { status: 500 }
       );
+    }
+
+    // T/F 50:50 보장 + 교대 패턴 방지 셔플
+    if (data.tf_questions?.length > 0) {
+      const tList = data.tf_questions.filter(q => q.answer === 'T').slice(0, 5);
+      const fList = data.tf_questions.filter(q => q.answer === 'F').slice(0, 5);
+      const balanced = [...tList, ...fList];
+
+      // 교대 패턴(TFTF... / FTFT...)이 나오면 재셔플, 최대 10회
+      const isAlternating = (arr: typeof balanced) => {
+        const p = arr.map(q => q.answer).join('');
+        return p === 'TFTFTFTFTF' || p === 'FTFTFTFTFT';
+      };
+      let attempts = 0;
+      do {
+        for (let i = balanced.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [balanced[i], balanced[j]] = [balanced[j], balanced[i]];
+        }
+        attempts++;
+      } while (isAlternating(balanced) && attempts < 10);
+
+      data.tf_questions = balanced.map((q, i) => ({ ...q, number: i + 1 }));
+      data.answer_key = data.tf_questions.map(q => `${q.number}. ${q.answer}`).join('  ');
     }
 
     return NextResponse.json({ success: true, data });
