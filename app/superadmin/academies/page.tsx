@@ -232,7 +232,7 @@ export default function AcademiesPage() {
       </div>
 
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-base">
             <thead className="bg-slate-800/50">
               <tr>
                 <th className="py-2 px-2 text-left font-black text-slate-500 whitespace-nowrap">학원명</th>
@@ -243,7 +243,6 @@ export default function AcademiesPage() {
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">학생</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">SMS</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">VIP</th>
-                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">역할</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">가입일</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">CON</th>
               </tr>
@@ -308,10 +307,6 @@ export default function AcademiesPage() {
                         {a.sms_enabled ? '⭐ VIP' : '—'}
                       </button>
                     </td>
-                    {/* 역할 */}
-                    <td className="py-2 px-2 text-center whitespace-nowrap">
-                      <span className="px-1.5 py-0.5 text-[10px] font-black rounded bg-indigo-900/60 text-indigo-300 whitespace-nowrap">전체기능</span>
-                    </td>
                     {/* 가입일 */}
                     <td className="py-2 px-2 text-center font-bold text-slate-500 whitespace-nowrap">{dateStr}</td>
                     {/* CON 충전/차감 */}
@@ -335,7 +330,7 @@ export default function AcademiesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={11} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={10} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>
