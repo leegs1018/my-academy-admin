@@ -259,6 +259,10 @@ export default function LandingPageClient() {
             ))}
           </div>
 
+          <Link href="/kiosk" className="px-4 py-2 text-sm font-bold border-2 border-slate-200 text-slate-500 rounded-full hover:border-slate-400 hover:text-slate-700 transition-all hidden sm:block whitespace-nowrap">
+            출결 키오스크
+          </Link>
+
           <div className="w-px h-5 bg-slate-200 mx-1 hidden md:block" />
 
           {isLoggedIn ? (
