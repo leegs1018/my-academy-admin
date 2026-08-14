@@ -374,7 +374,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 href="/superadmin"
                 className="px-3 py-2 text-xs font-black text-indigo-600 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all border border-indigo-200 hidden sm:block"
               >
-                🛠 슈퍼어드민
+                🛠 관리자 모드
               </Link>
             )}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">

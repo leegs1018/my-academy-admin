@@ -243,7 +243,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
               href="/admin"
               className="px-4 py-2 text-sm font-black text-indigo-400 hover:text-indigo-200 hover:bg-indigo-900/30 rounded-xl transition-all border border-indigo-800 hidden sm:block"
             >
-              👤 관리자 화면
+              👤 원장님 모드
             </Link>
             <button
               onClick={handleLogout}
