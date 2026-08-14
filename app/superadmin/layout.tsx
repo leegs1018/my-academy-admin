@@ -14,6 +14,7 @@ const menuItems = [
   { href: '/superadmin/mock-exams',        label: '모의고사 지문 관리', icon: '📚' },
   { href: '/superadmin/question-reports',  label: '문제 신고 관리',    icon: '🚨' },
   { href: '/superadmin/inquiries',         label: '문의 관리',         icon: '💬' },
+  { href: '/superadmin/samples',           label: '문제 예시 관리',    icon: '📂' },
   { href: '/superadmin/notices',           label: '공지사항 관리',     icon: '📢' },
   { href: '/superadmin/site-settings',     label: '사이트 설정',       icon: '⚙️' },
 ];
@@ -238,6 +239,12 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
               )}
             </div>
 
+            <Link
+              href="/admin"
+              className="px-4 py-2 text-sm font-black text-indigo-400 hover:text-indigo-200 hover:bg-indigo-900/30 rounded-xl transition-all border border-indigo-800 hidden sm:block"
+            >
+              👤 관리자 화면
+            </Link>
             <button
               onClick={handleLogout}
               className="px-4 py-2 text-sm font-black text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-xl transition-all"

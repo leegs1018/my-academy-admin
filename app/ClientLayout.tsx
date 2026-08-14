@@ -369,6 +369,14 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
+            {userEmail === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL && (
+              <Link
+                href="/superadmin"
+                className="px-3 py-2 text-xs font-black text-indigo-600 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all border border-indigo-200 hidden sm:block"
+              >
+                🛠 슈퍼어드민
+              </Link>
+            )}
             <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
               <button
                 onClick={() => !isDark || toggleTheme()}

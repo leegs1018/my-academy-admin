@@ -8,7 +8,11 @@ interface Analytics {
   totalStudents: number;
   totalSms: number;
   thisMonthNewAcademies: number;
+  todayVisitors: number;
+  todayConUsage: number;
+  todayConCharge: number;
   monthlyData: { month: string; count: number }[];
+  weeklyData: { week: string; count: number; range: string }[];
   top5: { academy_id: string; academy_name: string; student_count: number }[];
 }
 
@@ -41,6 +45,14 @@ export default function SuperAdminDashboard() {
     { label: '이번달 신규 가입', value: data?.thisMonthNewAcademies ?? 0, unit: '개', icon: '✨', color: 'text-pink-400' },
   ];
 
+  const todayStats = [
+    { label: '오늘 방문자', value: data?.todayVisitors ?? 0, unit: '명', icon: '👥', color: 'text-sky-400', bg: 'from-sky-500/10 to-sky-600/5', border: 'border-sky-500/20' },
+    { label: '오늘 CON 사용량', value: data?.todayConUsage ?? 0, unit: 'CON', icon: '⚡', color: 'text-amber-400', bg: 'from-amber-500/10 to-amber-600/5', border: 'border-amber-500/20' },
+    { label: '오늘 CON 충전량', value: data?.todayConCharge ?? 0, unit: 'CON', icon: '💳', color: 'text-emerald-400', bg: 'from-emerald-500/10 to-emerald-600/5', border: 'border-emerald-500/20' },
+  ];
+
+  const todayDateStr = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+
   return (
     <div className="space-y-8">
       <div>
@@ -48,7 +60,29 @@ export default function SuperAdminDashboard() {
         <p className="text-sm text-slate-500 mt-1 font-bold">CON EDU 플랫폼 전체 현황</p>
       </div>
 
-      {/* KPI 카드 */}
+      {/* 오늘 TODAY 섹션 */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-2.5 py-1 text-xs font-black bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full animate-pulse">● LIVE</span>
+          <span className="text-sm font-black text-slate-400">TODAY — {todayDateStr}</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {todayStats.map(s => (
+            <div key={s.label} className={`bg-gradient-to-br ${s.bg} rounded-2xl p-5 border ${s.border}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-2xl">{s.icon}</span>
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">TODAY</span>
+              </div>
+              <p className={`text-3xl font-black ${s.color}`}>
+                {s.value.toLocaleString()}<span className="text-base ml-1 text-slate-500">{s.unit}</span>
+              </p>
+              <p className="text-xs font-black text-slate-500 mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 전체 KPI 카드 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
           <div key={kpi.label} className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
@@ -61,30 +95,39 @@ export default function SuperAdminDashboard() {
         ))}
       </div>
 
-      {/* 월별 가입 차트 */}
+      {/* 주차별 가입 차트 */}
       <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800">
-        <h2 className="text-lg font-black text-white mb-6">월별 학원 가입 현황</h2>
-        {(data?.monthlyData?.length ?? 0) > 0 ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={data!.monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis
-                dataKey="month"
-                tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
-                tickFormatter={(v) => v.slice(5)}
-              />
-              <YAxis tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, color: '#fff', fontWeight: 700 }}
-                labelFormatter={(v) => `${v} 가입`}
-                formatter={(val) => [`${val}개`, '신규 학원']}
-              />
-              <Bar dataKey="count" fill="#6366f1" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-slate-600 font-bold text-center py-12">데이터가 없습니다</p>
-        )}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-black text-white">이번 달 주차별 학원 가입 현황</h2>
+          <span className="text-xs font-black text-slate-600">
+            {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' })}
+          </span>
+        </div>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={data?.weeklyData ?? []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+            <XAxis
+              dataKey="week"
+              tick={{ fill: '#64748b', fontSize: 12, fontWeight: 700 }}
+            />
+            <YAxis tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} allowDecimals={false} />
+            <Tooltip
+              contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, color: '#fff', fontWeight: 700 }}
+              formatter={(val, _name, props) => [`${val}개`, `${props.payload?.range ?? ''} 가입`]}
+            />
+            <Bar dataKey="count" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={64} />
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="flex gap-4 mt-3 flex-wrap">
+          {(data?.weeklyData ?? []).map(w => (
+            <div key={w.week} className="flex items-center gap-1.5 text-xs text-slate-500 font-bold">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
+              <span>{w.week}</span>
+              <span className="text-slate-600">({w.range})</span>
+              <span className="text-indigo-400 font-black">{w.count}개</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Top5 학원 */}

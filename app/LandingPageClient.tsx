@@ -240,21 +240,38 @@ export default function LandingPageClient() {
           </div>
         </Link>
 
-        <div className="flex items-center gap-3">
-          <Link href="/kiosk" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-200 text-slate-500 rounded-full hover:border-slate-400 hover:text-slate-700 transition-all hidden sm:block">
-            출결 키오스크
-          </Link>
+        <div className="flex items-center gap-1 md:gap-2">
+          {/* 상단 네브 메뉴 */}
+          <div className="hidden md:flex items-center gap-1">
+            {[
+              { href: '/notices', label: '공지사항' },
+              { href: '/guide',   label: '서비스 가이드' },
+              { href: '/samples', label: '문제 예시' },
+              { href: '/pricing', label: '가격 안내' },
+            ].map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-full transition-all"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="w-px h-5 bg-slate-200 mx-1 hidden md:block" />
+
           {isLoggedIn ? (
-            <Link href="/admin/ai-questions" className="px-6 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
+            <Link href="/admin" className="px-8 py-2.5 text-sm font-black bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all whitespace-nowrap">
               서비스 시작하기 🚀
             </Link>
           ) : (
             <>
-              <Link href="/register" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-900 text-slate-900 rounded-full hover:bg-slate-900 hover:text-white transition-all">
-                솔루션 가입하기
-              </Link>
-              <Link href="/login" className="px-5 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
+              <Link href="/login" className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:text-slate-900 transition-all hidden sm:block">
                 로그인
+              </Link>
+              <Link href="/register" className="px-8 py-2.5 text-sm font-black bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all whitespace-nowrap">
+                지금 시작하기 →
               </Link>
             </>
           )}
@@ -299,28 +316,16 @@ export default function LandingPageClient() {
 
           <div className="flex flex-wrap justify-center gap-3">
             <Link
-              href="/notices"
-              className="px-7 py-3.5 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-sm"
-            >
-              공지사항
-            </Link>
-            <Link
-              href="/guide"
-              className="px-7 py-3.5 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-sm"
-            >
-              서비스 가이드
-            </Link>
-            <Link
-              href="/pricing"
-              className="px-7 py-3.5 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-sm"
-            >
-              가격 안내
-            </Link>
-            <Link
-              href={isLoggedIn ? '/admin/ai-questions' : '/register'}
-              className="px-10 py-3.5 bg-slate-900 text-white font-black rounded-full text-sm shadow-2xl shadow-slate-300 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
+              href={isLoggedIn ? '/admin' : '/register'}
+              className="px-14 py-4 bg-slate-900 text-white font-black rounded-full text-base shadow-2xl shadow-slate-300 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
             >
               지금 시작하기 →
+            </Link>
+            <Link
+              href="/samples"
+              className="px-10 py-4 bg-white text-slate-600 font-black rounded-full border-2 border-slate-200 hover:border-slate-400 hover:text-slate-900 transition-all text-base"
+            >
+              문제 예시 보기
             </Link>
           </div>
         </div>
