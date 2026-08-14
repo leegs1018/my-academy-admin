@@ -232,80 +232,74 @@ export default function AcademiesPage() {
       </div>
 
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead className="bg-slate-800/50">
               <tr>
-                <th className="py-3 px-4 text-left text-xs font-black text-slate-500">학원명</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">가입방법</th>
-                <th className="py-3 px-4 text-left text-xs font-black text-slate-500">이메일</th>
-                <th className="py-3 px-4 text-left text-xs font-black text-slate-500 hidden md:table-cell">전화번호</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">키오스크</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">추천인코드</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">잔여 콘</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">학생수</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">SMS발송수</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">VIP</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">역할</th>
-                <th className="py-3 px-4 text-right text-xs font-black text-slate-500">가입일</th>
-                <th className="py-3 px-4 text-center text-xs font-black text-slate-500">CON</th>
+                <th className="py-2 px-2 text-left font-black text-slate-500 whitespace-nowrap">학원명</th>
+                <th className="py-2 px-2 text-left font-black text-slate-500 whitespace-nowrap">이메일</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">전화</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">키/추천</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">CON잔액</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">학생</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">SMS</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">VIP</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">역할</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">가입일</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">CON</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((a) => {
                 const date = new Date(a.created_at);
-                const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+                const dateStr = `${date.getFullYear().toString().slice(2)}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+                const badge = PROVIDER_BADGE[a.provider] ?? PROVIDER_BADGE.email;
                 return (
                   <tr key={a.user_id} className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
-                    <td className="py-3 px-4 min-w-[140px]">
+                    {/* 학원명 + 가입방법 */}
+                    <td className="py-2 px-2">
                       {a.academy_name ? (
-                        <div className="flex items-center gap-1.5 flex-nowrap">
+                        <div className="flex items-center gap-1 flex-nowrap">
+                          <span className={`flex-shrink-0 inline-block px-1.5 py-0.5 text-[9px] font-black rounded ${badge.className}`}>{badge.label}</span>
                           <span className="font-black text-white whitespace-nowrap">{a.academy_name}</span>
                           {!a.profile_completed && (
-                            <span className="flex-shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-800 whitespace-nowrap">미완성</span>
+                            <span className="flex-shrink-0 text-[9px] font-black px-1 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-800 whitespace-nowrap">미완성</span>
                           )}
                         </div>
                       ) : (
                         <div>
-                          <p className="font-black text-slate-500 text-sm">(미설정)</p>
-                          <p className="text-[10px] font-black text-red-400 mt-0.5">프로필 미완성</p>
+                          <p className="font-black text-slate-500">(미설정)</p>
+                          <p className="text-[9px] font-black text-red-400 mt-0.5">프로필 미완성</p>
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      {(() => {
-                        const badge = PROVIDER_BADGE[a.provider] ?? PROVIDER_BADGE.email;
-                        return (
-                          <span className={`inline-block px-2 py-0.5 text-[10px] font-black rounded-md ${badge.className}`}>
-                            {badge.label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="py-3 px-4 text-slate-400 font-bold text-xs">{a.email}</td>
-                    <td className="py-3 px-4 text-slate-400 font-bold text-xs hidden md:table-cell">
+                    {/* 이메일 */}
+                    <td className="py-2 px-2 text-slate-400 font-bold whitespace-nowrap">{a.email}</td>
+                    {/* 전화 */}
+                    <td className="py-2 px-2 text-center text-slate-400 font-bold whitespace-nowrap">
                       {a.academy_phone || a.mobile || '-'}
                     </td>
-                    <td className="py-3 px-4 text-center font-black text-slate-300 tracking-widest">
-                      {a.kiosk_code || '-'}
+                    {/* 키오스크 / 추천인코드 */}
+                    <td className="py-2 px-2 text-center whitespace-nowrap">
+                      <span className="font-black text-slate-400">{a.kiosk_code || '-'}</span>
+                      <span className="text-slate-700 mx-1">/</span>
+                      <span className="font-black text-indigo-400">{a.own_referral_code || '-'}</span>
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      {a.own_referral_code
-                        ? <span className="font-black text-indigo-300 tracking-widest text-xs">{a.own_referral_code}</span>
-                        : <span className="text-slate-600 text-xs">-</span>}
-                    </td>
-                    <td className="py-3 px-4 text-center">
+                    {/* CON 잔액 */}
+                    <td className="py-2 px-2 text-center whitespace-nowrap">
                       <span className="font-black text-yellow-400">{(a.points || 0).toLocaleString()}</span>
-                      <span className="text-xs text-slate-500 ml-0.5">C</span>
+                      <span className="text-slate-600 ml-0.5">C</span>
                     </td>
-                    <td className="py-3 px-4 text-center font-black text-emerald-400">{a.student_count}</td>
-                    <td className="py-3 px-4 text-center font-black text-indigo-400">{a.sms_count}</td>
-                    <td className="py-3 px-4 text-center">
+                    {/* 학생수 */}
+                    <td className="py-2 px-2 text-center font-black text-emerald-400 whitespace-nowrap">{a.student_count}</td>
+                    {/* SMS */}
+                    <td className="py-2 px-2 text-center font-black text-indigo-400 whitespace-nowrap">{a.sms_count}</td>
+                    {/* VIP */}
+                    <td className="py-2 px-2 text-center whitespace-nowrap">
                       <button
                         onClick={() => handleSmsToggle(a)}
                         disabled={smsLoading === a.user_id}
                         title={a.sms_enabled ? 'VIP 해제' : 'VIP 지정'}
-                        className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all disabled:opacity-50 ${
+                        className={`px-2 py-0.5 text-[10px] font-black rounded transition-all disabled:opacity-50 whitespace-nowrap ${
                           a.sms_enabled
                             ? 'bg-yellow-500 text-slate-900 hover:bg-yellow-400'
                             : 'bg-slate-700 text-slate-500 hover:bg-slate-600 hover:text-slate-300'
@@ -314,23 +308,24 @@ export default function AcademiesPage() {
                         {a.sms_enabled ? '⭐ VIP' : '—'}
                       </button>
                     </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-indigo-900/60 text-indigo-300">
-                        전체기능
-                      </span>
+                    {/* 역할 */}
+                    <td className="py-2 px-2 text-center whitespace-nowrap">
+                      <span className="px-1.5 py-0.5 text-[10px] font-black rounded bg-indigo-900/60 text-indigo-300 whitespace-nowrap">전체기능</span>
                     </td>
-                    <td className="py-3 px-4 text-right text-xs font-bold text-slate-500">{dateStr}</td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex gap-1.5 justify-center">
+                    {/* 가입일 */}
+                    <td className="py-2 px-2 text-center font-bold text-slate-500 whitespace-nowrap">{dateStr}</td>
+                    {/* CON 충전/차감 */}
+                    <td className="py-2 px-2 text-center whitespace-nowrap">
+                      <div className="flex gap-1 justify-center">
                         <button
                           onClick={() => openChargeModal(a)}
-                          className="px-3 py-1.5 text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg transition-all"
+                          className="px-2 py-1 text-[10px] font-black bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded transition-all whitespace-nowrap"
                         >
                           충전
                         </button>
                         <button
                           onClick={() => openDeductModal(a)}
-                          className="px-3 py-1.5 text-xs font-black bg-red-700 hover:bg-red-600 text-white rounded-lg transition-all"
+                          className="px-2 py-1 text-[10px] font-black bg-red-700 hover:bg-red-600 text-white rounded transition-all whitespace-nowrap"
                         >
                           차감
                         </button>
@@ -340,11 +335,10 @@ export default function AcademiesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={13} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={11} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>
-        </div>
       </div>
 
       {/* CON 충전 모달 */}
