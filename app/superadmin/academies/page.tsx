@@ -232,7 +232,7 @@ export default function AcademiesPage() {
       </div>
 
       <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
-          <table className="w-full text-xs">
+          <table className="w-full text-sm">
             <thead className="bg-slate-800/50">
               <tr>
                 <th className="py-2 px-2 text-left font-black text-slate-500 whitespace-nowrap">학원명</th>
