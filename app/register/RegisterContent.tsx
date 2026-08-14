@@ -16,6 +16,7 @@ export default function RegisterContent() {
     referralCode: '',
     termsAgreed: false,
     privacyAgreed: false,
+    smsMarketingAgreed: false,
   });
 
   const [loading, setLoading] = useState(false);
@@ -105,6 +106,7 @@ export default function RegisterContent() {
                 points: initialPoints,
                 kiosk_code: kioskCode,
                 own_referral_code: ownReferralCode,
+                sms_marketing_agreed: formData.smsMarketingAgreed,
               }
             ]);
           if (!error) { dbError = null; break; }
@@ -193,6 +195,7 @@ export default function RegisterContent() {
           <div className="md:col-span-2 space-y-3 mt-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">
             <AgreementCheckbox id="terms" name="termsAgreed" checked={formData.termsAgreed} onChange={handleChange} label="이용약관에 동의합니다. (필수)" />
             <AgreementCheckbox id="privacy" name="privacyAgreed" checked={formData.privacyAgreed} onChange={handleChange} label="개인정보처리방침에 동의합니다. (필수)" />
+            <AgreementCheckbox id="smsMarketing" name="smsMarketingAgreed" checked={formData.smsMarketingAgreed} onChange={handleChange} label="마케팅 문자 수신에 동의합니다. (선택)" />
           </div>
 
           <button

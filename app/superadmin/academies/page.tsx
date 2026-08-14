@@ -257,10 +257,19 @@ export default function AcademiesPage() {
                 const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
                 return (
                   <tr key={a.user_id} className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
-                    <td className="py-3 px-4">
-                      <span className="font-black text-white">{a.academy_name || '(미설정)'}</span>
-                      {!a.profile_completed && (
-                        <span className="ml-1.5 text-[9px] font-black px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-800">프로필 미완성</span>
+                    <td className="py-3 px-4 min-w-[140px]">
+                      {a.academy_name ? (
+                        <div className="flex items-center gap-1.5 flex-nowrap">
+                          <span className="font-black text-white whitespace-nowrap">{a.academy_name}</span>
+                          {!a.profile_completed && (
+                            <span className="flex-shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-800 whitespace-nowrap">미완성</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="font-black text-slate-500 text-sm">(미설정)</p>
+                          <p className="text-[10px] font-black text-red-400 mt-0.5">프로필 미완성</p>
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">

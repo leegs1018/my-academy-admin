@@ -13,6 +13,7 @@ export default function CompleteProfilePage() {
     referralCode: '',
     termsAgreed: false,
     privacyAgreed: false,
+    smsMarketingAgreed: false,
   });
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -113,6 +114,7 @@ export default function CompleteProfilePage() {
         points,
         kiosk_code: kioskCode,
         own_referral_code: ownReferralCode,
+        sms_marketing_agreed: form.smsMarketingAgreed,
       });
       if (!error) { saved = true; break; }
       if (error.code === '23505') { kioskCode = Math.floor(100000 + Math.random() * 900000).toString(); continue; }
@@ -198,6 +200,7 @@ export default function CompleteProfilePage() {
           <div className="md:col-span-2 space-y-3 mt-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
             <Check id="terms" name="termsAgreed" checked={form.termsAgreed} onChange={change} label="이용약관에 동의합니다. (필수)" />
             <Check id="privacy" name="privacyAgreed" checked={form.privacyAgreed} onChange={change} label="개인정보처리방침에 동의합니다. (필수)" />
+            <Check id="smsMarketing" name="smsMarketingAgreed" checked={form.smsMarketingAgreed} onChange={change} label="마케팅 문자 수신에 동의합니다. (선택)" />
           </div>
 
           <button
