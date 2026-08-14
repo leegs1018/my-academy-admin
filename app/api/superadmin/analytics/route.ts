@@ -25,15 +25,14 @@ export async function GET(request: NextRequest) {
   const tomorrowStr = tomorrowStart.toISOString().slice(0, 10);
   const tomorrowISO = `${tomorrowStr}T00:00:00+09:00`;
 
-  // 이번 달 1일
   const thisMonthStr = todayStr.slice(0, 7); // YYYY-MM
-  const firstOfMonth = `${thisMonthStr}-01T00:00:00+09:00`;
 
   const [
     studentCountRes,
     smsCountRes,
     topStudentRes,
     todayConRes,
+    todayVisitRes,
   ] = await Promise.all([
     superAdminId
       ? db.from('students').select('*', { count: 'exact', head: true }).neq('academy_id', superAdminId)
@@ -50,15 +49,17 @@ export async function GET(request: NextRequest) {
       .select('type, amount')
       .gte('created_at', todayStart)
       .lt('created_at', tomorrowISO),
+    // 오늘 메인페이지 방문자 (IP 기반 unique)
+    db
+      .from('site_visits')
+      .select('*', { count: 'exact', head: true })
+      .eq('visited_date', todayStr),
   ]);
 
   const totalSms = (smsCountRes.data || []).reduce((sum: number, r: any) => sum + (r.total_count || 0), 0);
 
-  // 오늘 방문자: last_sign_in_at이 오늘인 유저 수 (슈퍼어드민 제외)
-  const todayVisitors = allNonAdminUsers.filter((u: any) => {
-    if (!u.last_sign_in_at) return false;
-    return (u.last_sign_in_at as string).startsWith(todayStr);
-  }).length;
+  // 오늘 메인페이지 방문자 (IP 기반, site_visits 테이블)
+  const todayVisitors = todayVisitRes.count ?? 0;
 
   // 오늘 CON 사용량·충전량
   let todayConUsage = 0;

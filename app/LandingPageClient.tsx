@@ -204,6 +204,8 @@ export default function LandingPageClient() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setIsLoggedIn(!!session));
+    // 방문자 추적 (IP 기반, 하루 1회)
+    fetch('/api/track-visit', { method: 'POST' }).catch(() => {});
   }, []);
 
   useEffect(() => {
