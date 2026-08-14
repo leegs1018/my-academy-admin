@@ -16,6 +16,7 @@ interface Academy {
   student_count: number;
   sms_count: number;
   sms_enabled: boolean;
+  sms_marketing_agreed: boolean;
   role: 'ai_only' | 'admin';
   provider: string;
   profile_completed: boolean;
@@ -242,6 +243,7 @@ export default function AcademiesPage() {
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">CON잔액</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">학생</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">SMS</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">문자수신</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">VIP</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">가입일</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">CON</th>
@@ -292,6 +294,12 @@ export default function AcademiesPage() {
                     <td className="py-2 px-2 text-center font-black text-emerald-400 whitespace-nowrap">{a.student_count}</td>
                     {/* SMS */}
                     <td className="py-2 px-2 text-center font-black text-indigo-400 whitespace-nowrap">{a.sms_count}</td>
+                    {/* 문자수신동의 */}
+                    <td className="py-2 px-2 text-center whitespace-nowrap">
+                      {a.sms_marketing_agreed
+                        ? <span className="text-emerald-400 font-black text-base">✓</span>
+                        : <span className="text-slate-700 font-bold">—</span>}
+                    </td>
                     {/* VIP */}
                     <td className="py-2 px-2 text-center whitespace-nowrap">
                       <button
@@ -330,7 +338,7 @@ export default function AcademiesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={10} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
+                <tr><td colSpan={11} className="py-16 text-center text-slate-600 font-bold">검색 결과 없음</td></tr>
               )}
             </tbody>
           </table>

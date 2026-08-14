@@ -10,6 +10,7 @@ interface Academy {
   mobile: string;
   academy_phone: string;
   email: string;
+  sms_marketing_agreed: boolean;
 }
 
 interface SmsLog {
@@ -39,7 +40,9 @@ export default function SuperAdminSmsPage() {
       fetch('/api/superadmin/academies').then(r => r.json()),
       fetch('/api/superadmin/sms/logs').then(r => r.json()),
     ]).then(([aData, lData]) => {
-      setAcademies(aData.academies || []);
+      // 문자 수신 동의한 학원만 표시
+      const all: Academy[] = aData.academies || [];
+      setAcademies(all.filter(a => a.sms_marketing_agreed));
       setLogs(lData.logs || []);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -142,7 +145,7 @@ export default function SuperAdminSmsPage() {
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-black text-white">수신자 선택</h2>
-                <p className="text-xs text-slate-500 mt-0.5">총 {academies.length}개 학원 · 선택 {selectedIds.size}개</p>
+                <p className="text-xs text-slate-500 mt-0.5">수신동의 {academies.length}개 학원 · 선택 {selectedIds.size}개</p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 accent-indigo-500" />
