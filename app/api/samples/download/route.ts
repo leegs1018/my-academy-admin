@@ -5,6 +5,6 @@ export async function POST(req: NextRequest) {
   const { id } = await req.json() as { id: string };
   if (!id) return NextResponse.json({ ok: false });
   const db = createAdminClient();
-  await db.rpc('increment_sample_download', { p_id: id }).catch(() => {});
+  try { await db.rpc('increment_sample_download', { p_id: id }); } catch { /* silent */ }
   return NextResponse.json({ ok: true });
 }
