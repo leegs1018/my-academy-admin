@@ -397,7 +397,7 @@ export default function LandingPageClient() {
           <h2 className="text-4xl font-black text-slate-900">문제 생성 그 이상, 학원 관리까지</h2>
           <p className="text-slate-400 font-medium mt-4">AI 문제 생성과 학원 운영 관리를 하나의 플랫폼에서</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             {
               icon: '🎓',
@@ -425,15 +425,6 @@ export default function LandingPageClient() {
               color: 'text-yellow-600',
               bg: 'bg-yellow-50',
               border: 'hover:border-yellow-300',
-            },
-            {
-              icon: '📱',
-              title: '문자 발송',
-              label: 'SMS Messaging',
-              desc: '원장님이 학부모·학생에게 직접 SMS를 발송합니다. 수업 공지, 휴원 안내 등 중요 사항을 빠르게 전달하세요.',
-              color: 'text-rose-600',
-              bg: 'bg-rose-50',
-              border: 'hover:border-rose-300',
             },
           ].map((item, i) => (
             <div key={i}
