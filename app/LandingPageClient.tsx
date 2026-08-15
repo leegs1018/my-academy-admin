@@ -301,8 +301,8 @@ export default function LandingPageClient() {
           </h1>
 
           <p className="text-xl text-slate-400 font-medium leading-relaxed max-w-2xl mb-6">
-            지문 하나로 어법·어휘·빈칸 등 <strong className="text-slate-600">10가지 유형</strong> 변형 문제를 즉시 생성.<br />
-            워크북·지문분석까지, 영어 수업에 필요한 모든 자료를 AI로 해결하세요.
+            <strong className="text-slate-600">AI 영어 변형문제 생성</strong>부터 <strong className="text-slate-600">학생 출결·알림톡</strong>까지.<br />
+            영어 학원 운영에 필요한 모든 것을 하나의 플랫폼에서 해결하세요.
           </p>
 
           {/* 스탯 뱃지 */}
@@ -311,7 +311,7 @@ export default function LandingPageClient() {
               { label: '변형 문제 유형', value: '10가지' },
               { label: '난이도', value: 'A2 ~ C2' },
               { label: '기출 지문', value: '수능·평가원·교육청' },
-              { label: '이력 보관', value: '30일' },
+              { label: '출결 알림', value: '카카오 알림톡' },
             ].map((s) => (
               <div key={s.label} className="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-4 py-2 shadow-sm">
                 <span className="text-sm font-black text-slate-900">{s.value}</span>
@@ -385,6 +385,65 @@ export default function LandingPageClient() {
               <h4 className="text-2xl font-black mb-4">{item.title}</h4>
               <p className="text-slate-500 font-medium leading-relaxed text-sm">{item.desc}</p>
               <div className="absolute top-8 right-8 text-slate-200 group-hover:text-yellow-400 transition-colors text-2xl font-bold">↗</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 학원 관리 섹션 ── */}
+      <section className="max-w-7xl mx-auto px-8 py-20">
+        <div className="text-center mb-14">
+          <p className="text-yellow-600 font-black text-xs uppercase tracking-widest mb-3">Academy Management</p>
+          <h2 className="text-4xl font-black text-slate-900">문제 생성 그 이상, 학원 관리까지</h2>
+          <p className="text-slate-400 font-medium mt-4">AI 문제 생성과 학원 운영 관리를 하나의 플랫폼에서</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[
+            {
+              icon: '🎓',
+              title: '학생 관리',
+              label: 'Student Management',
+              desc: '학생 등록, 반 편성, 연락처·학부모 정보까지 한 곳에서 관리합니다. 반별 학생 현황을 한눈에 파악하세요.',
+              color: 'text-indigo-600',
+              bg: 'bg-indigo-50',
+              border: 'hover:border-indigo-300',
+            },
+            {
+              icon: '🖥️',
+              title: '출결 키오스크',
+              label: 'Attendance Kiosk',
+              desc: '학원 전용 6자리 코드로 학생이 직접 출결 체크. 별도 태블릿 없이 어떤 기기에서도 바로 사용 가능합니다.',
+              color: 'text-teal-600',
+              bg: 'bg-teal-50',
+              border: 'hover:border-teal-300',
+            },
+            {
+              icon: '🔔',
+              title: '카카오 알림톡',
+              label: 'KakaoTalk Notification',
+              desc: '등원·하원 시 학부모에게 카카오 알림톡을 자동 발송. 학원에 도착한 순간 바로 알립니다.',
+              color: 'text-yellow-600',
+              bg: 'bg-yellow-50',
+              border: 'hover:border-yellow-300',
+            },
+            {
+              icon: '📱',
+              title: '문자 발송',
+              label: 'SMS Messaging',
+              desc: '원장님이 학부모·학생에게 직접 SMS를 발송합니다. 수업 공지, 휴원 안내 등 중요 사항을 빠르게 전달하세요.',
+              color: 'text-rose-600',
+              bg: 'bg-rose-50',
+              border: 'hover:border-rose-300',
+            },
+          ].map((item, i) => (
+            <div key={i}
+              className={`group p-8 bg-white border-2 border-slate-100 rounded-[2.5rem] transition-all duration-300 hover:-translate-y-2 hover:shadow-xl ${item.border} cursor-default`}>
+              <div className={`w-14 h-14 ${item.bg} rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}>
+                {item.icon}
+              </div>
+              <p className={`${item.color} font-black text-[10px] uppercase tracking-widest mb-1.5`}>{item.label}</p>
+              <h4 className="text-xl font-black text-slate-900 mb-3">{item.title}</h4>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
@@ -557,10 +616,10 @@ export default function LandingPageClient() {
         <div className="max-w-7xl mx-auto bg-slate-900 rounded-[4rem] px-8 py-24 text-center relative overflow-hidden shadow-2xl shadow-slate-400">
           <div className="relative z-10">
             <h2 className="text-4xl md:text-5xl font-black text-white mb-6 leading-tight">
-              AI가 만드는 수준 높은 영어 수업 자료<br />
-              <span className="text-yellow-400 italic">CON EDU</span>
+              AI 문제 생성부터 출결·알림톡까지<br />
+              <span className="text-yellow-400 italic">콘에듀</span>로 한 번에
             </h2>
-            <p className="text-slate-400 font-medium mb-12">지금 가입하고 지문분석·워크북·실전 변형 문제를 경험해보세요.</p>
+            <p className="text-slate-400 font-medium mb-12">지금 무료로 가입하고 영어 학원 운영의 모든 것을 경험해보세요.</p>
             <Link
               href={isLoggedIn ? '/admin/ai-questions' : '/register'}
               className="px-12 py-5 bg-yellow-400 text-slate-900 font-black rounded-full hover:bg-yellow-300 transition-all inline-block text-lg shadow-xl shadow-yellow-400/20"
