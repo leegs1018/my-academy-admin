@@ -43,6 +43,10 @@ export async function GET(request: NextRequest) {
   if (featureFilter !== 'all') {
     if (featureFilter === 'charge') {
       query = query.eq('type', 'charge');
+    } else if (featureFilter === 'wb_direct') {
+      query = query.like('feature_key', 'wb_direct_%');
+    } else if (featureFilter === 'wb_mock') {
+      query = query.like('feature_key', 'wb_mock_%');
     } else {
       query = query.eq('feature_key', featureFilter);
     }
@@ -66,8 +70,12 @@ export async function GET(request: NextRequest) {
 
   if (academyIds) summaryQuery = summaryQuery.in('academy_id', academyIds);
   if (typeFilter !== 'all') summaryQuery = summaryQuery.eq('type', typeFilter);
-  if (featureFilter !== 'all' && featureFilter !== 'charge') summaryQuery = summaryQuery.eq('feature_key', featureFilter);
-  if (featureFilter === 'charge') summaryQuery = summaryQuery.eq('type', 'charge');
+  if (featureFilter !== 'all') {
+    if (featureFilter === 'charge') summaryQuery = summaryQuery.eq('type', 'charge');
+    else if (featureFilter === 'wb_direct') summaryQuery = summaryQuery.like('feature_key', 'wb_direct_%');
+    else if (featureFilter === 'wb_mock') summaryQuery = summaryQuery.like('feature_key', 'wb_mock_%');
+    else summaryQuery = summaryQuery.eq('feature_key', featureFilter);
+  }
   if (startDate) summaryQuery = summaryQuery.gte('created_at', startDate);
   if (endDate) {
     const endDateObj = new Date(endDate);

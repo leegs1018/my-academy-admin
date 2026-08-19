@@ -100,7 +100,7 @@ async function getToken(account: string, apiKey: string): Promise<string> {
   return data.token;
 }
 
-export async function sendPpurioSms(to: string, content: string, academy_id?: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendPpurioSms(to: string, content: string, academy_id?: string, subject?: string): Promise<{ ok: boolean; error?: string }> {
   const cfg = await getPpurioConfig(academy_id);
 
   if (!cfg.apiKey || !cfg.account) {
@@ -121,6 +121,7 @@ export async function sendPpurioSms(to: string, content: string, academy_id?: st
       account:       cfg.account,
       messageType,
       content,
+      ...(messageType === 'LMS' && subject ? { subject } : {}),
       from:          cfg.senderNumber.replace(/-/g, ''),
       duplicateFlag: 'Y',
       targetCount:   1,

@@ -22,8 +22,9 @@ interface Summary {
 }
 
 const FEATURE_LABELS: Record<string, string> = {
-  pdf_analysis: '지문분석 툴/워크북',
-  mock_workbook: '모의고사 툴/워크북',
+  pdf_analysis: '지문분석',
+  pdf_analysis_direct: '지문분석',
+  mock_workbook: '모의고사 툴',
   ai_question_per_type: '실전변형 문제',
   mock_exam_question_per_type: '모의고사변형 문제',
   vocab_choice: '어휘 선택 문제',
@@ -34,13 +35,44 @@ const FEATURE_LABELS: Record<string, string> = {
   admin_deduct: '관리자 차감',
 };
 
+// 워크북 세부 유형 레이블
+const WB_TYPE_LABELS: Record<string, string> = {
+  passage_analysis: '구문분석', passage_translation: '지문해석지',
+  translation: '문장해석', word_order: '단어배열', english_writing: '영작',
+  vocab_choice: '어휘고르기', vocab_fill: '어휘채우기',
+  grammar_choice: '어법고르기', grammar_correct: '어법고치기', grammar_correct_adv: '어법고치기(심화)',
+  combo_grammar_order: '어법+순서', combo_vocab_fill: '영작+어휘',
+  summary_sentence: '요약문', paragraph_order: '문단배열', sentence_insertion: '문장삽입',
+  suneung_vocab_right: '적절한어휘', suneung_vocab_wrong: '부적절한어휘',
+  suneung_grammar_right: '맞는어법', suneung_grammar_wrong: '틀린어법',
+  combo_vocab_grammar: '어휘+어법', combo_grammar_insert: '어법+문장삽입',
+};
+
+function featureLabel(key: string | null): string {
+  if (!key) return '-';
+  if (FEATURE_LABELS[key]) return FEATURE_LABELS[key];
+  // 워크북 (wb_direct_*, wb_mock_*)
+  if (key.startsWith('wb_direct_')) {
+    const type = key.replace('wb_direct_', '');
+    return `워크북 (직접) ${WB_TYPE_LABELS[type] ?? type}`;
+  }
+  if (key.startsWith('wb_mock_')) {
+    const type = key.replace('wb_mock_', '');
+    return `워크북 (모의) ${WB_TYPE_LABELS[type] ?? type}`;
+  }
+  // 실전변형 유형별 (ai_type_*, mock_ai_type_*)
+  if (key.startsWith('ai_type_')) return `실전변형 (${key.replace('ai_type_', '')})`;
+  if (key.startsWith('mock_ai_type_')) return `모의변형 (${key.replace('mock_ai_type_', '')})`;
+  return key;
+}
+
 const FEATURE_FILTER_OPTIONS = [
   { value: 'all', label: '전체 기능' },
-  { value: 'pdf_analysis', label: '지문분석 툴/워크북' },
-  { value: 'mock_workbook', label: '모의고사 툴/워크북' },
+  { value: 'pdf_analysis_direct', label: '지문분석' },
   { value: 'ai_question_per_type', label: '실전변형 문제' },
   { value: 'mock_exam_question_per_type', label: '모의고사변형 문제' },
-  { value: 'vocab_choice', label: '어휘 선택 문제' },
+  { value: 'wb_direct', label: '워크북 (직접입력)' },
+  { value: 'wb_mock', label: '워크북 (모의고사)' },
   { value: 'sms', label: 'SMS' },
   { value: 'lms', label: 'LMS' },
 ];
@@ -114,11 +146,6 @@ export default function ConHistoryPage() {
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  };
-
-  const featureLabel = (key: string | null) => {
-    if (!key) return '-';
-    return FEATURE_LABELS[key] || key;
   };
 
   return (

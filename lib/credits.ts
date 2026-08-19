@@ -2,13 +2,27 @@ import { createAdminClient } from './supabase-admin';
 
 export async function getFeaturePrice(featureKey: string): Promise<number> {
   const supabase = createAdminClient();
+
+  // Build fallback key list: try exact key first, then known aliases
+  const fallbacks: string[] = [featureKey];
+  if (featureKey === 'pdf_analysis') fallbacks.push('pdf_analysis_direct');
+  else if (featureKey === 'mock_workbook') fallbacks.push('pdf_analysis_direct');
+  else if (featureKey === 'ai_question_per_type')
+    fallbacks.push('ai_type_topic_title', 'ai_type_grammar', 'ai_type_vocab_paraphrase');
+  else if (featureKey === 'mock_exam_question_per_type')
+    fallbacks.push('mock_ai_type_topic_title', 'mock_ai_type_grammar', 'mock_ai_type_vocab_paraphrase');
+
   const { data } = await supabase
     .from('con_pricing')
-    .select('cost_per_use')
-    .eq('feature_key', featureKey)
-    .eq('is_active', true)
-    .single();
-  return data?.cost_per_use ?? 0;
+    .select('feature_key, cost_per_use')
+    .in('feature_key', fallbacks)
+    .eq('is_active', true);
+
+  for (const key of fallbacks) {
+    const row = (data ?? []).find((r: { feature_key: string }) => r.feature_key === key);
+    if (row) return (row as { cost_per_use: number }).cost_per_use;
+  }
+  return 0;
 }
 
 export async function deductCon(

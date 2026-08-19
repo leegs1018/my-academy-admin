@@ -25,6 +25,18 @@ export async function POST(req: Request) {
     const byteLength = Buffer.byteLength(message, 'utf8');
     const messageType = byteLength > 90 ? 'lms' : 'sms';
 
+    // LMS 발송 시 학원명을 제목으로 사용
+    let lmsSubject: string | undefined;
+    if (messageType === 'lms' && academy_id) {
+      const supabaseAdmin = createAdminClient();
+      const { data: cfg } = await supabaseAdmin
+        .from('academy_config')
+        .select('academy_name')
+        .eq('user_id', academy_id)
+        .single();
+      if (cfg?.academy_name) lmsSubject = `[${cfg.academy_name}]`;
+    }
+
     // CON 잔액 확인 및 차감
     if (academy_id) {
       const pricePerMsg = await getFeaturePrice(messageType);
@@ -63,7 +75,7 @@ export async function POST(req: Request) {
     const results: { student_id: string; name: string; phone: string; status: 'success' | 'fail'; error?: string }[] = [];
 
     for (const recipient of recipients) {
-      const result = await sendPpurioSms(recipient.phone, message, academy_id);
+      const result = await sendPpurioSms(recipient.phone, message, academy_id, lmsSubject);
       if (result.ok) {
         results.push({ student_id: recipient.student_id, name: recipient.name, phone: recipient.phone, status: 'success' });
       } else {

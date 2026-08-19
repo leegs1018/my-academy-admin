@@ -1457,11 +1457,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '문제 유형을 최소 1개 선택해주세요.' }, { status: 400 });
     }
 
-    // CON 차감 — 문제 개수 기준 (count 합산)
+    // CON 차감 — 유형별 단가 × 문제 수 합산
     if (academy_id) {
-      const pricePerType = await getFeaturePrice(examFeatureKey);
+      const isMock = examFeatureKey === 'mock_exam_question_per_type';
+      const typePrefix = isMock ? 'mock_ai_type_' : 'ai_type_';
+      const perTypeKeys = [...new Set(enabledConfigs.map(c => `${typePrefix}${c.type}`))];
+
+      // 단가 일괄 조회
+      const dbP = createAdminClient();
+      const { data: pricingRows } = await dbP
+        .from('con_pricing')
+        .select('feature_key, cost_per_use')
+        .in('feature_key', [...perTypeKeys, examFeatureKey, 'ai_question_per_type'])
+        .eq('is_active', true);
+      const priceMap: Record<string, number> = {};
+      for (const row of pricingRows ?? []) priceMap[(row as { feature_key: string }).feature_key] = (row as { cost_per_use: number }).cost_per_use;
+
+      // 유형별 단가 없으면 ai_question_per_type 또는 getFeaturePrice 폴백
+      const fallbackPrice = priceMap[examFeatureKey] ?? priceMap['ai_question_per_type'] ?? await getFeaturePrice(examFeatureKey);
+
+      let totalCost = 0;
+      const pricePerTypeMap: Record<string, number> = {};
+      for (const c of enabledConfigs) {
+        const pk = `${typePrefix}${c.type}`;
+        const p = priceMap[pk] ?? fallbackPrice;
+        pricePerTypeMap[c.type] = p;
+        totalCost += p * Math.max(1, Math.min(3, c.count));
+      }
       const totalQuestions = enabledConfigs.reduce((s, c) => s + Math.max(1, Math.min(3, c.count)), 0);
-      const totalCost = pricePerType * totalQuestions;
+      const avgPrice = totalQuestions > 0 ? Math.round(totalCost / totalQuestions) : 0;
+
       if (totalCost > 0) {
         const balance = await getConBalance(academy_id);
         if (balance < totalCost) {
@@ -1469,7 +1494,7 @@ export async function POST(request: Request) {
             error: 'INSUFFICIENT_CON',
             required: totalCost,
             balance,
-            price_per_type: pricePerType,
+            price_per_type: avgPrice,
           }, { status: 402 });
         }
         const supabaseAdmin = createAdminClient();
@@ -1477,7 +1502,7 @@ export async function POST(request: Request) {
           p_academy_id: academy_id,
           p_amount: totalCost,
           p_feature_key: examFeatureKey,
-          p_description: `${examFeatureDesc} (${totalQuestions}문제 × ${pricePerType}C)`,
+          p_description: `${examFeatureDesc} (${totalQuestions}문제 × ${avgPrice}C)`,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {
