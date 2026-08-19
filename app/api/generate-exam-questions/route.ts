@@ -1833,23 +1833,26 @@ export async function POST(request: Request) {
             const nextIdx = rest.search(/\([ABC]\)/);
             return (nextIdx === -1 ? rest : rest.slice(0, nextIdx)).trim();
           };
-          const introMatch = q!.modified_passage!.match(/\[주어진 글\]\s*([\s\S]*?)(?=\(A\))/);
-          const intro = introMatch ? introMatch[1].trim() : '';
           const sA = getSeg('A'), sB = getSeg('B'), sC = getSeg('C');
-          if (sA && sB && sC && intro) {
+          if (sA && sB && sC) {
+            // (A)/(B)/(C) 이전의 도입부 전체 (형식이 다양하므로 첫 레이블 앞까지 추출)
+            const firstSegIdx = q!.modified_passage!.search(/\([ABC]\)/);
+            const introPart = firstSegIdx > 0 ? q!.modified_passage!.slice(0, firstSegIdx).trim() : '[주어진 글]';
+
             const segByLabel: Record<string, string> = { A: sA, B: sB, C: sC };
             const currentOrder = ANSWER_ORDERS[q!.answer] ?? ANSWER_ORDERS[1];
             // 현재 답 기준으로 논리 순서 추출
             const logicalSegs = currentOrder.map(l => segByLabel[l]);
-            // 1~5 중 무작위 새 답 선택
-            const newAnswer = Math.floor(Math.random() * 5) + 1;
+            // 1~5 중 무작위 새 답 선택 (① 연속 방지: 현재 답과 다른 번호 우선)
+            let newAnswer: number;
+            do { newAnswer = Math.floor(Math.random() * 5) + 1; } while (newAnswer === q!.answer && Math.random() < 0.8);
             const newOrder = ANSWER_ORDERS[newAnswer] ?? ANSWER_ORDERS[1];
             // 새 레이블에 논리 순서 배분
             const segForNew: Record<string, string> = {};
             newOrder.forEach((label, i) => { segForNew[label] = logicalSegs[i]; });
             // modified_passage 재조립
-            q!.modified_passage = `[주어진 글]\n${intro}\n\n(A)\n${segForNew['A']}\n\n(B)\n${segForNew['B']}\n\n(C)\n${segForNew['C']}`;
-            // explanation 내 레이블 치환 (A→B 등 두 단계로 이중치환 방지)
+            q!.modified_passage = `${introPart}\n\n(A)\n${segForNew['A']}\n\n(B)\n${segForNew['B']}\n\n(C)\n${segForNew['C']}`;
+            // explanation 내 레이블 치환 (두 단계 치환으로 이중치환 방지)
             const labelMap: Record<string, string> = {};
             currentOrder.forEach((oldL, i) => { labelMap[oldL] = newOrder[i]; });
             let exp = q!.explanation ?? '';
@@ -1858,9 +1861,11 @@ export async function POST(request: Request) {
               .replace(/__A__/g, labelMap['A'])
               .replace(/__B__/g, labelMap['B'])
               .replace(/__C__/g, labelMap['C']);
-            exp = exp.replace(/\((__[ABC]__)\)/g, '($1)'); // 잔여 플레이스홀더 정리
+            exp = exp.replace(/\((__[ABC]__)\)/g, '($1)');
             q!.explanation = exp;
             q!.answer = newAnswer;
+          } else {
+            console.warn('[sentence_order] 단락 추출 실패 — 셔플 미적용 (sA/sB/sC 중 빈 값 존재)');
           }
         }
 
