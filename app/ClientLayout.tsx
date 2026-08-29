@@ -156,7 +156,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const isKioskPage = pathname === '/kiosk';
   const isSuperAdminPage = pathname.startsWith('/superadmin');
   const isPublicPage = pathname === '/guide' || pathname === '/support' || pathname === '/privacy' || pathname === '/terms'
-    || pathname === '/find-account' || pathname.startsWith('/auth/reset-password') || pathname.startsWith('/auth/complete-profile');
+    || pathname === '/find-account' || pathname.startsWith('/auth/reset-password') || pathname.startsWith('/auth/complete-profile') || pathname.startsWith('/auth/agree-terms');
   const showLayout = !isLandingPage && !isLoginPage && !isRegisterPage && !isKioskPage && !isSuperAdminPage && !isPublicPage;
 
   if (!showLayout) {

@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
         description: '신규 가입 보너스',
       });
 
-      redirectTarget = `${origin}/admin`;
+      redirectTarget = `${origin}/auth/agree-terms`;
     } else {
       const { data: { user } } = await supabase.auth.getUser();
       const isSuperAdmin = user?.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;

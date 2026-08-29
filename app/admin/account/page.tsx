@@ -35,6 +35,9 @@ export default function AccountPage() {
   const [ownReferralCode, setOwnReferralCode] = useState('');
   const [referralCopied, setReferralCopied] = useState(false);
 
+  // 마케팅 문자 수신 동의
+  const [smsMarketingAgreed, setSmsMarketingAgreed] = useState(false);
+
   // 프로필 완성 상태 추적 (보너스 중복 방지)
   const [initialProfileComplete, setInitialProfileComplete] = useState<boolean | null>(null);
 
@@ -95,7 +98,7 @@ export default function AccountPage() {
         // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+          .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, sms_marketing_agreed, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
           .eq('user_id', session.user.id)
           .single();
         if (data) {
@@ -119,6 +122,7 @@ export default function AccountPage() {
             kakao_template_grade:     data.kakao_template_grade     || '',
           });
           setInitialProfileComplete(!!name && (!!phone || !!mob));
+          setSmsMarketingAgreed(data.sms_marketing_agreed ?? false);
         }
         setVerified(true);
       }
@@ -167,6 +171,7 @@ export default function AccountPage() {
         kakao_template_grade:     data.kakao_template_grade     || '',
       });
       setInitialProfileComplete(!!name && (!!phone || !!mob));
+      setSmsMarketingAgreed(data.sms_marketing_agreed ?? false);
     }
 
     setVerifyLoading(false);
@@ -179,7 +184,7 @@ export default function AccountPage() {
     setSaveMsg('');
     const { error } = await supabase
       .from('academy_config')
-      .update({ academy_name: academyName, academy_phone: academyPhone, mobile })
+      .update({ academy_name: academyName, academy_phone: academyPhone, mobile, sms_marketing_agreed: smsMarketingAgreed })
       .eq('user_id', userId);
 
     if (error) {
@@ -435,6 +440,17 @@ export default function AccountPage() {
                 />
               </div>
             </div>
+
+            {/* 마케팅 문자 수신 동의 */}
+            <label className="flex items-center gap-3 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={smsMarketingAgreed}
+                onChange={e => setSmsMarketingAgreed(e.target.checked)}
+                className="w-4 h-4 accent-gray-900 cursor-pointer flex-shrink-0"
+              />
+              <span className="text-sm font-bold text-gray-600">마케팅 문자 수신에 동의합니다. (선택)</span>
+            </label>
 
             <div className="flex items-center gap-3 pt-2">
               <button
