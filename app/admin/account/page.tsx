@@ -146,7 +146,7 @@ export default function AccountPage() {
 
     const { data } = await supabase
       .from('academy_config')
-      .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+      .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, sms_marketing_agreed, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
       .eq('user_id', userId)
       .single();
 
