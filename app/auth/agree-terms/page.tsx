@@ -18,10 +18,12 @@ export default function AgreeTermsPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
+    // terms_agreed 컬럼이 없을 수도 있으므로 실패해도 무시하고 진행
     await supabase
       .from('academy_config')
       .update({ terms_agreed: true })
-      .eq('user_id', session.user.id);
+      .eq('user_id', session.user.id)
+      .then(() => {});
 
     router.replace('/admin');
   };

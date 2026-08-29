@@ -78,16 +78,22 @@ export default function AccountPage() {
   // ── 초기 세션 확인 ───────────────────────────────
   useEffect(() => {
     const init = async () => {
-      // getUser()로 서버에서 완전한 유저 정보 조회 (getSession은 캐시 기반이라 identities 누락 가능)
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) { router.replace('/login'); return; }
-      setEmail(user.email || '');
-      setUserId(user.id);
+      // getSession()으로 userId 안정 확보 (로컬 캐시 기반, 항상 동작)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) { router.replace('/login'); return; }
+      const uid = session.user.id;
+      setEmail(session.user.email || '');
+      setUserId(uid);
+
+      // getUser()로 서버에서 identities·app_metadata 포함 전체 정보 조회 (SNS 감지용)
+      // 실패해도 session 기반 fallback 사용
+      const { data: { user: fullUser } } = await supabase.auth.getUser();
+      const targetUser = fullUser ?? session.user;
 
       // SNS 감지: identities → app_metadata 순으로 확인
-      const identities = user.identities ?? [];
+      const identities = targetUser.identities ?? [];
       const snsIdentity = identities.find((i: { provider: string }) => SNS_PROVIDERS.includes(i.provider));
-      const appProvider = user.app_metadata?.provider ?? '';
+      const appProvider = targetUser.app_metadata?.provider ?? '';
       const isSocialLogin = !!snsIdentity || SNS_PROVIDERS.includes(appProvider);
       const detectedProvider = snsIdentity?.provider ?? (SNS_PROVIDERS.includes(appProvider) ? appProvider : 'email');
       setProvider(detectedProvider);
@@ -96,8 +102,8 @@ export default function AccountPage() {
         // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
         const { data } = await supabase
           .from('academy_config')
-          .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, sms_marketing_agreed, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
-          .eq('user_id', user.id)
+          .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+          .eq('user_id', uid)
           .single();
         if (data) {
           const name = data.academy_name || '';
@@ -120,8 +126,10 @@ export default function AccountPage() {
             kakao_template_grade:     data.kakao_template_grade     || '',
           });
           setInitialProfileComplete(!!name && (!!phone || !!mob));
-          setSmsMarketingAgreed(data.sms_marketing_agreed ?? false);
         }
+        // sms_marketing_agreed 별도 조회 (컬럼 미존재 시 쿼리 실패 방지)
+        supabase.from('academy_config').select('sms_marketing_agreed').eq('user_id', uid).single()
+          .then(({ data: smsData }) => { if (smsData) setSmsMarketingAgreed(smsData.sms_marketing_agreed ?? false); });
         setVerified(true);
       }
     };
@@ -144,7 +152,7 @@ export default function AccountPage() {
 
     const { data } = await supabase
       .from('academy_config')
-      .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, sms_marketing_agreed, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+      .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
       .eq('user_id', userId)
       .single();
 
@@ -169,7 +177,9 @@ export default function AccountPage() {
         kakao_template_grade:     data.kakao_template_grade     || '',
       });
       setInitialProfileComplete(!!name && (!!phone || !!mob));
-      setSmsMarketingAgreed(data.sms_marketing_agreed ?? false);
+      // sms_marketing_agreed 별도 조회 (컬럼 미존재 시 쿼리 실패 방지)
+      supabase.from('academy_config').select('sms_marketing_agreed').eq('user_id', userId).single()
+        .then(({ data: smsData }) => { if (smsData) setSmsMarketingAgreed(smsData.sms_marketing_agreed ?? false); });
     }
 
     setVerifyLoading(false);

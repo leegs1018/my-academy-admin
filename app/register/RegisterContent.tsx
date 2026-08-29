@@ -135,7 +135,6 @@ export default function RegisterContent() {
               points: initialPoints,
               kiosk_code: kioskCode,
               own_referral_code: ownReferralCode,
-              terms_agreed: true,
               sms_marketing_agreed: formData.smsMarketingAgreed,
             }]);
           if (!error) { dbError = null; break; }

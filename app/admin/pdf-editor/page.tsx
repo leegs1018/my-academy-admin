@@ -57,6 +57,16 @@ type UnifiedHistoryItem =
   | (PdfHistoryItem & { _source: 'input' })
   | (MockWorkbookHistoryItem & { _source: 'mock' });
 
+interface PassageCard {
+  id: string; text: string; mode: 'text' | 'image';
+  imageFile: File | null; imagePreview: string | null;
+  ocrText: string; ocrDone: boolean; ocrLoading: boolean; isDragging: boolean;
+}
+function newPassageCard(): PassageCard {
+  return { id: Math.random().toString(36).slice(2), text: '', mode: 'text', imageFile: null, imagePreview: null, ocrText: '', ocrDone: false, ocrLoading: false, isDragging: false };
+}
+function effectiveText(card: PassageCard): string { return card.mode === 'text' ? card.text : card.ocrText; }
+
 interface WorkbookResult { number: string; passageText: string; materials: GeneratedMaterials; }
 
 
@@ -267,35 +277,27 @@ const DIFF_COLORS: Record<string, string> = {
 
 export default function PdfEditorPage() {
   const [activeMainTab, setActiveMainTab] = useState<'input' | 'mock' | 'history'>('input');
-  const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
 
-  const [manualText, setManualText] = useState('');
-
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [ocrText, setOcrText] = useState('');
-  const [ocrLoading, setOcrLoading] = useState(false);
-  const [ocrDone, setOcrDone] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-
+  // ── 직접 입력 탭 state ──
+  const [passages, setPassages] = useState<PassageCard[]>([newPassageCard()]);
   const [difficulty, setDifficulty] = useState<'a2' | 'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
-  const [result, setResult] = useState<GeneratedMaterials | null>(null);
-  const [originalPassageText, setOriginalPassageText] = useState('');
+  const [inputResults, setInputResults] = useState<WorkbookResult[]>([]);
+  const [activeInputResultTab, setActiveInputResultTab] = useState(0);
+  const [inputSaveStatusMap, setInputSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
+  const [inputSaveErrorMsgMap, setInputSaveErrorMsgMap] = useState<Record<number, string>>({});
+  const [inputSavedSet, setInputSavedSet] = useState<Set<number>>(new Set());
+  const [inputEditModeIdx, setInputEditModeIdx] = useState<number | null>(null);
+  const [inputEditedResults, setInputEditedResults] = useState<Record<number, GeneratedMaterials>>({});
+  const [inputEditSaveStatusMap, setInputEditSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
+  const [inputShowAnswerKeyMap, setInputShowAnswerKeyMap] = useState<Record<number, boolean>>({});
   const [error, setError] = useState<string | null>(null);
-  const [showAnswerKey, setShowAnswerKey] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [pdfTitle, setPdfTitle] = useState('');
   const [pdfLoading, setPdfLoading] = useState<false | '문제' | '답안'>(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
-  const [saveErrorMsg, setSaveErrorMsg] = useState('');
   const msgIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const [editMode, setEditMode] = useState(false);
-  const [editedResult, setEditedResult] = useState<GeneratedMaterials | null>(null);
-  const [editSaveStatus, setEditSaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
 
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
 
@@ -405,6 +407,15 @@ export default function PdfEditorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMockResultTab, mockResults]);
 
+  // ── 직접 입력 탭 자동저장 트리거 ──
+  useEffect(() => {
+    const r = inputResults[activeInputResultTab];
+    if (!r || inputSavedSet.has(activeInputResultTab)) return;
+    const timer = setTimeout(() => autoSaveInputPdf(activeInputResultTab), 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeInputResultTab, inputResults]);
+
   // ── 로고 로드 ──
   useEffect(() => {
     const loadLogo = async () => {
@@ -470,58 +481,52 @@ export default function PdfEditorPage() {
   }, [activeMainTab]);
 
   // ── 자동 저장 (클라이언트 PDF → 서버 저장) ──
-  const autoSavePdf = useCallback(async (generated: GeneratedMaterials, text: string, diff: string, titleSnapshot: string) => {
-    setSaveStatus('saving');
+  const autoSaveInputPdf = useCallback(async (idx: number) => {
+    if (inputSavedSet.has(idx)) return;
+    const r = inputResults[idx];
+    if (!r) return;
+    setInputSavedSet(prev => new Set([...prev, idx]));
+    setInputSaveStatusMap(prev => ({ ...prev, [idx]: 'saving' }));
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setSaveStatus('error'); setSaveErrorMsg('로그인 세션 없음'); return; }
-
+      if (!session) { setInputSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
       const [pdfBlob, answerBlob] = await Promise.all([
         generatePdfBlob(true),
-        buildAnswerPdfBlob(generated, pdfTitle.trim()),
+        buildAnswerPdfBlob(r.materials, pdfTitle.trim()),
       ]);
-      if (!pdfBlob) { setSaveStatus('error'); setSaveErrorMsg('PDF 요소를 찾을 수 없음'); return; }
-
+      if (!pdfBlob) { setInputSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); setInputSaveErrorMsgMap(prev => ({ ...prev, [idx]: 'PDF 요소를 찾을 수 없음' })); return; }
       const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-
-      const [pdfBase64, answerPdfBase64] = await Promise.all([
-        toBase64(pdfBlob),
-        toBase64(answerBlob),
-      ]);
-
+      const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
       const res = await fetch('/api/save-pdf-history', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
-          pdfBase64,
-          answerPdfBase64,
-          title: titleSnapshot.trim() || null,
-          passageExcerpt: text.slice(0, 150),
-          passageFull: text,
-          passageType: generated.korean_summary.type,
-          difficulty: diff,
+          pdfBase64, answerPdfBase64,
+          title: pdfTitle.trim() || null,
+          passageExcerpt: r.passageText.slice(0, 150),
+          passageFull: r.passageText,
+          passageType: r.materials.korean_summary.type,
+          difficulty,
         }),
       });
       const json = await res.json() as { success?: boolean; error?: string };
       if (res.ok && json.success) {
-        setSaveStatus('done');
+        setInputSaveStatusMap(prev => ({ ...prev, [idx]: 'done' }));
       } else {
-        setSaveStatus('error');
-        setSaveErrorMsg(json.error || '알 수 없는 오류');
+        setInputSaveStatusMap(prev => ({ ...prev, [idx]: 'error' }));
+        setInputSaveErrorMsgMap(prev => ({ ...prev, [idx]: json.error || '알 수 없는 오류' }));
       }
     } catch (e) {
-      setSaveStatus('error');
-      setSaveErrorMsg(e instanceof Error ? e.message : '네트워크 오류');
+      setInputSaveStatusMap(prev => ({ ...prev, [idx]: 'error' }));
+      setInputSaveErrorMsgMap(prev => ({ ...prev, [idx]: e instanceof Error ? e.message : '네트워크 오류' }));
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputResults, inputSavedSet, pdfTitle, difficulty]);
 
   // ── 이력에서 단건 다운로드 ──
   const downloadFromHistory = async (pdfPath: string, filename: string) => {
@@ -746,86 +751,91 @@ export default function PdfEditorPage() {
   const mockAllPassagesReady = mockSelectedNumbers.length > 0 && mockSelectedNumbers.every(n => mockPassageMap[n]) && mockLoadingNumbers.size === 0;
   const canMockGenerate = mockAllPassagesReady && !mockLoading && !!session;
 
-  // ── 이미지 선택 ──
-  const handleImageSelect = (file: File) => {
+  // ── 패시지 카드 helpers ──
+  const updatePassage = (id: string, updates: Partial<PassageCard>) => {
+    setPassages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  };
+  const addPassage = () => { if (passages.length >= 10) return; setPassages(prev => [...prev, newPassageCard()]); };
+  const removePassage = (id: string) => { if (passages.length <= 1) return; setPassages(prev => prev.filter(p => p.id !== id)); };
+
+  const handlePassageImageSelect = (id: string, file: File) => {
     if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
       setError('JPG, PNG, GIF, WebP 형식만 지원합니다.'); return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError('이미지 파일이 너무 큽니다. (최대 10MB)'); return;
-    }
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-    setOcrText(''); setOcrDone(false); setError(null); setResult(null);
+    if (file.size > 10 * 1024 * 1024) { setError('이미지 파일이 너무 큽니다. (최대 10MB)'); return; }
+    const card = passages.find(p => p.id === id);
+    if (card?.imagePreview) URL.revokeObjectURL(card.imagePreview);
+    updatePassage(id, { imageFile: file, imagePreview: URL.createObjectURL(file), ocrText: '', ocrDone: false });
+    setError(null);
   };
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleImageSelect(file);
-  }, []);
-
-  // ── OCR ──
-  const handleOCR = async () => {
-    if (!imageFile) return;
-    setOcrLoading(true); setError(null);
+  const handlePassageOCR = async (id: string) => {
+    const card = passages.find(p => p.id === id);
+    if (!card?.imageFile) return;
+    updatePassage(id, { ocrLoading: true });
+    setError(null);
     try {
       const fd = new FormData();
-      fd.append('image', imageFile);
+      fd.append('image', card.imageFile);
       const res = await fetch('/api/ocr', { method: 'POST', body: fd });
-      const json = await res.json();
+      const json = await res.json() as { text?: string; error?: string };
       if (!res.ok) throw new Error(json.error || 'OCR 오류');
-      setOcrText(json.text); setOcrDone(true);
+      updatePassage(id, { ocrText: json.text ?? '', ocrDone: true, ocrLoading: false });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'OCR 오류가 발생했습니다.');
-    } finally {
-      setOcrLoading(false);
+      updatePassage(id, { ocrLoading: false });
     }
   };
 
   // ── 문제 생성 ──
-  const textToSend = inputMode === 'text' ? manualText.trim() : ocrText.trim();
-  const canGenerate = textToSend.length >= 50 && !loading;
+  const canGenerate = passages.some(p => effectiveText(p).trim().length >= 50) && !loading;
 
   const handleGenerate = async () => {
-    const currentText = (inputMode === 'text' ? manualText : ocrText).trim();
-    if (currentText.length < 50 || loading) return;
+    const validPassages = passages.filter(p => effectiveText(p).trim().length >= 50);
+    if (validPassages.length === 0 || loading) return;
 
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    setLoading(true); setError(null); setResult(null); setShowAnswerKey(false);
+    setLoading(true); setError(null); setInputResults([]); setActiveInputResultTab(0);
+    setInputSaveStatusMap({}); setInputSavedSet(new Set()); setInputEditModeIdx(null);
+    setInputEditedResults({}); setInputEditSaveStatusMap({}); setInputShowAnswerKeyMap({});
 
     const msgs = ['AI가 지문을 읽고 있어요... 🤖', '문제를 생성하고 있어요... ✍️', '어휘 표를 만들고 있어요... 📚', '거의 완성됐어요! 잠시만요... ✨'];
-    let idx = 0;
-    setLoadingMsg(msgs[0]);
-    msgIntervalRef.current = setInterval(() => { idx = (idx + 1) % msgs.length; setLoadingMsg(msgs[idx]); }, 8000);
+    let msgIdx = 0;
+    if (validPassages.length === 1) {
+      setLoadingMsg(msgs[0]);
+      msgIntervalRef.current = setInterval(() => { msgIdx = (msgIdx + 1) % msgs.length; setLoadingMsg(msgs[msgIdx]); }, 8000);
+    } else {
+      setLoadingMsg(`0/${validPassages.length}개 지문 생성 중...`);
+    }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const res = await fetch('/api/process-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: currentText, difficulty, academy_id: user?.id }),
-        signal: controller.signal,
-      });
-      const rawText = await res.text();
-      let json: { data?: GeneratedMaterials; error?: string };
-      try {
-        json = JSON.parse(rawText);
-      } catch {
-        throw new Error('AI 응답을 처리할 수 없습니다. 다시 시도해주세요.');
-      }
-      if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
-      const generated = json.data as GeneratedMaterials;
-      setOriginalPassageText(currentText);
-      setResult(generated);
-      setSaveStatus('idle');
-      // DOM 렌더링 대기 후 자동 저장
-      setTimeout(() => autoSavePdf(generated, currentText, difficulty, pdfTitle), 800);
+      const resultSlots = new Array<WorkbookResult | null>(validPassages.length).fill(null);
+      let completedCount = 0;
+      const settled = await Promise.allSettled(
+        validPassages.map(async (card, i) => {
+          const text = effectiveText(card).trim();
+          const res = await fetch('/api/process-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, difficulty, academy_id: user?.id }),
+            signal: controller.signal,
+          });
+          const rawText = await res.text();
+          let json: { data?: GeneratedMaterials; error?: string };
+          try { json = JSON.parse(rawText); } catch { throw new Error('AI 응답을 처리할 수 없습니다. 다시 시도해주세요.'); }
+          if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
+          resultSlots[i] = { number: String(i + 1), passageText: text, materials: json.data as GeneratedMaterials };
+          completedCount++;
+          if (validPassages.length > 1) setLoadingMsg(`${completedCount}/${validPassages.length}개 지문 생성 완료...`);
+          setInputResults(resultSlots.filter((r): r is WorkbookResult => r !== null));
+        })
+      );
+      const firstFailed = settled.find(r => r.status === 'rejected');
+      if (firstFailed) setError((firstFailed as PromiseRejectedResult).reason?.message || '일부 지문 생성에 실패했습니다.');
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
@@ -842,21 +852,26 @@ export default function PdfEditorPage() {
     setTimeout(() => setCopiedSection(null), 2000);
   };
 
-  const buildTFText = () => result?.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n') ?? '';
+  const activeInputResult = inputResults[activeInputResultTab] ?? null;
+  const activeInputD = (inputEditedResults[activeInputResultTab] ?? activeInputResult?.materials) ?? null;
+  const isInputEditMode = inputEditModeIdx === activeInputResultTab;
+
+  const buildTFText = () => activeInputD?.tf_questions.map(q => `${q.number}. ${q.statement}`).join('\n') ?? '';
   const buildOneSentenceText = () =>
-    result?.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${s.korean})`).join('\n\n') ?? '';
+    activeInputD?.one_sentence_summaries.map((s, i) => `${i + 1}. ${s.english.replace(/\*\*/g, '')}\n   (${s.korean})`).join('\n\n') ?? '';
   const buildVocabText = () =>
-    result?.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n') ?? '';
+    activeInputD?.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n') ?? '';
 
   const baseName = pdfTitle.trim() || '영어문제';
 
   // ── 문제 PDF 다운로드 ──
   const handleDownloadProblemPDF = async () => {
+    if (!activeInputResult) return;
     setPdfLoading('문제');
-    const wasEditing = editMode;
+    const wasEditing = isInputEditMode;
     try {
       if (wasEditing) {
-        setEditMode(false);
+        setInputEditModeIdx(null);
         await new Promise(r => requestAnimationFrame(r));
         await new Promise(r => requestAnimationFrame(r));
       }
@@ -866,17 +881,17 @@ export default function PdfEditorPage() {
     } catch (e) {
       alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
     } finally {
-      if (wasEditing) setEditMode(true);
+      if (wasEditing) setInputEditModeIdx(activeInputResultTab);
       setPdfLoading(false);
     }
   };
 
   // ── 답안·해설 PDF 다운로드 ──
   const handleDownloadAnswerPDF = async () => {
-    if (!result) return;
+    if (!activeInputResult || !activeInputD) return;
     setPdfLoading('답안');
     try {
-      const blob = await buildAnswerPdfBlob(result, pdfTitle.trim());
+      const blob = await buildAnswerPdfBlob(activeInputD, pdfTitle.trim());
       triggerDownload(blob, `${baseName}_답안해설.pdf`);
     } catch (e) {
       alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
@@ -887,22 +902,25 @@ export default function PdfEditorPage() {
 
   // ── 편집본 PDF 저장 ──
   const handleEditSave = async () => {
-    if (!editedResult) return;
-    setEditSaveStatus('saving');
-    const wasEditing = editMode;
+    const idx = activeInputResultTab;
+    const edited = inputEditedResults[idx];
+    const r = inputResults[idx];
+    if (!edited || !r) return;
+    setInputEditSaveStatusMap(prev => ({ ...prev, [idx]: 'saving' }));
+    const wasEditing = inputEditModeIdx === idx;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setEditSaveStatus('error'); return; }
+      if (!session) { setInputEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
       if (wasEditing) {
-        flushSync(() => setEditMode(false));
+        flushSync(() => setInputEditModeIdx(null));
         await new Promise(r => requestAnimationFrame(r));
       }
       const [pdfBlob, answerBlob] = await Promise.all([
         generatePdfBlob(true),
-        buildAnswerPdfBlob(editedResult, pdfTitle.trim()),
+        buildAnswerPdfBlob(edited, pdfTitle.trim()),
       ]);
-      if (wasEditing) setEditMode(true);
-      if (!pdfBlob) { setEditSaveStatus('error'); return; }
+      if (wasEditing) setInputEditModeIdx(idx);
+      if (!pdfBlob) { setInputEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' })); return; }
       const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
@@ -916,30 +934,29 @@ export default function PdfEditorPage() {
         body: JSON.stringify({
           pdfBase64, answerPdfBase64,
           title: (pdfTitle.trim() ? '[편집본] ' + pdfTitle.trim() : '[편집본]'),
-          passageExcerpt: originalPassageText.slice(0, 150),
-          passageFull: originalPassageText,
-          passageType: editedResult.korean_summary.type,
+          passageExcerpt: r.passageText.slice(0, 150),
+          passageFull: r.passageText,
+          passageType: edited.korean_summary.type,
           difficulty,
         }),
       });
       const json = await res.json() as { success?: boolean };
-      setEditSaveStatus(res.ok && json.success ? 'done' : 'error');
-    } catch (e) {
-      console.error('[handleEditSave]', e);
-      if (wasEditing) setEditMode(true);
-      setEditSaveStatus('error');
+      setInputEditSaveStatusMap(prev => ({ ...prev, [idx]: res.ok && json.success ? 'done' : 'error' }));
+    } catch {
+      if (wasEditing) setInputEditModeIdx(idx);
+      setInputEditSaveStatusMap(prev => ({ ...prev, [idx]: 'error' }));
     }
   };
 
   return (
     <div className="pb-32">
 
-      {(loading || ocrLoading) && (
+      {(loading || passages.some(p => p.ocrLoading)) && (
         <div className="no-print fixed inset-0 bg-indigo-900/60 backdrop-blur-md z-[200] flex items-center justify-center">
           <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
             <p className="font-black text-indigo-600 text-xl animate-pulse">
-              {ocrLoading ? '이미지에서 텍스트를 추출하고 있어요... 🔍' : loadingMsg}
+              {passages.some(p => p.ocrLoading) ? '이미지에서 텍스트를 추출하고 있어요... 🔍' : loadingMsg}
             </p>
             {loading && <p className="text-slate-400 font-bold text-sm mt-3">30~60초 정도 소요될 수 있어요</p>}
           </div>
@@ -975,82 +992,95 @@ export default function PdfEditorPage() {
                 className="w-full px-5 py-3 border-2 border-slate-200 rounded-2xl font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300"
               />
             </div>
-            <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl w-fit">
-              {([['text', '✏️ 텍스트 직접 입력'], ['image', '📷 사진 등록']] as const).map(([mode, label]) => (
-                <button key={mode} onClick={() => { setInputMode(mode); setError(null); }}
-                  className={`px-6 py-3 rounded-xl font-black text-sm transition-all
-                    ${inputMode === mode ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <p className="text-sm font-bold text-slate-500 mb-4">영어 지문을 붙여넣거나 사진을 등록하세요. 지문 추가 버튼으로 최대 10개까지 한 번에 생성할 수 있어요.</p>
 
-            {inputMode === 'text' && (
-              <div>
-                <p className="text-sm font-bold text-slate-500 mb-3">영어 지문을 복사(Ctrl+C)한 뒤 아래에 붙여넣기(Ctrl+V) 해주세요</p>
-                <textarea
-                  value={manualText}
-                  onChange={(e) => { setManualText(e.target.value); setResult(null); abortControllerRef.current?.abort(); }}
-                  placeholder="여기에 영어 지문을 붙여넣어 주세요..."
-                  rows={12}
-                  className="w-full p-5 border-2 border-slate-200 rounded-2xl font-mono text-sm text-slate-700 resize-y focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300"
-                />
-                <p className="text-xs text-slate-400 font-bold mt-2 text-right">
-                  {manualText.trim().length}자{manualText.trim().length > 0 && manualText.trim().length < 50 && ' (최소 50자 이상)'}
-                </p>
-              </div>
-            )}
-
-            {inputMode === 'image' && (
-              <div className="space-y-5">
-                <label
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={handleDrop}
-                  className={`block w-full border-4 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all
-                    ${isDragging ? 'border-indigo-500 bg-indigo-50' : imageFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50'}`}
-                >
-                  <div className="text-5xl mb-3">{imageFile ? '🖼️' : '📷'}</div>
-                  {imageFile ? (
-                    <><p className="font-black text-emerald-700 text-lg">{imageFile.name}</p><p className="text-xs text-slate-400 mt-1">다른 사진으로 변경하려면 클릭하세요</p></>
-                  ) : (
-                    <><p className="font-black text-slate-600 text-lg">사진을 클릭하거나 드래그하여 등록</p><p className="text-sm text-slate-400 font-bold mt-2">JPG · PNG · WebP · GIF · 최대 10MB</p></>
-                  )}
-                  <input type="file" accept="image/*" className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageSelect(f); }} />
-                </label>
-
-                {imageFile && imagePreview && (
-                  <div className="flex flex-col md:flex-row gap-5">
-                    <div className="md:w-1/2 rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center min-h-[200px]">
-                      <Image src={imagePreview} alt="업로드된 이미지" width={600} height={400} className="max-h-80 object-contain w-full" unoptimized />
+            <div className="space-y-4">
+              {passages.map((card, cardIdx) => (
+                <div key={card.id} className="border-2 border-slate-100 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-600">지문 {cardIdx + 1}</span>
+                    {passages.length > 1 && (
+                      <button onClick={() => removePassage(card.id)}
+                        className="text-xs font-black text-slate-400 hover:text-rose-500 transition-colors px-2 py-1 hover:bg-rose-50 rounded-lg">
+                        × 삭제
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 bg-slate-100 p-1 rounded-xl w-fit">
+                    {([['text', '✏️ 텍스트'], ['image', '📷 사진']] as const).map(([mode, label]) => (
+                      <button key={mode} onClick={() => updatePassage(card.id, { mode })}
+                        className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${card.mode === mode ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {card.mode === 'text' ? (
+                    <div>
+                      <textarea rows={7} placeholder="여기에 영어 지문을 붙여넣어 주세요..."
+                        value={card.text}
+                        onChange={e => updatePassage(card.id, { text: e.target.value })}
+                        className="w-full p-4 border-2 border-slate-200 rounded-2xl font-mono text-sm text-slate-700 resize-y focus:outline-none focus:border-indigo-400 transition-colors placeholder:text-slate-300" />
+                      <p className="text-xs text-slate-400 font-bold mt-1 text-right">
+                        {card.text.trim().length}자{card.text.trim().length > 0 && card.text.trim().length < 50 && ' (최소 50자 이상)'}
+                      </p>
                     </div>
-                    <div className="md:w-1/2 flex flex-col gap-3">
-                      {!ocrDone ? (
-                        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
-                          <p className="font-black text-indigo-500 text-center mb-4">사진에서 영어 텍스트를<br />AI가 자동으로 추출해드려요</p>
-                          <button onClick={handleOCR} disabled={ocrLoading}
-                            className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-indigo-700 active:scale-95 transition-all shadow-lg disabled:opacity-50">
-                            🔍 텍스트 추출하기
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <p className="font-black text-emerald-600 text-sm">✅ 텍스트 추출 완료 — 수정 후 문제를 생성하세요</p>
-                            <button onClick={() => { setOcrDone(false); setOcrText(''); }}
-                              className="no-print text-xs font-black text-slate-400 hover:text-rose-500 transition-colors">다시 추출</button>
+                  ) : (
+                    <div className="space-y-4">
+                      <label
+                        onDragOver={e => { e.preventDefault(); updatePassage(card.id, { isDragging: true }); }}
+                        onDragLeave={() => updatePassage(card.id, { isDragging: false })}
+                        onDrop={e => { e.preventDefault(); updatePassage(card.id, { isDragging: false }); const f = e.dataTransfer.files[0]; if (f) handlePassageImageSelect(card.id, f); }}
+                        className={`block w-full border-4 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all
+                          ${card.isDragging ? 'border-indigo-500 bg-indigo-50' : card.imageFile ? 'border-emerald-300 bg-emerald-50/50' : 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50'}`}>
+                        <div className="text-4xl mb-2">{card.imageFile ? '🖼️' : '📷'}</div>
+                        {card.imageFile ? (
+                          <><p className="font-black text-emerald-700">{card.imageFile.name}</p><p className="text-xs text-slate-400 mt-1">다른 사진으로 변경하려면 클릭하세요</p></>
+                        ) : (
+                          <><p className="font-black text-slate-600">사진을 클릭하거나 드래그하여 등록</p><p className="text-sm text-slate-400 font-bold mt-1">JPG · PNG · WebP · GIF · 최대 10MB</p></>
+                        )}
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handlePassageImageSelect(card.id, f); }} />
+                      </label>
+                      {card.imageFile && card.imagePreview && (
+                        <div className="flex flex-col md:flex-row gap-4">
+                          <div className="md:w-1/2 rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center min-h-[160px]">
+                            <Image src={card.imagePreview} alt="업로드된 이미지" width={600} height={400} className="max-h-72 object-contain w-full" unoptimized />
                           </div>
-                          <textarea value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={10}
-                            className="flex-1 w-full p-4 border-2 border-emerald-200 rounded-2xl font-mono text-sm text-slate-700 resize-y focus:outline-none focus:border-indigo-400 transition-colors bg-emerald-50/30" />
-                          <p className="text-xs text-slate-400 font-bold text-right">{ocrText.trim().length}자</p>
+                          <div className="md:w-1/2 flex flex-col gap-3">
+                            {!card.ocrDone ? (
+                              <div className="flex-1 flex flex-col items-center justify-center p-6 bg-indigo-50 rounded-2xl border-2 border-dashed border-indigo-200">
+                                <p className="font-black text-indigo-500 text-center mb-4 text-sm">사진에서 영어 텍스트를<br />AI가 자동으로 추출해드려요</p>
+                                <button onClick={() => handlePassageOCR(card.id)} disabled={card.ocrLoading}
+                                  className="bg-indigo-600 text-white px-6 py-2.5 rounded-2xl font-black text-sm hover:bg-indigo-700 active:scale-95 transition-all shadow-lg disabled:opacity-50">
+                                  {card.ocrLoading ? '⏳ 추출 중...' : '🔍 텍스트 추출하기'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex-1 flex flex-col gap-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="font-black text-emerald-600 text-xs">✅ 추출 완료 — 수정 후 생성하세요</p>
+                                  <button onClick={() => updatePassage(card.id, { ocrDone: false, ocrText: '' })}
+                                    className="no-print text-xs font-black text-slate-400 hover:text-rose-500 transition-colors">다시 추출</button>
+                                </div>
+                                <textarea value={card.ocrText} onChange={e => updatePassage(card.id, { ocrText: e.target.value })} rows={8}
+                                  className="flex-1 w-full p-3 border-2 border-emerald-200 rounded-2xl font-mono text-sm text-slate-700 resize-y focus:outline-none focus:border-indigo-400 transition-colors bg-emerald-50/30" />
+                                <p className="text-xs text-slate-400 font-bold text-right">{card.ocrText.trim().length}자</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              ))}
+              {passages.length < 10 && (
+                <button onClick={addPassage}
+                  className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-sm font-black text-slate-600 hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-600 transition-all">
+                  + 지문 추가 ({passages.length}/10)
+                </button>
+              )}
+            </div>
 
             {error && (
               <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
@@ -1086,16 +1116,30 @@ export default function PdfEditorPage() {
             )}
             <button onClick={handleGenerate} disabled={!canGenerate}
               className="mt-3 w-full bg-indigo-600 text-white py-5 rounded-2xl font-black text-xl shadow-xl hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-              AI로 문제 생성하기 🚀
+              {passages.filter(p => effectiveText(p).trim().length >= 50).length > 1
+                ? `AI로 문제 생성하기 (${passages.filter(p => effectiveText(p).trim().length >= 50).length}개 지문) 🚀`
+                : 'AI로 문제 생성하기 🚀'}
             </button>
           </div>
 
           {/* ── 결과 영역 ── */}
-          {result && (
+          {inputResults.length > 0 && (
             <>
+            {inputResults.length > 1 && (
+              <div className="no-print flex gap-2 mb-4 overflow-x-auto pb-1">
+                {inputResults.map((r, idx) => (
+                  <button key={idx} onClick={() => setActiveInputResultTab(idx)}
+                    className={`px-4 py-2 rounded-xl font-black text-sm whitespace-nowrap transition-all ${activeInputResultTab === idx ? 'bg-indigo-600 text-white' : 'bg-white border-2 border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600'}`}>
+                    지문 {r.number}
+                  </button>
+                ))}
+              </div>
+            )}
             <div id="print-area" className="space-y-0">
               {(() => {
-                const d = editedResult ?? result;
+                const r = activeInputResult;
+                if (!r) return null;
+                const d = activeInputD!;
                 return (
                   <>
               {/* ── 1페이지: 00 원문 + 01 변형지문 + 02 T/F 문제 ── */}
@@ -1117,7 +1161,7 @@ export default function PdfEditorPage() {
                     </div>
                   </div>
                   <div className="p-4">
-                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{originalPassageText}</p>
+                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{r.passageText}</p>
                   </div>
                 </div>
 
@@ -1126,11 +1170,11 @@ export default function PdfEditorPage() {
                   color="bg-teal-600" theme={printTheme}
                   onCopy={() => copy(d.paraphrased_passage ?? '', 'paraphrase')}
                   copied={copiedSection === 'paraphrase'}>
-                  {editMode ? (
+                  {isInputEditMode ? (
                     <textarea
                       className="w-full p-3 border-2 border-teal-200 rounded-xl font-bold text-slate-700 text-base leading-relaxed resize-y focus:outline-none focus:border-teal-400 min-h-[120px]"
-                      value={editedResult?.paraphrased_passage ?? ''}
-                      onChange={(e) => setEditedResult(prev => prev ? { ...prev, paraphrased_passage: e.target.value } : prev)}
+                      value={inputEditedResults[activeInputResultTab]?.paraphrased_passage ?? ''}
+                      onChange={(e) => setInputEditedResults(prev => ({ ...prev, [activeInputResultTab]: { ...prev[activeInputResultTab], paraphrased_passage: e.target.value } }))}
                     />
                   ) : (
                     <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{d.paraphrased_passage}</p>
@@ -1144,15 +1188,15 @@ export default function PdfEditorPage() {
                     {d.tf_questions.map((q) => (
                       <div key={q.number} className={`flex items-start gap-2 px-2 py-0.5 rounded-lg transition-colors ${printTheme === 'color' ? 'hover:bg-violet-50' : ''}`}>
                         <span className={`font-black w-7 shrink-0 text-lg ${printTheme === 'color' ? 'text-violet-600' : 'text-slate-600'}`}>{q.number}.</span>
-                        {editMode ? (
+                        {isInputEditMode ? (
                           <textarea
                             className="flex-1 border border-slate-200 rounded p-1 font-bold text-slate-700 text-xl resize-none focus:outline-none focus:border-slate-400 min-h-[36px]"
                             value={q.statement}
-                            onChange={(e) => setEditedResult(prev => {
-                              if (!prev) return prev;
-                              const tf = [...prev.tf_questions];
+                            onChange={(e) => setInputEditedResults(prev => {
+                              const cur = prev[activeInputResultTab] ?? r.materials;
+                              const tf = [...cur.tf_questions];
                               tf[q.number - 1] = { ...tf[q.number - 1], statement: e.target.value };
-                              return { ...prev, tf_questions: tf };
+                              return { ...prev, [activeInputResultTab]: { ...cur, tf_questions: tf } };
                             })}
                           />
                         ) : (
@@ -1162,12 +1206,12 @@ export default function PdfEditorPage() {
                     ))}
                   </div>
                   <div className={`pdf-answer-area border-t pt-3 ${printTheme === 'color' ? 'border-violet-100' : 'border-slate-200'}`}>
-                    <button onClick={() => setShowAnswerKey(!showAnswerKey)}
+                    <button onClick={() => setInputShowAnswerKeyMap(prev => ({ ...prev, [activeInputResultTab]: !prev[activeInputResultTab] }))}
                       className={`no-print flex items-center gap-2 font-black hover:transition-colors text-sm ${printTheme === 'color' ? 'text-violet-600 hover:text-violet-800' : 'text-slate-600 hover:text-slate-800'}`}>
-                      <span className={`transition-transform ${showAnswerKey ? 'rotate-90' : ''}`}>▶</span>
-                      해설지 {showAnswerKey ? '닫기' : '보기'}
+                      <span className={`transition-transform ${inputShowAnswerKeyMap[activeInputResultTab] ? 'rotate-90' : ''}`}>▶</span>
+                      해설지 {inputShowAnswerKeyMap[activeInputResultTab] ? '닫기' : '보기'}
                     </button>
-                    {showAnswerKey && (
+                    {inputShowAnswerKeyMap[activeInputResultTab] && (
                       <div className="mt-3 space-y-3">
                         <div className={`p-3 rounded-2xl border ${printTheme === 'color' ? 'bg-violet-50 border-violet-100' : 'bg-white border-slate-200'}`}>
                           <div className="flex justify-between mb-2">
@@ -1217,15 +1261,15 @@ export default function PdfEditorPage() {
                           <tr key={i} className={printTheme === 'color' && i % 2 === 0 ? 'bg-indigo-50' : 'bg-white'}>
                             <td className={`w-28 p-2.5 font-black text-base border whitespace-nowrap align-top ${printTheme === 'color' ? 'text-indigo-700 border-indigo-100' : 'text-slate-700 border-slate-200'}`}>{row.label}</td>
                             <td className={`p-2.5 border ${printTheme === 'color' ? 'border-indigo-100' : 'border-slate-200'}`}>
-                              {editMode ? (
+                              {isInputEditMode ? (
                                 <textarea
                                   className="w-full border border-indigo-200 rounded p-1 font-bold text-slate-700 text-base resize-none focus:outline-none focus:border-indigo-400 min-h-[40px]"
                                   value={row.content}
-                                  onChange={(e) => setEditedResult(prev => {
-                                    if (!prev) return prev;
-                                    const rows = [...prev.korean_summary.rows];
+                                  onChange={(e) => setInputEditedResults(prev => {
+                                    const cur = prev[activeInputResultTab] ?? r.materials;
+                                    const rows = [...cur.korean_summary.rows];
                                     rows[i] = { ...rows[i], content: e.target.value };
-                                    return { ...prev, korean_summary: { ...prev.korean_summary, rows } };
+                                    return { ...prev, [activeInputResultTab]: { ...cur, korean_summary: { ...cur.korean_summary, rows } } };
                                   })}
                                 />
                               ) : (
@@ -1248,15 +1292,15 @@ export default function PdfEditorPage() {
                     {d.english_titles.map((title, i) => (
                       <div key={i} className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border ${printTheme === 'color' ? 'bg-amber-50 border-amber-100' : 'bg-white border-slate-200'}`}>
                         <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-amber-600' : 'text-slate-600'}`}>{i + 1}.</span>
-                        {editMode ? (
+                        {isInputEditMode ? (
                           <input
                             className="flex-1 border border-amber-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-amber-400"
                             value={title}
-                            onChange={(e) => setEditedResult(prev => {
-                              if (!prev) return prev;
-                              const titles = [...prev.english_titles];
+                            onChange={(e) => setInputEditedResults(prev => {
+                              const cur = prev[activeInputResultTab] ?? r.materials;
+                              const titles = [...cur.english_titles];
                               titles[i] = e.target.value;
-                              return { ...prev, english_titles: titles };
+                              return { ...prev, [activeInputResultTab]: { ...cur, english_titles: titles } };
                             })}
                           />
                         ) : (() => {
@@ -1282,26 +1326,26 @@ export default function PdfEditorPage() {
                         <div className="flex items-start gap-2">
                           <span className={`font-black w-8 shrink-0 text-lg ${printTheme === 'color' ? 'text-rose-600' : 'text-slate-600'}`}>{i + 1}.</span>
                           <div className="flex-1">
-                            {editMode ? (
+                            {isInputEditMode ? (
                               <>
                                 <input
                                   className="w-full border border-rose-200 rounded p-1 font-bold text-slate-700 text-base focus:outline-none focus:border-rose-400 mb-1"
                                   value={s.english}
-                                  onChange={(e) => setEditedResult(prev => {
-                                    if (!prev) return prev;
-                                    const sums = [...prev.one_sentence_summaries];
+                                  onChange={(e) => setInputEditedResults(prev => {
+                                    const cur = prev[activeInputResultTab] ?? r.materials;
+                                    const sums = [...cur.one_sentence_summaries];
                                     sums[i] = { ...sums[i], english: e.target.value };
-                                    return { ...prev, one_sentence_summaries: sums };
+                                    return { ...prev, [activeInputResultTab]: { ...cur, one_sentence_summaries: sums } };
                                   })}
                                 />
                                 <input
                                   className="w-full border border-rose-200 rounded p-1 font-bold text-slate-500 text-sm focus:outline-none focus:border-rose-400"
                                   value={s.korean}
-                                  onChange={(e) => setEditedResult(prev => {
-                                    if (!prev) return prev;
-                                    const sums = [...prev.one_sentence_summaries];
+                                  onChange={(e) => setInputEditedResults(prev => {
+                                    const cur = prev[activeInputResultTab] ?? r.materials;
+                                    const sums = [...cur.one_sentence_summaries];
                                     sums[i] = { ...sums[i], korean: e.target.value };
-                                    return { ...prev, one_sentence_summaries: sums };
+                                    return { ...prev, [activeInputResultTab]: { ...cur, one_sentence_summaries: sums } };
                                   })}
                                 />
                               </>
@@ -1339,16 +1383,16 @@ export default function PdfEditorPage() {
                       </thead>
                       <tbody>
                         {d.vocabulary_table.map((row, i) => {
-                          const updateVocab = (patch: Partial<VocabRow>) => setEditedResult(prev => {
-                            if (!prev) return prev;
-                            const vocab = [...prev.vocabulary_table];
+                          const updateVocab = (patch: Partial<VocabRow>) => setInputEditedResults(prev => {
+                            const cur = prev[activeInputResultTab] ?? r.materials;
+                            const vocab = [...cur.vocabulary_table];
                             vocab[i] = { ...vocab[i], ...patch };
-                            return { ...prev, vocabulary_table: vocab };
+                            return { ...prev, [activeInputResultTab]: { ...cur, vocabulary_table: vocab } };
                           });
                           return (
                           <tr key={i} className={printTheme === 'color' && i % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
                             <td className="px-2 py-1 border-b border-slate-100">
-                              {editMode ? (
+                              {isInputEditMode ? (
                                 <div className="flex flex-col gap-0.5">
                                   <input className="w-full border border-indigo-200 rounded px-1 py-0.5 font-black text-indigo-700 text-sm focus:outline-none focus:border-indigo-400" value={row.word} onChange={e => updateVocab({ word: e.target.value })} />
                                   <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.meaning} onChange={e => updateVocab({ meaning: e.target.value })} />
@@ -1359,7 +1403,7 @@ export default function PdfEditorPage() {
                             </td>
                             {([['syn1','syn1_m'], ['syn2','syn2_m'], ['syn3','syn3_m']] as const).map(([wk, mk], j) => (
                               <td key={j} className="px-2 py-1 border-b border-slate-100">
-                                {editMode ? (
+                                {isInputEditMode ? (
                                   <div className="flex flex-col gap-0.5">
                                     <input className="w-full border border-slate-200 rounded px-1 py-0.5 font-bold text-slate-700 text-sm focus:outline-none focus:border-slate-400" value={row[wk]} onChange={e => updateVocab({ [wk]: e.target.value })} />
                                     <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row[mk]} onChange={e => updateVocab({ [mk]: e.target.value })} />
@@ -1370,7 +1414,7 @@ export default function PdfEditorPage() {
                               </td>
                             ))}
                             <td className="px-2 py-1 border-b border-slate-100">
-                              {editMode ? (
+                              {isInputEditMode ? (
                                 <div className="flex flex-col gap-0.5">
                                   <input className="w-full border border-rose-200 rounded px-1 py-0.5 font-black text-rose-600 text-sm focus:outline-none focus:border-rose-400" value={row.antonym} onChange={e => updateVocab({ antonym: e.target.value })} />
                                   <input className="w-full border border-slate-200 rounded px-1 py-0.5 text-slate-500 text-xs focus:outline-none focus:border-slate-400" value={row.antonym_m} onChange={e => updateVocab({ antonym_m: e.target.value })} />
@@ -1402,63 +1446,62 @@ export default function PdfEditorPage() {
             </>
           )}
 
-          {result && (
+          {inputResults.length > 0 && (
             <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-3 z-50">
               {/* 테마 토글 */}
               <div className="flex items-center gap-1 bg-white border border-slate-200 shadow-lg px-3 py-2 rounded-2xl">
                 <span className="text-slate-400 text-xs font-bold mr-1">테마</span>
-                <button
-                  onClick={() => setPrintTheme('color')}
+                <button onClick={() => setPrintTheme('color')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'color' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
                   컬러
                 </button>
-                <button
-                  onClick={() => setPrintTheme('mono')}
+                <button onClick={() => setPrintTheme('mono')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${printTheme === 'mono' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600'}`}>
                   흑백
                 </button>
               </div>
-              {saveStatus === 'saving' && (
+              {inputSaveStatusMap[activeInputResultTab] === 'saving' && (
                 <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-slate-500">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
                   이력 자동 저장 중...
                 </div>
               )}
-              {saveStatus === 'done' && (
+              {inputSaveStatusMap[activeInputResultTab] === 'done' && (
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-emerald-600">
                   ✅ 이력에 저장됨
                 </div>
               )}
-              {saveStatus === 'error' && (
+              {inputSaveStatusMap[activeInputResultTab] === 'error' && (
                 <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 shadow-lg px-4 py-2.5 rounded-2xl text-sm font-bold text-rose-600 max-w-xs">
-                  ⚠️ 이력 저장 실패: {saveErrorMsg}
+                  ⚠️ 이력 저장 실패: {inputSaveErrorMsgMap[activeInputResultTab]}
                 </div>
               )}
-              {editMode && editSaveStatus !== 'idle' && (
+              {isInputEditMode && (inputEditSaveStatusMap[activeInputResultTab] ?? 'idle') !== 'idle' && (
                 <div className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-lg border
-                  ${editSaveStatus === 'saving' ? 'bg-white border-slate-200 text-slate-500' : editSaveStatus === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
-                  {editSaveStatus === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : editSaveStatus === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
+                  ${inputEditSaveStatusMap[activeInputResultTab] === 'saving' ? 'bg-white border-slate-200 text-slate-500' : inputEditSaveStatusMap[activeInputResultTab] === 'done' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
+                  {inputEditSaveStatusMap[activeInputResultTab] === 'saving' ? <><div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />편집본 저장 중...</> : inputEditSaveStatusMap[activeInputResultTab] === 'done' ? '✅ 편집본 저장됨' : '⚠️ 편집본 저장 실패'}
                 </div>
               )}
               <div className="flex gap-3">
                 <button
                   onClick={() => {
-                    if (!editMode) {
-                      if (!editedResult) setEditedResult(JSON.parse(JSON.stringify(result)));
-                      setEditSaveStatus('idle');
-                      setEditMode(true);
+                    const idx = activeInputResultTab;
+                    if (!isInputEditMode) {
+                      if (!inputEditedResults[idx]) setInputEditedResults(prev => ({ ...prev, [idx]: JSON.parse(JSON.stringify(inputResults[idx]?.materials)) }));
+                      setInputEditSaveStatusMap(prev => ({ ...prev, [idx]: 'idle' }));
+                      setInputEditModeIdx(idx);
                     } else {
-                      setEditMode(false);
+                      setInputEditModeIdx(null);
                     }
                   }}
                   className={`px-6 py-4 rounded-2xl font-black text-lg shadow-2xl transition-all active:scale-95
-                    ${editMode ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
-                  {editMode ? '✏️ 편집 종료' : '✏️ 편집'}
+                    ${isInputEditMode ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-slate-600 text-white hover:bg-slate-700'}`}>
+                  {isInputEditMode ? '✏️ 편집 종료' : '✏️ 편집'}
                 </button>
-                {editMode && (
-                  <button onClick={handleEditSave} disabled={editSaveStatus === 'saving'}
+                {isInputEditMode && (
+                  <button onClick={handleEditSave} disabled={inputEditSaveStatusMap[activeInputResultTab] === 'saving'}
                     className="bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-2xl hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50">
-                    {editSaveStatus === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
+                    {inputEditSaveStatusMap[activeInputResultTab] === 'saving' ? '⏳ 저장 중...' : '📥 편집본 저장'}
                   </button>
                 )}
                 <button onClick={handleDownloadProblemPDF} disabled={pdfLoading !== false}
