@@ -229,7 +229,7 @@ export default function LoginContent() {
         </div>
 
         <div className="flex justify-between mt-8 text-sm font-bold text-slate-400 px-2">
-          <Link href="/login" className="hover:text-slate-900 transition-colors">계정 만들기</Link>
+          <Link href="/register" className="hover:text-slate-900 transition-colors">계정 만들기</Link>
           <span className="text-slate-200">|</span>
           <Link href="/find-account" className="hover:text-slate-900 transition-colors">아이디 찾기</Link>
           <span className="text-slate-200">|</span>
