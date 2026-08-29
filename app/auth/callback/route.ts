@@ -54,7 +54,32 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!config) {
-      redirectTarget = `${origin}/auth/complete-profile`;
+      // 소셜 로그인: academy_config 즉시 생성 후 admin 대시보드로 이동
+      const RANDOM_NAMES = ['오리온','페가수스','시리우스','카시오페이아','안드로메다','처녀자리','사자자리','전갈자리','쌍둥이자리','독수리자리','백조자리','큰곰자리','에리다누스','켄타우루스','에메랄드','사파이어','루비','오팔','토파즈','아폴로','아테나','헤르메스','아르테미스','포세이돈','북극성','은하수','금성','새벽별','달빛','유성'];
+      const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)] + '_' + (Math.floor(Math.random() * 900) + 100);
+      const kioskCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const ownReferralCode = Math.random().toString(36).slice(2, 10).toUpperCase();
+      const BASE_BONUS = 100;
+
+      await admin.from('academy_config').insert({
+        user_id: userId,
+        academy_name: randomName,
+        points: BASE_BONUS,
+        kiosk_code: kioskCode,
+        own_referral_code: ownReferralCode,
+      });
+
+      // 가입 보너스 CON 이력 기록
+      await admin.from('con_transactions').insert({
+        academy_id: userId,
+        type: 'charge',
+        amount: BASE_BONUS,
+        balance_after: BASE_BONUS,
+        feature_key: 'signup_bonus',
+        description: '신규 가입 보너스',
+      });
+
+      redirectTarget = `${origin}/admin`;
     } else {
       const { data: { user } } = await supabase.auth.getUser();
       const isSuperAdmin = user?.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;

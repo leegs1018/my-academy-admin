@@ -35,6 +35,9 @@ export default function AccountPage() {
   const [ownReferralCode, setOwnReferralCode] = useState('');
   const [referralCopied, setReferralCopied] = useState(false);
 
+  // 프로필 완성 상태 추적 (보너스 중복 방지)
+  const [initialProfileComplete, setInitialProfileComplete] = useState<boolean | null>(null);
+
   // 수정 상태
   const [saving, setSaving] = useState(false);
   const [kioskResetting, setKioskResetting] = useState(false);
@@ -96,9 +99,12 @@ export default function AccountPage() {
           .eq('user_id', session.user.id)
           .single();
         if (data) {
-          setAcademyName(data.academy_name || '');
-          setAcademyPhone(data.academy_phone || '');
-          setMobile(data.mobile || '');
+          const name = data.academy_name || '';
+          const phone = data.academy_phone || '';
+          const mob = data.mobile || '';
+          setAcademyName(name);
+          setAcademyPhone(phone);
+          setMobile(mob);
           setPoints(data.points || 0);
           setKioskCode(data.kiosk_code || '');
           setOwnReferralCode(data.own_referral_code || '');
@@ -112,6 +118,7 @@ export default function AccountPage() {
             kakao_template_departure: data.kakao_template_departure || '',
             kakao_template_grade:     data.kakao_template_grade     || '',
           });
+          setInitialProfileComplete(!!name && (!!phone || !!mob));
         }
         setVerified(true);
       }
@@ -140,9 +147,12 @@ export default function AccountPage() {
       .single();
 
     if (data) {
-      setAcademyName(data.academy_name || '');
-      setAcademyPhone(data.academy_phone || '');
-      setMobile(data.mobile || '');
+      const name = data.academy_name || '';
+      const phone = data.academy_phone || '';
+      const mob = data.mobile || '';
+      setAcademyName(name);
+      setAcademyPhone(phone);
+      setMobile(mob);
       setPoints(data.points || 0);
       setKioskCode(data.kiosk_code || '');
       setOwnReferralCode(data.own_referral_code || '');
@@ -156,6 +166,7 @@ export default function AccountPage() {
         kakao_template_departure: data.kakao_template_departure || '',
         kakao_template_grade:     data.kakao_template_grade     || '',
       });
+      setInitialProfileComplete(!!name && (!!phone || !!mob));
     }
 
     setVerifyLoading(false);
@@ -171,8 +182,40 @@ export default function AccountPage() {
       .update({ academy_name: academyName, academy_phone: academyPhone, mobile })
       .eq('user_id', userId);
 
+    if (error) {
+      setSaving(false);
+      setSaveMsg('저장 중 오류가 발생했습니다.');
+      setTimeout(() => setSaveMsg(''), 3000);
+      return;
+    }
+
+    // 프로필 첫 완성 시 200C 지급
+    const nowComplete = !!academyName.trim() && (!!academyPhone.trim() || !!mobile.trim());
+    if (!initialProfileComplete && nowComplete) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          const res = await fetch('/api/profile-complete-bonus', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          });
+          const json = await res.json();
+          if (res.ok && !json.skipped) {
+            setPoints(prev => prev + 200);
+            setSaveMsg('저장되었습니다. 프로필 완성 보너스 +200C가 지급되었습니다!');
+            setInitialProfileComplete(true);
+            setSaving(false);
+            setTimeout(() => setSaveMsg(''), 5000);
+            return;
+          }
+        }
+      } catch {}
+    }
+
     setSaving(false);
-    setSaveMsg(error ? '저장 중 오류가 발생했습니다.' : '저장되었습니다.');
+    setSaveMsg('저장되었습니다.');
+    if (nowComplete) setInitialProfileComplete(true);
     setTimeout(() => setSaveMsg(''), 3000);
   };
 

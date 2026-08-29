@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [recentNotices, setRecentNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [todayStr, setTodayStr] = useState('');
+  const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
 
 
   const fetchDashboardData = useCallback(async (userId: string) => {
@@ -81,6 +82,16 @@ export default function DashboardPage() {
         router.replace('/login');
       } else {
         fetchDashboardData(session.user.id);
+        // 프로필 완성 여부 확인
+        const { data: cfg } = await supabase
+          .from('academy_config')
+          .select('academy_name, academy_phone, mobile')
+          .eq('user_id', session.user.id)
+          .single();
+        if (cfg) {
+          const complete = !!cfg.academy_name && (!!cfg.academy_phone || !!cfg.mobile);
+          setProfileComplete(complete);
+        }
       }
     };
     checkAuth();
@@ -111,6 +122,18 @@ export default function DashboardPage() {
           </p>
         </div>
       </header>
+
+      {/* 프로필 미완성 배너 */}
+      {profileComplete === false && (
+        <Link href="/admin/account" className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-3xl px-6 py-4 hover:bg-amber-100 transition-colors group">
+          <span className="text-2xl">🎁</span>
+          <div className="flex-1">
+            <p className="font-black text-amber-800 text-sm">프로필을 완성하면 +200C를 드려요!</p>
+            <p className="text-xs font-bold text-amber-500 mt-0.5">학원명 + 전화번호(또는 휴대폰)를 등록해주세요</p>
+          </div>
+          <span className="text-amber-400 font-black text-sm group-hover:translate-x-1 transition-transform">프로필 완성하기 ➜</span>
+        </Link>
+      )}
 
       {/* 핵심 요약 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

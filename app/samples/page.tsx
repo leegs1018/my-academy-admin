@@ -76,7 +76,7 @@ export default function SamplesPage() {
         </Link>
         <div className="flex items-center gap-3">
           <Link href="/" className="text-sm font-bold text-slate-500 hover:text-slate-900 transition-all">홈으로</Link>
-          <Link href="/register" className="px-6 py-2.5 text-sm font-black bg-slate-900 text-white rounded-full hover:shadow-lg transition-all">
+          <Link href="/login" className="px-6 py-2.5 text-sm font-black bg-slate-900 text-white rounded-full hover:shadow-lg transition-all">
             무료 시작하기 →
           </Link>
         </div>
@@ -167,7 +167,7 @@ export default function SamplesPage() {
       <section className="bg-slate-900 py-16 text-center px-8">
         <p className="text-3xl font-black text-white mb-3">직접 만들어보고 싶으신가요?</p>
         <p className="text-slate-400 font-medium mb-8">무료로 가입하고 AI로 나만의 문제를 생성해보세요.</p>
-        <Link href="/register"
+        <Link href="/login"
           className="px-12 py-4 bg-yellow-400 text-slate-900 font-black rounded-full text-base hover:bg-yellow-300 transition-all hover:-translate-y-0.5 shadow-xl shadow-yellow-400/30">
           무료로 시작하기 →
         </Link>

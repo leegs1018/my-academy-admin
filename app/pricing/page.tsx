@@ -147,7 +147,7 @@ export default async function PricingPage() {
           <Link href="/pricing" className="px-5 py-2.5 text-sm font-bold text-slate-900 border-b-2 border-slate-900">
             가격 안내
           </Link>
-          <Link href="/register" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-900 text-slate-900 rounded-full hover:bg-slate-900 hover:text-white transition-all">
+          <Link href="/login" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-900 text-slate-900 rounded-full hover:bg-slate-900 hover:text-white transition-all">
             솔루션 가입하기
           </Link>
           <Link href="/login" className="px-5 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">
@@ -254,7 +254,7 @@ export default async function PricingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                href="/register"
+                href="/login"
                 className="px-10 py-4 bg-yellow-400 text-slate-900 font-black rounded-full hover:bg-yellow-300 transition-all shadow-xl shadow-yellow-400/20 text-base"
               >
                 무료로 시작하기 ({pricing['signup_bonus'] ?? 300}C 지급)

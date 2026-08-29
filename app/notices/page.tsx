@@ -50,7 +50,7 @@ export default async function NoticesPage() {
           <Link href="/pricing" className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
             가격 안내
           </Link>
-          <Link href="/register" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-900 text-slate-900 rounded-full hover:bg-slate-900 hover:text-white transition-all">
+          <Link href="/login" className="px-5 py-2.5 text-sm font-bold border-2 border-slate-900 text-slate-900 rounded-full hover:bg-slate-900 hover:text-white transition-all">
             솔루션 가입하기
           </Link>
           <Link href="/login" className="px-5 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all">

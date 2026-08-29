@@ -276,7 +276,7 @@ export default function LandingPageClient() {
               <Link href="/login" className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:text-slate-900 transition-all hidden sm:block">
                 로그인
               </Link>
-              <Link href="/register" className="px-8 py-2.5 text-sm font-black bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all whitespace-nowrap">
+              <Link href="/login" className="px-8 py-2.5 text-sm font-black bg-slate-900 text-white rounded-full hover:shadow-xl hover:-translate-y-0.5 transition-all whitespace-nowrap">
                 지금 시작하기 →
               </Link>
             </>
@@ -322,7 +322,7 @@ export default function LandingPageClient() {
 
           <div className="flex flex-wrap justify-center gap-3">
             <Link
-              href={isLoggedIn ? '/admin' : '/register'}
+              href={isLoggedIn ? '/admin' : '/login'}
               className="px-14 py-4 bg-slate-900 text-white font-black rounded-full text-base shadow-2xl shadow-slate-300 hover:bg-slate-800 transition-all hover:-translate-y-0.5"
             >
               지금 시작하기 →
@@ -612,7 +612,7 @@ export default function LandingPageClient() {
             </h2>
             <p className="text-slate-400 font-medium mb-12">지금 무료로 가입하고 영어 학원 운영의 모든 것을 경험해보세요.</p>
             <Link
-              href={isLoggedIn ? '/admin/ai-questions' : '/register'}
+              href={isLoggedIn ? '/admin/ai-questions' : '/login'}
               className="px-12 py-5 bg-yellow-400 text-slate-900 font-black rounded-full hover:bg-yellow-300 transition-all inline-block text-lg shadow-xl shadow-yellow-400/20"
             >
               {isLoggedIn ? '서비스 바로가기' : '지금 무료로 시작하기'}
