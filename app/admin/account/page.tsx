@@ -83,18 +83,16 @@ export default function AccountPage() {
       setEmail(session.user.email || '');
       setUserId(session.user.id);
 
-      // SNS 로그인 감지 → 비밀번호 확인 단계 자동 스킵
-      // identities 배열도 확인 (기존 이메일 계정에 SNS 연결된 경우 app_metadata.provider가 'email'로 남음)
+      // SNS 로그인 감지: identities(가장 신뢰) → app_metadata → user_metadata 순으로 확인
+      // user_metadata.provider는 updateUserById 호출 시 덮어쓰일 수 있어 마지막에 확인
       const identities = session.user.identities ?? [];
       const snsIdentity = identities.find((i: { provider: string }) => SNS_PROVIDERS.includes(i.provider));
-      const detectedProvider =
-        session.user.user_metadata?.provider ||
-        snsIdentity?.provider ||
-        session.user.app_metadata?.provider ||
-        'email';
+      const appProvider = session.user.app_metadata?.provider ?? '';
+      const isSocialLogin = !!snsIdentity || SNS_PROVIDERS.includes(appProvider);
+      const detectedProvider = snsIdentity?.provider ?? (SNS_PROVIDERS.includes(appProvider) ? appProvider : 'email');
       setProvider(detectedProvider);
 
-      if (SNS_PROVIDERS.includes(detectedProvider)) {
+      if (isSocialLogin) {
         // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
         const { data } = await supabase
           .from('academy_config')

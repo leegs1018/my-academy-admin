@@ -69,9 +69,10 @@ export async function GET(request: NextRequest) {
         own_referral_code: ownReferralCode,
       });
 
-      // user_metadata.role 을 'admin'으로 설정 (미설정 시 middleware가 ai_only로 판단)
+      // user_metadata.role 을 'admin'으로 설정 — 기존 필드 보존 후 merge
+      const { data: { user: newUser } } = await admin.auth.admin.getUserById(userId);
       await admin.auth.admin.updateUserById(userId, {
-        user_metadata: { role: 'admin' },
+        user_metadata: { ...(newUser?.user_metadata ?? {}), role: 'admin' },
       });
 
       // 가입 보너스 CON 이력 기록
@@ -89,10 +90,10 @@ export async function GET(request: NextRequest) {
       const { data: { user } } = await supabase.auth.getUser();
       const isSuperAdmin = user?.email === process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;
 
-      // user_metadata.role 미설정 시 'admin'으로 보정 (소셜 로그인 기존 가입자 대응)
+      // user_metadata.role 미설정 시 'admin'으로 보정 — 기존 필드 보존 후 merge
       if (user && !user.user_metadata?.role) {
         await admin.auth.admin.updateUserById(userId, {
-          user_metadata: { role: 'admin' },
+          user_metadata: { ...(user.user_metadata ?? {}), role: 'admin' },
         });
       }
 
