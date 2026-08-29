@@ -78,16 +78,16 @@ export default function AccountPage() {
   // ── 초기 세션 확인 ───────────────────────────────
   useEffect(() => {
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.replace('/login'); return; }
-      setEmail(session.user.email || '');
-      setUserId(session.user.id);
+      // getUser()로 서버에서 완전한 유저 정보 조회 (getSession은 캐시 기반이라 identities 누락 가능)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) { router.replace('/login'); return; }
+      setEmail(user.email || '');
+      setUserId(user.id);
 
-      // SNS 로그인 감지: identities(가장 신뢰) → app_metadata → user_metadata 순으로 확인
-      // user_metadata.provider는 updateUserById 호출 시 덮어쓰일 수 있어 마지막에 확인
-      const identities = session.user.identities ?? [];
+      // SNS 감지: identities → app_metadata 순으로 확인
+      const identities = user.identities ?? [];
       const snsIdentity = identities.find((i: { provider: string }) => SNS_PROVIDERS.includes(i.provider));
-      const appProvider = session.user.app_metadata?.provider ?? '';
+      const appProvider = user.app_metadata?.provider ?? '';
       const isSocialLogin = !!snsIdentity || SNS_PROVIDERS.includes(appProvider);
       const detectedProvider = snsIdentity?.provider ?? (SNS_PROVIDERS.includes(appProvider) ? appProvider : 'email');
       setProvider(detectedProvider);
@@ -97,7 +97,7 @@ export default function AccountPage() {
         const { data } = await supabase
           .from('academy_config')
           .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, sms_marketing_agreed, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
-          .eq('user_id', session.user.id)
+          .eq('user_id', user.id)
           .single();
         if (data) {
           const name = data.academy_name || '';
