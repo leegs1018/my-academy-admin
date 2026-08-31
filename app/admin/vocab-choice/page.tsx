@@ -1552,55 +1552,57 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
-        {/* ── 상단 테두리 박스: 제목 + 내용요약 + 키워드 ── */}
+        {/* ── 상단: 제목 + 내용요약(테두리 없음) + 키워드(테두리만) ── */}
         {(titleEn || titleKo || koreanSummary || keywordBullets.length > 0) && (
-          <div style={{
-            border: '1.5px solid #94a3b8', borderRadius: 6,
-            marginBottom: 14, overflow: 'hidden',
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
-              <tbody>
-                <tr>
-                  {/* 왼쪽: 제목 + 내용 요약 */}
-                  <td style={{ padding: '12px 14px', verticalAlign: 'top', borderRight: '1.5px solid #94a3b8' }}>
-                    {(titleEn || titleKo) && (
-                      <div style={{ textAlign: 'center', marginBottom: koreanSummary ? 10 : 0 }}>
-                        {titleEn && (
-                          <p style={{ fontSize: 13, fontWeight: 900, margin: '0 0 3px', letterSpacing: '0.03em', lineHeight: 1.4 }}>{titleEn}</p>
-                        )}
-                        {titleKo && (
-                          <p style={{ fontSize: 11, color: '#374151', margin: 0 }}>({titleKo})</p>
-                        )}
-                      </div>
-                    )}
-                    {koreanSummary && (
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11, lineHeight: 1.75, textAlign: 'justify' }}>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          border: '1.5px solid #374151', borderRadius: '50%',
-                          minWidth: 30, height: 17, fontSize: 9, fontWeight: 900, flexShrink: 0,
-                          marginTop: 2, padding: '0 3px',
-                        }}>내용</span>
-                        <span style={{ flex: 1 }}>{koreanSummary}</span>
-                      </div>
-                    )}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+            <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
+            <tbody>
+              <tr>
+                {/* 왼쪽: 제목 + 내용 요약 — 테두리 없음 */}
+                <td style={{ padding: '0 20px 0 0', verticalAlign: 'top' }}>
+                  {(titleEn || titleKo) && (
+                    <div style={{ textAlign: 'center', marginBottom: koreanSummary ? 10 : 0 }}>
+                      {titleEn && (
+                        <p style={{ fontSize: 13, fontWeight: 900, margin: '0 0 3px', letterSpacing: '0.03em', lineHeight: 1.4 }}>{titleEn}</p>
+                      )}
+                      {titleKo && (
+                        <p style={{ fontSize: 11, color: '#374151', margin: 0 }}>({titleKo})</p>
+                      )}
+                    </div>
+                  )}
+                  {koreanSummary && (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11, lineHeight: 1.75, textAlign: 'justify' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        border: '1.5px solid #374151', borderRadius: '50%',
+                        minWidth: 30, height: 17, fontSize: 9, fontWeight: 900, flexShrink: 0,
+                        marginTop: 2, padding: '0 3px',
+                      }}>내용</span>
+                      <span style={{ flex: 1 }}>{koreanSummary}</span>
+                    </div>
+                  )}
+                </td>
+                {/* 오른쪽: 키워드 불렛 — 테두리 박스 */}
+                {keywordBullets.length > 0 && (
+                  <td style={{ verticalAlign: 'middle' }}>
+                    <div style={{
+                      border: '1.5px solid #94a3b8', borderRadius: 6,
+                      padding: '12px 18px', textAlign: 'center',
+                    }}>
+                      {keywordBullets.slice(0, 2).map((b, bi) => (
+                        <React.Fragment key={bi}>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 11.5, lineHeight: 1.65 }}>{b}</p>
+                          {bi < Math.min(keywordBullets.length, 2) - 1 && (
+                            <p style={{ margin: '3px 0', fontSize: 12, color: '#64748b' }}>↓</p>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
                   </td>
-                  {/* 오른쪽: 키워드 불렛 */}
-                  <td style={{ padding: '14px 18px', verticalAlign: 'middle', textAlign: 'center' }}>
-                    {keywordBullets.map((b, bi) => (
-                      <React.Fragment key={bi}>
-                        <p style={{ margin: 0, fontWeight: 700, fontSize: 11.5, lineHeight: 1.65 }}>{b}</p>
-                        {bi < keywordBullets.length - 1 && (
-                          <p style={{ margin: '3px 0', fontSize: 12, color: '#64748b' }}>↓</p>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                )}
+              </tr>
+            </tbody>
+          </table>
         )}
 
         {/* ── 본문 / 해석 2단 테이블 ── */}
