@@ -547,19 +547,38 @@ function highlightKeyWords(text: string, keyWords: string[]): React.ReactNode {
 function RenderPassageTranslation({ result }: { result: WorkbookResult }) {
   const sentences = result.sentences as PassageSentence[] || result.items as PassageSentence[] || [];
   const vocabTable = result.vocab_table as VocabRow[] || [];
+  const titleEn = result.title_en as string || '';
+  const titleKo = result.title_ko as string || '';
+  const koreanSummary = result.korean_summary as string || '';
+  const keywordBullets = result.keyword_bullets as string[] || [];
   return (
-    <div className="space-y-1">
+    <div className="space-y-3">
+      {/* 제목·요약 섹션 */}
+      {(titleEn || koreanSummary) && (
+        <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-1">
+          {titleEn && <p className="text-sm font-black text-center text-slate-900">{titleEn}</p>}
+          {titleKo && <p className="text-xs text-center text-slate-500">({titleKo})</p>}
+          {koreanSummary && <p className="text-xs text-slate-700 mt-1 leading-relaxed">[요약] {koreanSummary}</p>}
+        </div>
+      )}
+      {/* 오른쪽 키워드 불렛 박스 */}
+      {keywordBullets.length > 0 && (
+        <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50">
+          <p className="text-xs font-black text-indigo-700 mb-1">내용 압축 키워드</p>
+          {keywordBullets.map((b, i) => <p key={i} className="text-xs text-slate-700">→ {b}</p>)}
+        </div>
+      )}
+      {/* 본문·해석 */}
       {sentences.map((s, i) => (
         <div key={i} className="py-1 border-b border-slate-100 last:border-0">
-          <p className="text-sm font-medium text-slate-800 leading-relaxed">
-            {highlightKeyWords(s.en, s.key_words || [])}
-          </p>
-          <p className="text-sm font-bold text-slate-800 leading-relaxed mt-0.5">{s.ko}</p>
+          <p className="text-sm text-slate-800 leading-relaxed">{s.en}</p>
+          <p className="text-sm font-bold text-slate-600 leading-relaxed mt-0.5">{s.ko}</p>
         </div>
       ))}
+      {/* 어휘표 — 2페이지 영역 */}
       {vocabTable.length > 0 && (
-        <div className="mt-6">
-          <p className="text-xs font-black text-slate-500 mb-2">지문의 주요 어휘와 뜻</p>
+        <div className="mt-6 border-t-2 border-slate-300 pt-4">
+          <p className="text-xs font-black text-slate-500 mb-2">지문의 주요 어휘와 뜻 (2페이지)</p>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -1519,84 +1538,107 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
   );
 }
 
-function PdfPassageTranslation({ result, id, title }: { result: WorkbookResult; id: string; title?: string }) {
+// ── 지문 해석지 페이지1: 제목·요약·본문·해석 ──────────────────────────────────
+function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult; id: string; title?: string }) {
   const sentences = (result.sentences || result.items) as PassageSentence[];
-  const vocabTable = result.vocab_table as VocabRow[] || [];
-  const keyColors: Record<string, string> = {};
-  const pdfColors = ['#DC2626','#2563EB','#059669','#7C3AED','#D97706'];
-  let ci = 0;
-  sentences?.forEach(s => (s.key_words || []).forEach(kw => {
-    if (!keyColors[kw.toLowerCase()]) keyColors[kw.toLowerCase()] = pdfColors[ci++ % pdfColors.length];
-  }));
+  const titleEn = result.title_en as string || '';
+  const titleKo = result.title_ko as string || '';
+  const koreanSummary = result.korean_summary as string || '';
+  const keywordBullets = result.keyword_bullets as string[] || [];
 
-  const renderHighlighted = (text: string, keyWords: string[]) => {
-    if (!keyWords || keyWords.length === 0) return text;
-    const escaped = keyWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
-    const parts = text.split(regex);
-    return parts.map((part, i) => {
-      const isKey = !!keyColors[part.toLowerCase()];
-      if (isKey) return <span key={i} style={{ color: '#000', fontWeight: 900 }}>{part}</span>;
-      return <span key={i}>{part}</span>;
-    });
-  };
+  // 오른쪽 첫 행에 키워드 박스를 한 번만 그리기 위한 플래그
+  let keywordRendered = false;
 
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title || '지문 해석지'}</PdfPageHeader>
+
+      {/* 제목 섹션 */}
+      {(titleEn || titleKo) && (
+        <div style={{ textAlign: 'center', marginBottom: 8 }}>
+          {titleEn && <p style={{ fontSize: 13, fontWeight: 900, margin: '0 0 2px' }}>{titleEn}</p>}
+          {titleKo && <p style={{ fontSize: 11, color: '#6B7280', margin: 0 }}>({titleKo})</p>}
+        </div>
+      )}
+
+      {/* 한글 요약 */}
+      {koreanSummary && (
+        <div style={{ background: '#F1F5F9', borderRadius: 5, padding: '5px 10px', marginBottom: 10, fontSize: 11, lineHeight: 1.7 }}>
+          <span style={{ fontWeight: 900 }}>[내용] </span>{koreanSummary}
+        </div>
+      )}
+
+      {/* 본문 / 해석 2단 테이블 */}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
+        <colgroup><col style={{ width: '50%' }} /><col style={{ width: '50%' }} /></colgroup>
         <tbody>
-          {(sentences || []).map((s, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-              <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.9, verticalAlign: 'top' }}>
-                {renderHighlighted(s.en, s.key_words || [])}
+          {(sentences || []).map((s, i) => {
+            const showKeywordBox = !keywordRendered && keywordBullets.length > 0;
+            if (showKeywordBox) keywordRendered = true;
+            return (
+              <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.9, verticalAlign: 'top' }}>
+                  {s.en}
+                </td>
+                <td style={{ padding: '4px 0 4px 8px', fontSize: 12, lineHeight: 1.7, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
+                  {showKeywordBox && (
+                    <div style={{ border: '1px solid #C7D2FE', borderRadius: 5, padding: '5px 8px', marginBottom: 6, background: '#EEF2FF' }}>
+                      {keywordBullets.map((b, bi) => (
+                        <p key={bi} style={{ margin: '0 0 2px', fontSize: 10, color: '#3730A3', fontWeight: 700 }}>→ {b}</p>
+                      ))}
+                    </div>
+                  )}
+                  <span style={{ fontWeight: 700 }}>{s.ko}</span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── 지문 해석지 페이지2: 주요 어휘와 뜻 ──────────────────────────────────────
+function PdfPassageTranslationP2({ result, id, title }: { result: WorkbookResult; id: string; title?: string }) {
+  const vocabTable = result.vocab_table as VocabRow[] || [];
+  if (!vocabTable.length) return <div id={id} style={{ ...PDF_BASE, display: 'none' }} />;
+  return (
+    <div id={id} style={PDF_BASE}>
+      <PdfPageHeader>{title || '지문 해석지'} — 주요 어휘와 뜻</PdfPageHeader>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+        <thead>
+          <tr style={{ background: '#1E293B', color: '#fff' }}>
+            {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+              <th key={i} style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 900, borderRight: '1px solid #334155' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {vocabTable.map((row, i) => (
+            <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+              <td style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
+                <span style={{ fontWeight: 900 }}>{row.word}</span>
+                {row.meaning && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.meaning})</span>}
               </td>
-              <td style={{ padding: '4px 0 4px 8px', fontSize: 12, color: '#000', fontWeight: 700, lineHeight: 1.6, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
-                {s.ko}
+              {[['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']].map(([k,m]) => (
+                <td key={k} style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
+                  {(row as Record<string,string>)[k] && <>
+                    <span style={{ color: '#1D4ED8', fontWeight: 700 }}>{(row as Record<string,string>)[k]}</span>
+                    {(row as Record<string,string>)[m] && <span style={{ color: '#64748B', marginLeft: 3 }}>({(row as Record<string,string>)[m]})</span>}
+                  </>}
+                </td>
+              ))}
+              <td style={{ padding: '3px 6px', borderBottom: '1px solid #E2E8F0' }}>
+                {row.antonym && <>
+                  <span style={{ color: '#DC2626', fontWeight: 700 }}>{row.antonym}</span>
+                  {row.antonym_m && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.antonym_m})</span>}
+                </>}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      {vocabTable.length > 0 && (
-        <div style={{ marginTop: 18 }}>
-          <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 900, color: '#374151' }}>지문의 주요 어휘와 뜻</p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
-            <thead>
-              <tr style={{ background: '#1E293B', color: '#fff' }}>
-                {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                  <th key={i} style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 900, borderRight: '1px solid #334155' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {vocabTable.map((row, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                  <td style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
-                    <span style={{ fontWeight: 900 }}>{row.word}</span>
-                    {row.meaning && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.meaning})</span>}
-                  </td>
-                  {[['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']].map(([k,m]) => (
-                    <td key={k} style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
-                      {(row as Record<string,string>)[k] && <>
-                        <span style={{ color: '#1D4ED8', fontWeight: 700 }}>{(row as Record<string,string>)[k]}</span>
-                        {(row as Record<string,string>)[m] && <span style={{ color: '#64748B', marginLeft: 3 }}>({(row as Record<string,string>)[m]})</span>}
-                      </>}
-                    </td>
-                  ))}
-                  <td style={{ padding: '3px 6px', borderBottom: '1px solid #E2E8F0' }}>
-                    {row.antonym && <>
-                      <span style={{ color: '#DC2626', fontWeight: 700 }}>{row.antonym}</span>
-                      {row.antonym_m && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.antonym_m})</span>}
-                    </>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
@@ -3456,7 +3498,12 @@ export default function WorkbookPage() {
                   </React.Fragment>
                 );
               case 'passage_translation':
-                return <PdfPassageTranslation key={key} result={result} id={problemId} title={fullTitle} />;
+                return (
+                  <React.Fragment key={key}>
+                    <PdfPassageTranslationP1 result={result} id={problemId} title={fullTitle} />
+                    <PdfPassageTranslationP2 result={result} id={answerId} title={fullTitle} />
+                  </React.Fragment>
+                );
               case 'paragraph_order':
                 return (
                   <React.Fragment key={key}>
