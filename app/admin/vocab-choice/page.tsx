@@ -1615,7 +1615,6 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                   padding: '8px 14px 8px 0',
                   fontSize: 12.5, lineHeight: 2.0,
                   verticalAlign: 'top', textAlign: 'justify',
-                  borderBottom: i < sentences.length - 1 ? '1px solid #e8ecf0' : 'none',
                 }}>
                   {s.en}
                 </td>
@@ -1625,7 +1624,6 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                   verticalAlign: 'top', textAlign: 'justify',
                   borderLeft: '1.5px solid #cbd5e1',
                   color: '#111',
-                  borderBottom: i < sentences.length - 1 ? '1px solid #e8ecf0' : 'none',
                 }}>
                   {s.ko}
                 </td>
