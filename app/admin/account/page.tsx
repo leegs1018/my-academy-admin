@@ -8,6 +8,9 @@ import { useRouter } from 'next/navigation';
 export default function AccountPage() {
   const router = useRouter();
 
+  // 초기 로딩 (소셜 로그인 여부 판별 중)
+  const [initLoading, setInitLoading] = useState(true);
+
   // 비밀번호 확인 단계
   const [verified, setVerified] = useState(false);
   const [verifyPassword, setVerifyPassword] = useState('');
@@ -77,61 +80,72 @@ export default function AccountPage() {
 
   // ── 초기 세션 확인 ───────────────────────────────
   useEffect(() => {
+    const loadDbData = async (uid: string) => {
+      const { data } = await supabase
+        .from('academy_config')
+        .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
+        .eq('user_id', uid)
+        .single();
+      if (data) {
+        const name = data.academy_name || '';
+        const phone = data.academy_phone || '';
+        const mob = data.mobile || '';
+        setAcademyName(name);
+        setAcademyPhone(phone);
+        setMobile(mob);
+        setPoints(data.points || 0);
+        setKioskCode(data.kiosk_code || '');
+        setOwnReferralCode(data.own_referral_code || '');
+        setIsVip(data.sms_enabled ?? false);
+        setVipConfig({
+          ppurio_account:           data.ppurio_account           || '',
+          ppurio_api_key:           data.ppurio_api_key           || '',
+          ppurio_sender_number:     data.ppurio_sender_number     || '',
+          kakao_sender_key:         data.kakao_sender_key         || '',
+          kakao_template_arrival:   data.kakao_template_arrival   || '',
+          kakao_template_departure: data.kakao_template_departure || '',
+          kakao_template_grade:     data.kakao_template_grade     || '',
+        });
+        setInitialProfileComplete(!!name && (!!phone || !!mob));
+      }
+      supabase.from('academy_config').select('sms_marketing_agreed').eq('user_id', uid).single()
+        .then(({ data: smsData }) => { if (smsData) setSmsMarketingAgreed(smsData.sms_marketing_agreed ?? false); });
+    };
+
     const init = async () => {
-      // getSession()으로 userId 안정 확보 (로컬 캐시 기반, 항상 동작)
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) { router.replace('/login'); return; }
       const uid = session.user.id;
       setEmail(session.user.email || '');
       setUserId(uid);
 
-      // getUser()로 서버에서 identities·app_metadata 포함 전체 정보 조회 (SNS 감지용)
-      // 실패해도 session 기반 fallback 사용
-      const { data: { user: fullUser } } = await supabase.auth.getUser();
-      const targetUser = fullUser ?? session.user;
+      // 1차: JWT에 내장된 app_metadata·identities로 즉시 소셜 감지 (서버 요청 없음)
+      const jwtProvider = session.user.app_metadata?.provider ?? '';
+      const jwtIdentities = (session.user.identities ?? []) as Array<{ provider: string }>;
+      let isSocial = SNS_PROVIDERS.includes(jwtProvider) ||
+                     jwtIdentities.some(i => SNS_PROVIDERS.includes(i.provider));
+      let detectedProvider = jwtIdentities.find(i => SNS_PROVIDERS.includes(i.provider))?.provider
+                             || (SNS_PROVIDERS.includes(jwtProvider) ? jwtProvider : '');
 
-      // SNS 감지: identities → app_metadata 순으로 확인
-      const identities = targetUser.identities ?? [];
-      const snsIdentity = identities.find((i: { provider: string }) => SNS_PROVIDERS.includes(i.provider));
-      const appProvider = targetUser.app_metadata?.provider ?? '';
-      const isSocialLogin = !!snsIdentity || SNS_PROVIDERS.includes(appProvider);
-      const detectedProvider = snsIdentity?.provider ?? (SNS_PROVIDERS.includes(appProvider) ? appProvider : 'email');
-      setProvider(detectedProvider);
+      // 2차: JWT로 못 잡혔을 때만 서버에서 확인 (엣지케이스 대비)
+      if (!isSocial) {
+        const { data: { user: fullUser } } = await supabase.auth.getUser();
+        const targetUser = fullUser ?? session.user;
+        const ids = (targetUser.identities ?? []) as Array<{ provider: string }>;
+        const sns = ids.find(i => SNS_PROVIDERS.includes(i.provider));
+        const ap = targetUser.app_metadata?.provider ?? '';
+        isSocial = !!sns || SNS_PROVIDERS.includes(ap);
+        detectedProvider = sns?.provider || (SNS_PROVIDERS.includes(ap) ? ap : '');
+      }
 
-      if (isSocialLogin) {
-        // SNS 사용자는 이미 인증된 상태이므로 바로 정보 로드
-        const { data } = await supabase
-          .from('academy_config')
-          .select('academy_name, academy_phone, mobile, points, kiosk_code, own_referral_code, sms_enabled, ppurio_account, ppurio_api_key, ppurio_sender_number, kakao_sender_key, kakao_template_arrival, kakao_template_departure, kakao_template_grade')
-          .eq('user_id', uid)
-          .single();
-        if (data) {
-          const name = data.academy_name || '';
-          const phone = data.academy_phone || '';
-          const mob = data.mobile || '';
-          setAcademyName(name);
-          setAcademyPhone(phone);
-          setMobile(mob);
-          setPoints(data.points || 0);
-          setKioskCode(data.kiosk_code || '');
-          setOwnReferralCode(data.own_referral_code || '');
-          setIsVip(data.sms_enabled ?? false);
-          setVipConfig({
-            ppurio_account:        data.ppurio_account        || '',
-            ppurio_api_key:        data.ppurio_api_key        || '',
-            ppurio_sender_number:  data.ppurio_sender_number  || '',
-            kakao_sender_key:      data.kakao_sender_key      || '',
-            kakao_template_arrival:   data.kakao_template_arrival   || '',
-            kakao_template_departure: data.kakao_template_departure || '',
-            kakao_template_grade:     data.kakao_template_grade     || '',
-          });
-          setInitialProfileComplete(!!name && (!!phone || !!mob));
-        }
-        // sms_marketing_agreed 별도 조회 (컬럼 미존재 시 쿼리 실패 방지)
-        supabase.from('academy_config').select('sms_marketing_agreed').eq('user_id', uid).single()
-          .then(({ data: smsData }) => { if (smsData) setSmsMarketingAgreed(smsData.sms_marketing_agreed ?? false); });
+      setProvider(detectedProvider || 'email');
+
+      if (isSocial) {
+        await loadDbData(uid);
         setVerified(true);
       }
+      // 이메일 유저: verified=false 유지 → 비밀번호 입력 화면
+      setInitLoading(false);
     };
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -267,7 +281,10 @@ export default function AccountPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/login'); return; }
 
-    const res = await fetch('/api/auth/withdraw', { method: 'POST' });
+    const res = await fetch('/api/auth/withdraw', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+    });
     const data = await res.json();
 
     if (!res.ok) {
@@ -322,6 +339,15 @@ export default function AccountPage() {
   };
 
   // ── 비밀번호 확인 화면 ───────────────────────────
+  // 초기화 중: 소셜 여부 판별 완료 전까지 스피너
+  if (initLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="w-8 h-8 border-4 border-slate-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   if (!verified) {
     return (
       <div className="max-w-md mx-auto pt-10">

@@ -11,24 +11,36 @@ function isFreeCharge(description: string, featureKey?: string | null): boolean 
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return request.cookies.get(name)?.value; },
-        set(_name: string, _value: string, _options: CookieOptions) {},
-        remove(_name: string, _options: CookieOptions) {},
-      },
-    }
-  );
+  const admin = createAdminClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // Authorization 헤더(Bearer) 우선 → 없으면 쿠키 세션 사용
+  let user: { id: string } | null = null;
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const { data } = await admin.auth.getUser(token);
+    user = data.user;
+  }
+
+  if (!user) {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) { return request.cookies.get(name)?.value; },
+          set(_name: string, _value: string, _options: CookieOptions) {},
+          remove(_name: string, _options: CookieOptions) {},
+        },
+      }
+    );
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  }
+
   if (!user) {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
-
-  const admin = createAdminClient();
 
   // 유료 CON 여부 확인
   const { data: transactions } = await admin
