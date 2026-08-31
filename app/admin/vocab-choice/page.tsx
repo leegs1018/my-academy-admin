@@ -1546,38 +1546,11 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
   const koreanSummary = result.korean_summary as string || '';
   const keywordBullets = result.keyword_bullets as string[] || [];
 
-  const outerStyle: React.CSSProperties = {
-    position: 'fixed', top: 0, left: 0, width: '800px',
-    background: 'white', boxSizing: 'border-box',
-    fontFamily: 'Arial, Helvetica, sans-serif', zIndex: -9999, pointerEvents: 'none',
-    border: '2px solid #1e293b',
-    minHeight: '1090px',
-    display: 'flex', flexDirection: 'column',
-  };
-
   return (
-    <div id={id} style={outerStyle}>
-      {/* 헤더 바 */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '7px 14px', borderBottom: '2px solid #1e293b', background: '#f8fafc',
-      }}>
-        <div style={{
-          background: '#1e293b', color: '#fff', borderRadius: 4,
-          padding: '4px 14px', fontSize: 11.5, fontWeight: 900,
-        }}>
-          {title || '지문 해석지'}
-        </div>
-        <div style={{
-          border: '1.5px solid #1e293b', borderRadius: 4,
-          padding: '4px 14px', fontSize: 11, fontWeight: 900,
-        }}>
-          단계별 WORKBOOK 지문 연습하기
-        </div>
-      </div>
+    <div id={id} style={{ ...PDF_BASE, minHeight: '1090px', display: 'flex', flexDirection: 'column' }}>
+      <PdfPageHeader>{title || '지문 해석지'}</PdfPageHeader>
 
-      {/* 내용 영역 */}
-      <div style={{ padding: '14px 28px 16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
         {/* ── 상단 테두리 박스: 제목 + 내용요약 + 키워드 ── */}
         {(titleEn || titleKo || koreanSummary || keywordBullets.length > 0) && (
@@ -1649,7 +1622,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                   fontSize: 12, lineHeight: 1.85,
                   verticalAlign: 'top', textAlign: 'justify',
                   borderLeft: '1.5px solid #cbd5e1',
-                  color: '#111', fontWeight: 700,
+                  color: '#111',
                   borderBottom: i < sentences.length - 1 ? '1px solid #e8ecf0' : 'none',
                 }}>
                   {s.ko}
