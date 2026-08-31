@@ -46,7 +46,11 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
 
   const fetchNotifs = useCallback(async () => {
     try {
-      const res = await fetch('/api/superadmin/notifications');
+      const seenAt = typeof window !== 'undefined' ? localStorage.getItem('sa_academies_seen_at') : null;
+      const url = seenAt
+        ? `/api/superadmin/notifications?academies_since=${encodeURIComponent(seenAt)}`
+        : '/api/superadmin/notifications';
+      const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json() as NotifCounts;
       setNotifs(data);
@@ -58,6 +62,16 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     const interval = setInterval(fetchNotifs, 60_000);
     return () => clearInterval(interval);
   }, [fetchNotifs]);
+
+  // 알림 패널 닫힐 때 신규 학원 알림을 "확인 완료"로 저장
+  const prevNotifOpen = useRef(false);
+  useEffect(() => {
+    if (prevNotifOpen.current && !notifOpen) {
+      localStorage.setItem('sa_academies_seen_at', new Date().toISOString());
+      fetchNotifs();
+    }
+    prevNotifOpen.current = notifOpen;
+  }, [notifOpen, fetchNotifs]);
 
   // 알림 패널 바깥 클릭 시 닫기
   useEffect(() => {
