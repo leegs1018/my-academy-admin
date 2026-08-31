@@ -1546,53 +1546,58 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
   const koreanSummary = result.korean_summary as string || '';
   const keywordBullets = result.keyword_bullets as string[] || [];
 
-  // 오른쪽 첫 행에 키워드 박스를 한 번만 그리기 위한 플래그
-  let keywordRendered = false;
-
   return (
-    <div id={id} style={PDF_BASE}>
+    <div id={id} style={{ ...PDF_BASE, minHeight: '1090px', display: 'flex', flexDirection: 'column' }}>
       <PdfPageHeader>{title || '지문 해석지'}</PdfPageHeader>
 
       {/* 제목 섹션 */}
       {(titleEn || titleKo) && (
-        <div style={{ textAlign: 'center', marginBottom: 8 }}>
-          {titleEn && <p style={{ fontSize: 13, fontWeight: 900, margin: '0 0 2px' }}>{titleEn}</p>}
+        <div style={{ textAlign: 'center', marginBottom: 6 }}>
+          {titleEn && <p style={{ fontSize: 14, fontWeight: 900, margin: '0 0 2px' }}>{titleEn}</p>}
           {titleKo && <p style={{ fontSize: 11, color: '#6B7280', margin: 0 }}>({titleKo})</p>}
         </div>
       )}
 
       {/* 한글 요약 */}
       {koreanSummary && (
-        <div style={{ background: '#F1F5F9', borderRadius: 5, padding: '5px 10px', marginBottom: 10, fontSize: 11, lineHeight: 1.7 }}>
+        <div style={{ background: '#F1F5F9', borderRadius: 5, padding: '6px 12px', marginBottom: 10, fontSize: 11.5, lineHeight: 1.75 }}>
           <span style={{ fontWeight: 900 }}>[내용] </span>{koreanSummary}
         </div>
       )}
 
+      {/* 키워드 박스 (오른쪽 상단) — 별도 행으로 렌더 */}
+      {keywordBullets.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 0 }}>
+          <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
+          <tbody>
+            <tr>
+              <td style={{ padding: 0 }} />
+              <td style={{ padding: '0 0 6px 10px', borderLeft: '2px solid #E2E8F0' }}>
+                <div style={{ border: '1px solid #A5B4FC', borderRadius: 5, padding: '6px 10px', background: '#EEF2FF' }}>
+                  {keywordBullets.map((b, bi) => (
+                    <p key={bi} style={{ margin: bi === 0 ? 0 : '3px 0 0', fontSize: 10.5, color: '#3730A3', fontWeight: 700 }}>→ {b}</p>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
       {/* 본문 / 해석 2단 테이블 */}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <colgroup><col style={{ width: '50%' }} /><col style={{ width: '50%' }} /></colgroup>
+      <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
+        <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
         <tbody>
-          {(sentences || []).map((s, i) => {
-            const showKeywordBox = !keywordRendered && keywordBullets.length > 0;
-            if (showKeywordBox) keywordRendered = true;
-            return (
-              <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                <td style={{ padding: '4px 10px 4px 0', fontSize: 12, lineHeight: 1.9, verticalAlign: 'top' }}>
-                  {s.en}
-                </td>
-                <td style={{ padding: '4px 0 4px 8px', fontSize: 12, lineHeight: 1.7, verticalAlign: 'top', borderLeft: '1px solid #E2E8F0' }}>
-                  {showKeywordBox && (
-                    <div style={{ border: '1px solid #C7D2FE', borderRadius: 5, padding: '5px 8px', marginBottom: 6, background: '#EEF2FF' }}>
-                      {keywordBullets.map((b, bi) => (
-                        <p key={bi} style={{ margin: '0 0 2px', fontSize: 10, color: '#3730A3', fontWeight: 700 }}>→ {b}</p>
-                      ))}
-                    </div>
-                  )}
-                  <span style={{ fontWeight: 700 }}>{s.ko}</span>
-                </td>
-              </tr>
-            );
-          })}
+          {(sentences || []).map((s, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid #E8ECF0' }}>
+              <td style={{ padding: '7px 14px 7px 0', fontSize: 13, lineHeight: 2.0, verticalAlign: 'top' }}>
+                {s.en}
+              </td>
+              <td style={{ padding: '7px 0 7px 10px', fontSize: 12.5, lineHeight: 1.85, verticalAlign: 'top', borderLeft: '2px solid #E2E8F0', color: '#111', fontWeight: 700 }}>
+                {s.ko}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -2721,7 +2726,13 @@ export default function WorkbookPage() {
     if (withAnswer) setDownloadingAnswerPdf(true);
     else setDownloadingPdf(true);
     try {
-      const blob = await capturePdfFromElement(id);
+      // passage_translation: 문제 PDF = P1(본문해석) + P2(어휘표) 합본
+      const blob = typeResult.type === 'passage_translation' && !withAnswer
+        ? await captureAllToPdf([
+            `wb-pdf-problem-${activeTypeTab}-${activeResultTab}`,
+            `wb-pdf-answer-${activeTypeTab}-${activeResultTab}`,
+          ])
+        : await capturePdfFromElement(id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -2772,11 +2783,22 @@ export default function WorkbookPage() {
       let ids: string[] = [];
       if (wbPdfLayout === 'passage') {
         for (let pi = 0; pi < maxPassages; pi++) {
-          allResults.forEach(({ results }, ti) => { if (pi < results.length && !results[pi].error) ids.push(`wb-pdf-${suffix}-${ti}-${pi}`); });
+          allResults.forEach(({ type, results }, ti) => {
+            if (pi < results.length && !results[pi].error) {
+              ids.push(`wb-pdf-${suffix}-${ti}-${pi}`);
+              // passage_translation 문제 PDF는 P2(어휘표)도 함께 포함
+              if (type === 'passage_translation' && !withAnswer) ids.push(`wb-pdf-answer-${ti}-${pi}`);
+            }
+          });
         }
       } else if (wbPdfLayout === 'type') {
-        allResults.forEach(({ results }, ti) => {
-          results.forEach((r, pi) => { if (!r.error) ids.push(`wb-pdf-${suffix}-${ti}-${pi}`); });
+        allResults.forEach(({ type, results }, ti) => {
+          results.forEach((r, pi) => {
+            if (!r.error) {
+              ids.push(`wb-pdf-${suffix}-${ti}-${pi}`);
+              if (type === 'passage_translation' && !withAnswer) ids.push(`wb-pdf-answer-${ti}-${pi}`);
+            }
+          });
         });
       }
       const blob = await captureAllToPdf(ids);
