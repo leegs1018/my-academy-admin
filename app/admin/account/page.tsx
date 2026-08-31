@@ -119,13 +119,18 @@ export default function AccountPage() {
       setEmail(session.user.email || '');
       setUserId(uid);
 
-      // 1차: JWT에 내장된 app_metadata·identities로 즉시 소셜 감지 (서버 요청 없음)
+      // 1차: JWT에 내장된 app_metadata·user_metadata·identities로 즉시 소셜 감지 (서버 요청 없음)
+      // 네이버는 magic-link 방식으로 app_metadata.provider='email'이지만
+      // user_metadata.provider='naver'로 저장되므로 user_metadata도 확인
       const jwtProvider = session.user.app_metadata?.provider ?? '';
+      const umProvider = session.user.user_metadata?.provider ?? '';
       const jwtIdentities = (session.user.identities ?? []) as Array<{ provider: string }>;
       let isSocial = SNS_PROVIDERS.includes(jwtProvider) ||
+                     SNS_PROVIDERS.includes(umProvider) ||
                      jwtIdentities.some(i => SNS_PROVIDERS.includes(i.provider));
       let detectedProvider = jwtIdentities.find(i => SNS_PROVIDERS.includes(i.provider))?.provider
-                             || (SNS_PROVIDERS.includes(jwtProvider) ? jwtProvider : '');
+                             || (SNS_PROVIDERS.includes(jwtProvider) ? jwtProvider : '')
+                             || (SNS_PROVIDERS.includes(umProvider) ? umProvider : '');
 
       // 2차: JWT로 못 잡혔을 때만 서버에서 확인 (엣지케이스 대비)
       if (!isSocial) {
@@ -134,8 +139,9 @@ export default function AccountPage() {
         const ids = (targetUser.identities ?? []) as Array<{ provider: string }>;
         const sns = ids.find(i => SNS_PROVIDERS.includes(i.provider));
         const ap = targetUser.app_metadata?.provider ?? '';
-        isSocial = !!sns || SNS_PROVIDERS.includes(ap);
-        detectedProvider = sns?.provider || (SNS_PROVIDERS.includes(ap) ? ap : '');
+        const um = targetUser.user_metadata?.provider ?? '';
+        isSocial = !!sns || SNS_PROVIDERS.includes(ap) || SNS_PROVIDERS.includes(um);
+        detectedProvider = sns?.provider || (SNS_PROVIDERS.includes(ap) ? ap : '') || (SNS_PROVIDERS.includes(um) ? um : '');
       }
 
       setProvider(detectedProvider || 'email');
