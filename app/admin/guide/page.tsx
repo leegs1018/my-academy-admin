@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-type MainTab = 'pdf' | 'ai' | 'wb';
+type MainTab = 'pdf' | 'ai' | 'wb' | 'attendance' | 'grade';
 type SubTab = 'direct' | 'image' | 'mock';
 
 interface PricingItem { feature_key: string; cost_per_use: number; }
@@ -458,10 +458,43 @@ const WB_TYPE_INFO: Record<string, { label: string; icon: string }> = {
   summary_sentence:    { label: '요약문 서술형',          icon: '📋' },
 };
 
+const ATTENDANCE_STEPS = [
+  { title: '키오스크 코드 확인', desc: '계정 설정 메뉴에서 학원의 키오스크 코드(6자리 숫자)를 확인합니다.' },
+  { title: '키오스크 기기 접속', desc: '학원 로비의 태블릿·PC에서 브라우저로 [학원 주소]/kiosk 에 접속합니다.' },
+  { title: '학원 코드 입력 후 저장', desc: '키오스크 화면에 6자리 코드를 입력하면 학원명이 표시됩니다. 이후 같은 기기에선 자동 저장되어 바로 사용 가능합니다.' },
+  { title: '학생 전화번호 입력', desc: '학생이 직접 본인 또는 부모 전화번호 뒤 4자리를 키패드로 입력합니다.' },
+  { title: '본인 선택 → 등원/하원', desc: '같은 번호의 학생이 여러 명이면 이름을 선택합니다. 등원 또는 하원 버튼을 누르면 출석이 처리됩니다.' },
+  { title: '출석부 확인 (어드민)', desc: '출석체크 메뉴에서 날짜·반을 선택해 전체 출석 현황을 확인하고, 필요시 수동으로 상태를 변경합니다.' },
+  { title: '학부모 알림 발송', desc: '출석 상태 변경 시 학부모 SMS 또는 알림톡을 즉시 발송할 수 있습니다.' },
+];
+
+const ATTENDANCE_TIPS = '키오스크 기기는 30초간 조작이 없으면 초기 화면으로 자동 복귀합니다. 학원 코드는 계정 설정에서 언제든 확인할 수 있습니다.';
+
+const GRADE_STEPS_INPUT = [
+  { title: '성적 입력 탭 선택', desc: '성적 발송 메뉴 진입 후 상단 \'성적 입력\' 탭을 선택합니다.' },
+  { title: '반·월·과목 선택', desc: '대상 반, 입력할 달(月), 시험 카테고리(과목/시험명)를 선택합니다. 카테고리는 우측 + 버튼으로 직접 추가할 수 있습니다.' },
+  { title: '만점 및 회차 설정', desc: '시험 만점 점수와 회차(날짜)를 설정합니다.' },
+  { title: '학생별 점수 입력', desc: '학생 목록에서 각 학생의 점수를 입력합니다. 빈칸으로 두면 해당 학생은 미응시 처리됩니다.' },
+  { title: '저장', desc: '저장 버튼을 눌러 입력한 점수를 저장합니다.' },
+];
+
+const GRADE_STEPS_SEND = [
+  { title: '성적 발송 탭 선택', desc: '상단 \'성적 발송\' 탭을 클릭합니다.' },
+  { title: '반·회차·과목 선택', desc: '발송할 반과 시험 회차(날짜), 과목을 선택합니다. 과목은 복수 선택 가능합니다.' },
+  { title: '발송 대상 선택', desc: '학부모 / 학생 / 둘 다 중 발송 대상을 선택합니다.' },
+  { title: '학생 선택 및 미리보기', desc: '개별 학생을 선택(전체 선택 가능)하면 실제 발송될 문자 내용을 미리볼 수 있습니다.' },
+  { title: '발송', desc: '내용을 확인한 후 발송 버튼을 눌러 SMS를 전송합니다. 발송 결과(성공/실패 건수)가 즉시 표시됩니다.' },
+  { title: '발송 이력 확인', desc: '\'발송 이력\' 탭에서 과거에 발송한 내역과 개별 학생별 수신 내역을 조회할 수 있습니다.' },
+];
+
+const GRADE_TIPS = '성적 발송은 CON이 차감되지 않습니다. 성적 입력 후 발송 탭으로 이동해 원하는 학생을 선택해서 전송하세요. 발송 전 반드시 미리보기로 내용을 확인하세요.';
+
 const MAIN_TABS = [
-  { key: 'pdf' as MainTab, label: '지문분석',       icon: '📝', href: '/admin/pdf-editor',   color: 'bg-teal-600' },
-  { key: 'wb'  as MainTab, label: '워크북',         icon: '📌', href: '/admin/vocab-choice', color: 'bg-violet-600' },
-  { key: 'ai'  as MainTab, label: '실전 변형 문제', icon: '🎯', href: '/admin/ai-questions', color: 'bg-indigo-600' },
+  { key: 'pdf'        as MainTab, label: '지문분석',       icon: '📝', href: '/admin/pdf-editor',   color: 'bg-teal-600' },
+  { key: 'wb'         as MainTab, label: '워크북',         icon: '📌', href: '/admin/vocab-choice', color: 'bg-violet-600' },
+  { key: 'ai'         as MainTab, label: '실전 변형 문제', icon: '🎯', href: '/admin/ai-questions', color: 'bg-indigo-600' },
+  { key: 'attendance' as MainTab, label: '출석 키오스크',  icon: '✅', href: '/admin/attendance',   color: 'bg-emerald-600' },
+  { key: 'grade'      as MainTab, label: '성적 발송',      icon: '📊', href: '/admin/grade-input',  color: 'bg-sky-600' },
 ];
 
 const SUB_TABS = [
@@ -554,7 +587,8 @@ export default function GuidePage() {
       .catch(() => {});
   }, []);
 
-  const guide = mainTab === 'pdf' ? PDF_GUIDES[subTab] : mainTab === 'ai' ? AI_GUIDES[subTab] : WB_GUIDES[subTab];
+  const isAiTab = mainTab === 'pdf' || mainTab === 'ai' || mainTab === 'wb';
+  const guide = mainTab === 'pdf' ? PDF_GUIDES[subTab] : mainTab === 'ai' ? AI_GUIDES[subTab] : mainTab === 'wb' ? WB_GUIDES[subTab] : null;
   const activeMain = MAIN_TABS.find(t => t.key === mainTab)!;
   const conLabel = mainTab === 'pdf' ? '지문 1개당' : mainTab === 'wb' ? '유형 1개당' : '유형 1개당';
 
@@ -574,57 +608,88 @@ export default function GuidePage() {
       </div>
 
       {/* 메인 탭 */}
-      <div className="flex gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
         {MAIN_TABS.map(t => (
           <button
             key={t.key}
             onClick={() => { setMainTab(t.key); setSubTab('direct'); }}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-black text-sm transition-all border-2 ${
+            className={`flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-black text-xs transition-all border-2 ${
               mainTab === t.key
                 ? `${t.color} text-white border-transparent shadow-lg`
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300'
             }`}
           >
-            <span className="text-base">{t.icon}</span>
-            {t.label}
+            <span className="text-lg">{t.icon}</span>
+            <span className="leading-tight text-center">{t.label}</span>
           </button>
         ))}
       </div>
 
       {/* 이용 방법 카드 */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
-        {/* 서브 탭 */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800">
-          {SUB_TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setSubTab(t.key)}
-              className={`flex-1 py-3 text-xs font-black transition-all border-b-2 ${
-                subTab === t.key
-                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20'
-                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}
-            >
-              <span className="mr-1">{t.icon}</span>{t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 콘텐츠 */}
-        <div className="p-6 space-y-5">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-base font-black text-slate-800 dark:text-slate-100">
-              {activeMain.icon} {activeMain.label} — {guide.title}
-            </h2>
-            <ConBadge amount={conAmount(pricing, mainTab, subTab)} label={conLabel} />
+      {mainTab === 'attendance' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+          <div className="px-6 pt-5 pb-1">
+            <h2 className="text-base font-black text-slate-800 dark:text-slate-100">{activeMain.icon} {activeMain.label} 이용 방법</h2>
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">CON 차감 없이 무제한 사용 가능합니다</p>
           </div>
-          <StepList steps={guide.steps} />
-          <TipBox>{guide.tips}</TipBox>
+          <div className="p-6 space-y-5">
+            <StepList steps={ATTENDANCE_STEPS} />
+            <TipBox>{ATTENDANCE_TIPS}</TipBox>
+          </div>
         </div>
-      </div>
+      ) : mainTab === 'grade' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+          <div className="px-6 pt-5 pb-1">
+            <h2 className="text-base font-black text-slate-800 dark:text-slate-100">{activeMain.icon} {activeMain.label} 이용 방법</h2>
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">CON 차감 없이 무제한 사용 가능합니다</p>
+          </div>
+          <div className="p-6 space-y-6">
+            <div>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200 mb-3">① 성적 입력</p>
+              <StepList steps={GRADE_STEPS_INPUT} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200 mb-3">② 성적 발송</p>
+              <StepList steps={GRADE_STEPS_SEND} />
+            </div>
+            <TipBox>{GRADE_TIPS}</TipBox>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
+          {/* 서브 탭 */}
+          <div className="flex border-b border-slate-100 dark:border-slate-800">
+            {SUB_TABS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setSubTab(t.key)}
+                className={`flex-1 py-3 text-xs font-black transition-all border-b-2 ${
+                  subTab === t.key
+                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20'
+                    : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <span className="mr-1">{t.icon}</span>{t.label}
+              </button>
+            ))}
+          </div>
 
-      {/* 결과물 예시 */}
-      <div className="space-y-3">
+          {/* 콘텐츠 */}
+          <div className="p-6 space-y-5">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-base font-black text-slate-800 dark:text-slate-100">
+                {activeMain.icon} {activeMain.label} — {guide!.title}
+              </h2>
+              <ConBadge amount={conAmount(pricing, mainTab, subTab)} label={conLabel} />
+            </div>
+            <StepList steps={guide!.steps} />
+            <TipBox>{guide!.tips}</TipBox>
+          </div>
+        </div>
+      )}
+
+      {/* 결과물 예시 (AI 탭만 표시) */}
+      {isAiTab && <div className="space-y-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-black text-slate-800 dark:text-slate-100">🖼 결과물 예시</h3>
           <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">활성화된 유형만 표시됩니다</span>
@@ -667,7 +732,7 @@ export default function GuidePage() {
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-6 text-center text-sm font-bold text-slate-400">활성화된 유형이 없습니다. 슈퍼어드민에게 워크북 유형 활성화를 요청하세요.</div>
           )
         )}
-      </div>
+      </div>}
 
       {/* 바로가기 버튼 */}
       <Link
@@ -677,8 +742,8 @@ export default function GuidePage() {
         {activeMain.icon} {activeMain.label} 바로가기
       </Link>
 
-      {/* CON 안내 */}
-      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-2xl p-5 space-y-3">
+      {/* CON 안내 (AI 탭만 표시) */}
+      {isAiTab && <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-2xl p-5 space-y-3">
         <h3 className="text-sm font-black text-yellow-800 dark:text-yellow-300">⭐ CON(크레딧) 안내</h3>
         <div className="grid grid-cols-2 gap-2">
           {conTable.map(item => (
@@ -691,7 +756,7 @@ export default function GuidePage() {
         <p className="text-xs font-bold text-yellow-700 dark:text-yellow-400">
           CON 충전 메뉴에서 카드결제 또는 무통장입금으로 직접 충전할 수 있습니다. 3,000C 이상 충전 시 +5% · 5,000C 이상 +7% · 10,000C 이상 +10% 보너스가 적립됩니다. 충전 및 환불 문의는 문의하기 게시판을 이용해주세요.
         </p>
-      </div>
+      </div>}
 
       {/* FAQ */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 space-y-4">
