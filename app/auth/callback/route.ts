@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { sendPpurioSms } from '@/lib/ppurio';
 import type { EmailOtpType } from '@supabase/supabase-js';
 
 export async function GET(request: NextRequest) {
@@ -84,6 +85,23 @@ export async function GET(request: NextRequest) {
         feature_key: 'signup_bonus',
         description: '신규 가입 보너스',
       });
+
+      // 슈퍼어드민 신규 가입 알림 SMS (newUser는 위에서 이미 조회됨)
+      try {
+        const { data: notifySetting } = await admin
+          .from('site_settings')
+          .select('value')
+          .eq('key', 'admin_notify_phone')
+          .single();
+        const adminPhone = notifySetting?.value?.trim();
+        if (adminPhone) {
+          const userEmail = newUser?.email ?? '';
+          await sendPpurioSms(
+            adminPhone,
+            `[CON EDU] 소셜 신규 가입\n학원명: ${randomName}\n이메일: ${userEmail}`,
+          );
+        }
+      } catch { /* 알림 실패는 가입 자체에 영향 없음 */ }
 
       redirectTarget = `${origin}/auth/agree-terms`;
     } else {
