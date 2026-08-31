@@ -1632,10 +1632,6 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
           </tbody>
         </table>
 
-        {/* 페이지 번호 */}
-        <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#6b7280' }}>
-          - 1 -
-        </div>
       </div>
     </div>
   );
