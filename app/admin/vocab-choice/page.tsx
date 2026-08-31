@@ -1546,60 +1546,124 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
   const koreanSummary = result.korean_summary as string || '';
   const keywordBullets = result.keyword_bullets as string[] || [];
 
+  const outerStyle: React.CSSProperties = {
+    position: 'fixed', top: 0, left: 0, width: '800px',
+    background: 'white', boxSizing: 'border-box',
+    fontFamily: 'Arial, Helvetica, sans-serif', zIndex: -9999, pointerEvents: 'none',
+    border: '2px solid #1e293b',
+    minHeight: '1090px',
+    display: 'flex', flexDirection: 'column',
+  };
+
   return (
-    <div id={id} style={{ ...PDF_BASE, minHeight: '1090px', display: 'flex', flexDirection: 'column' }}>
-      <PdfPageHeader>{title || '지문 해석지'}</PdfPageHeader>
-
-      {/* 제목 섹션 */}
-      {(titleEn || titleKo) && (
-        <div style={{ textAlign: 'center', marginBottom: 6 }}>
-          {titleEn && <p style={{ fontSize: 14, fontWeight: 900, margin: '0 0 2px' }}>{titleEn}</p>}
-          {titleKo && <p style={{ fontSize: 11, color: '#6B7280', margin: 0 }}>({titleKo})</p>}
+    <div id={id} style={outerStyle}>
+      {/* 헤더 바 */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '7px 14px', borderBottom: '2px solid #1e293b', background: '#f8fafc',
+      }}>
+        <div style={{
+          background: '#1e293b', color: '#fff', borderRadius: 4,
+          padding: '4px 14px', fontSize: 11.5, fontWeight: 900,
+        }}>
+          {title || '지문 해석지'}
         </div>
-      )}
-
-      {/* 한글 요약 */}
-      {koreanSummary && (
-        <div style={{ background: '#F1F5F9', borderRadius: 5, padding: '6px 12px', marginBottom: 10, fontSize: 11.5, lineHeight: 1.75 }}>
-          <span style={{ fontWeight: 900 }}>[내용] </span>{koreanSummary}
+        <div style={{
+          border: '1.5px solid #1e293b', borderRadius: 4,
+          padding: '4px 14px', fontSize: 11, fontWeight: 900,
+        }}>
+          단계별 WORKBOOK 지문 연습하기
         </div>
-      )}
+      </div>
 
-      {/* 키워드 박스 (오른쪽 상단) — 별도 행으로 렌더 */}
-      {keywordBullets.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 0 }}>
-          <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
+      {/* 내용 영역 */}
+      <div style={{ padding: '14px 28px 16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+
+        {/* ── 상단 테두리 박스: 제목 + 내용요약 + 키워드 ── */}
+        {(titleEn || titleKo || koreanSummary || keywordBullets.length > 0) && (
+          <div style={{
+            border: '1.5px solid #94a3b8', borderRadius: 6,
+            marginBottom: 14, overflow: 'hidden',
+          }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
+              <tbody>
+                <tr>
+                  {/* 왼쪽: 제목 + 내용 요약 */}
+                  <td style={{ padding: '12px 14px', verticalAlign: 'top', borderRight: '1.5px solid #94a3b8' }}>
+                    {(titleEn || titleKo) && (
+                      <div style={{ textAlign: 'center', marginBottom: koreanSummary ? 10 : 0 }}>
+                        {titleEn && (
+                          <p style={{ fontSize: 13, fontWeight: 900, margin: '0 0 3px', letterSpacing: '0.03em', lineHeight: 1.4 }}>{titleEn}</p>
+                        )}
+                        {titleKo && (
+                          <p style={{ fontSize: 11, color: '#374151', margin: 0 }}>({titleKo})</p>
+                        )}
+                      </div>
+                    )}
+                    {koreanSummary && (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11, lineHeight: 1.75, textAlign: 'justify' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          border: '1.5px solid #374151', borderRadius: '50%',
+                          minWidth: 30, height: 17, fontSize: 9, fontWeight: 900, flexShrink: 0,
+                          marginTop: 2, padding: '0 3px',
+                        }}>내용</span>
+                        <span style={{ flex: 1 }}>{koreanSummary}</span>
+                      </div>
+                    )}
+                  </td>
+                  {/* 오른쪽: 키워드 불렛 */}
+                  <td style={{ padding: '14px 18px', verticalAlign: 'middle', textAlign: 'center' }}>
+                    {keywordBullets.map((b, bi) => (
+                      <React.Fragment key={bi}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 11.5, lineHeight: 1.65 }}>{b}</p>
+                        {bi < keywordBullets.length - 1 && (
+                          <p style={{ margin: '3px 0', fontSize: 12, color: '#64748b' }}>↓</p>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── 본문 / 해석 2단 테이블 ── */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
+          <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
           <tbody>
-            <tr>
-              <td style={{ padding: 0 }} />
-              <td style={{ padding: '0 0 6px 10px', borderLeft: '2px solid #E2E8F0' }}>
-                <div style={{ border: '1px solid #A5B4FC', borderRadius: 5, padding: '6px 10px', background: '#EEF2FF' }}>
-                  {keywordBullets.map((b, bi) => (
-                    <p key={bi} style={{ margin: bi === 0 ? 0 : '3px 0 0', fontSize: 10.5, color: '#3730A3', fontWeight: 700 }}>→ {b}</p>
-                  ))}
-                </div>
-              </td>
-            </tr>
+            {(sentences || []).map((s, i) => (
+              <tr key={i}>
+                <td style={{
+                  padding: '8px 14px 8px 0',
+                  fontSize: 12.5, lineHeight: 2.0,
+                  verticalAlign: 'top', textAlign: 'justify',
+                  borderBottom: i < sentences.length - 1 ? '1px solid #e8ecf0' : 'none',
+                }}>
+                  {s.en}
+                </td>
+                <td style={{
+                  padding: '8px 0 8px 14px',
+                  fontSize: 12, lineHeight: 1.85,
+                  verticalAlign: 'top', textAlign: 'justify',
+                  borderLeft: '1.5px solid #cbd5e1',
+                  color: '#111', fontWeight: 700,
+                  borderBottom: i < sentences.length - 1 ? '1px solid #e8ecf0' : 'none',
+                }}>
+                  {s.ko}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      )}
 
-      {/* 본문 / 해석 2단 테이블 */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
-        <colgroup><col style={{ width: '67%' }} /><col style={{ width: '33%' }} /></colgroup>
-        <tbody>
-          {(sentences || []).map((s, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid #E8ECF0' }}>
-              <td style={{ padding: '7px 14px 7px 0', fontSize: 13, lineHeight: 2.0, verticalAlign: 'top' }}>
-                {s.en}
-              </td>
-              <td style={{ padding: '7px 0 7px 10px', fontSize: 12.5, lineHeight: 1.85, verticalAlign: 'top', borderLeft: '2px solid #E2E8F0', color: '#111', fontWeight: 700 }}>
-                {s.ko}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        {/* 페이지 번호 */}
+        <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#6b7280' }}>
+          - 1 -
+        </div>
+      </div>
     </div>
   );
 }
