@@ -210,17 +210,26 @@ export default function AccountPage() {
   const handleSave = async () => {
     setSaving(true);
     setSaveMsg('');
+
+    // 기본 필드 업데이트 (sms_marketing_agreed 제외 — 컬럼 타입 이슈 대비)
     const { error } = await supabase
       .from('academy_config')
-      .update({ academy_name: academyName, academy_phone: academyPhone, mobile, sms_marketing_agreed: smsMarketingAgreed })
+      .update({ academy_name: academyName, academy_phone: academyPhone, mobile })
       .eq('user_id', userId);
 
     if (error) {
+      console.error('[handleSave] update error:', error);
       setSaving(false);
-      setSaveMsg('저장 중 오류가 발생했습니다.');
-      setTimeout(() => setSaveMsg(''), 3000);
+      setSaveMsg(`저장 중 오류가 발생했습니다. (${error.message})`);
+      setTimeout(() => setSaveMsg(''), 5000);
       return;
     }
+
+    // sms_marketing_agreed 별도 업데이트 (실패해도 무시)
+    supabase.from('academy_config')
+      .update({ sms_marketing_agreed: smsMarketingAgreed })
+      .eq('user_id', userId)
+      .then(({ error: e }) => { if (e) console.warn('[handleSave] sms_marketing_agreed update failed:', e); });
 
     // 프로필 첫 완성 시 200C 지급
     const nowComplete = !!academyName.trim() && (!!academyPhone.trim() || !!mobile.trim());
