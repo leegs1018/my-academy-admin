@@ -1254,7 +1254,7 @@ let _pdfAcademy = '';
 const PDF_BASE: React.CSSProperties = {
   position: 'fixed', top: 0, left: 0, width: '800px',
   background: 'white', padding: '20px 48px 40px', boxSizing: 'border-box',
-  fontFamily: 'Arial, Helvetica, sans-serif', zIndex: -9999, pointerEvents: 'none',
+  fontFamily: "'Nanum Gothic', NanumGothic, Arial, Helvetica, sans-serif", zIndex: -9999, pointerEvents: 'none',
 };
 const PDF_H2: React.CSSProperties = { fontSize: 14, fontWeight: 900, margin: '0 0 16px', borderBottom: '2px solid #333', paddingBottom: 8 };
 const PDF_P: React.CSSProperties = { fontSize: 13, lineHeight: 2, wordBreak: 'break-word' };
@@ -1575,7 +1575,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         border: '1.5px solid #374151', borderRadius: '50%',
-                        minWidth: 30, height: 17, fontSize: 9, fontWeight: 900, flexShrink: 0,
+                        minWidth: 30, height: 17, fontSize: 8, fontWeight: 900, flexShrink: 0,
                         marginTop: 2, padding: '0 3px',
                       }}>내용</span>
                       <span style={{ flex: 1 }}>{koreanSummary}</span>
@@ -1613,14 +1613,14 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
               <tr key={i}>
                 <td style={{
                   padding: '8px 14px 8px 0',
-                  fontSize: 12.5, lineHeight: 2.0,
+                  fontSize: 13.5, lineHeight: 2.0,
                   verticalAlign: 'top', textAlign: 'justify',
                 }}>
                   {s.en}
                 </td>
                 <td style={{
                   padding: '8px 0 8px 14px',
-                  fontSize: 12, lineHeight: 1.85,
+                  fontSize: 11, lineHeight: 1.85,
                   verticalAlign: 'top', textAlign: 'justify',
                   borderLeft: '1.5px solid #cbd5e1',
                   color: '#111',
@@ -2772,7 +2772,7 @@ export default function WorkbookPage() {
       const title = activeTab === 'input' ? inputTitle : mockTitle;
       const typeLabel = TYPE_LABELS[typeResult.type];
       const passageLabel = typeResult.results.length > 1 ? `_지문${activeResultTab + 1}` : '';
-      a.download = `${title ? `${title}_${typeLabel}` : typeLabel}${passageLabel}${withAnswer ? '_정답' : '_문제'}.pdf`;
+      a.download = `${typeLabel}${title ? `_${title}` : ''}${passageLabel}${withAnswer ? '_정답' : '_문제'}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -2797,7 +2797,7 @@ export default function WorkbookPage() {
       const a = document.createElement('a');
       a.href = url;
       const title = activeTab === 'input' ? inputTitle : mockTitle;
-      a.download = `${title || '워크북'}_심플답지.pdf`;
+      a.download = `심플답지_${title || '워크북'}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -2839,7 +2839,7 @@ export default function WorkbookPage() {
       const a = document.createElement('a');
       a.href = url;
       const title = activeTab === 'input' ? inputTitle : mockTitle;
-      a.download = `${title || '워크북'}_전체${withAnswer ? '_정답' : '_문제'}.pdf`;
+      a.download = `전체_${title || '워크북'}${withAnswer ? '_정답' : '_문제'}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -3401,13 +3401,13 @@ export default function WorkbookPage() {
                     </span>
                     <div className="flex justify-center">
                       {item.pdf_path
-                        ? <button onClick={() => downloadFromHistory(item.pdf_path!, `${item.title || '워크북'}_문제.pdf`)}
+                        ? <button onClick={() => downloadFromHistory(item.pdf_path!, `워크북_${item.title || ''}_문제.pdf`)}
                             className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-slate-800 rounded-lg text-xs font-black w-full text-center">⬇️ 문제</button>
                         : <span className="text-xs text-slate-300 font-bold text-center w-full">저장중</span>}
                     </div>
                     <div className="flex justify-center">
                       {item.answer_pdf_path
-                        ? <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `${item.title || '워크북'}_정답.pdf`)}
+                        ? <button onClick={() => downloadFromHistory(item.answer_pdf_path!, `워크북_${item.title || ''}_정답.pdf`)}
                             className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black w-full text-center">⬇️ 정답</button>
                         : <span className="text-xs text-slate-300 font-bold text-center w-full">-</span>}
                     </div>
