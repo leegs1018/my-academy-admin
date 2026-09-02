@@ -1571,7 +1571,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                     </div>
                   )}
                   {koreanSummary && (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11, lineHeight: 1.75, textAlign: 'justify' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 10, lineHeight: 1.75, textAlign: 'justify' }}>
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         border: '1.5px solid #374151', borderRadius: '50%',
