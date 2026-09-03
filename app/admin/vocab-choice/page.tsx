@@ -171,6 +171,8 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
 async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean): Promise<boolean> {
   const el = document.getElementById(elementId);
   if (!el) return false;
+  const cs = window.getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden' || el.offsetHeight === 0) return false;
   const { toJpeg } = await import('html-to-image');
   const W = 210, M = 10, cW = W - 2 * M, maxH = 277;
   const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
@@ -1656,7 +1658,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
 // ── 지문 해석지 페이지2: 주요 어휘와 뜻 ──────────────────────────────────────
 function PdfPassageTranslationP2({ result, id, title }: { result: WorkbookResult; id: string; title?: string }) {
   const vocabTable = result.vocab_table as VocabRow[] || [];
-  if (!vocabTable.length) return <div id={id} style={{ ...PDF_BASE, display: 'none' }} />;
+  if (!vocabTable.length) return null;
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title || '지문 해석지'} — 주요 어휘와 뜻</PdfPageHeader>
