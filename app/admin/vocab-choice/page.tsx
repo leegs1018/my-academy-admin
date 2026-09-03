@@ -1271,7 +1271,7 @@ function PdfPageHeader({ children, mb }: { children: React.ReactNode; mb?: numbe
 function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResult; isAnswer: boolean; title: string; id: string }) {
   const sentences = splitBySentence(result.passage as string || '');
   const choiceBase: React.CSSProperties = { borderRadius: 4, padding: '2px 6px', margin: '0 2px', fontWeight: 900, fontSize: 16 };
-  const sentStyle: React.CSSProperties = { fontSize: 15, lineHeight: 3.8, wordBreak: 'break-word', margin: 0 };
+  const sentStyle: React.CSSProperties = { fontSize: 15, lineHeight: 2.5, wordBreak: 'break-word', margin: 0 };
   return (
     <div id={id} style={PDF_BASE}>
       <PdfPageHeader>{title}</PdfPageHeader>
@@ -1437,7 +1437,7 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
       <PdfPageHeader>{title}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rawSentences.map((sent, si) => (
-          <p key={si} style={{ ...PDF_P, lineHeight: 3.8, margin: 0 }}>
+          <p key={si} style={{ ...PDF_P, lineHeight: 2.5, margin: 0 }}>
             {renderSentence(sent, si)}
           </p>
         ))}
@@ -2330,7 +2330,7 @@ function PdfResultContent({ result, type, isAnswer, title, id, embedded }: {
     case 'vocab_choice':
     case 'grammar_choice': {
       const cb: React.CSSProperties = { background: '#FFF9C4', borderRadius: 3, padding: '1px 4px', margin: '0 1px' };
-      const sStyle: React.CSSProperties = { fontSize: 13, lineHeight: 3.8, wordBreak: 'break-word', margin: 0 };
+      const sStyle: React.CSSProperties = { fontSize: 13, lineHeight: 2.5, wordBreak: 'break-word', margin: 0 };
       const sentences2 = splitBySentence(result.passage as string || '');
       return wrap(<>{h2}
         <div>{sentences2.map((sentence, si) => {
