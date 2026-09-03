@@ -190,12 +190,15 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
     let sliceY = 0; let firstSlice = true;
     while (sliceY < img.naturalHeight) {
       const sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
+      const sliceContentH = cW * (sliceH / img.naturalWidth);
+      // 마지막 슬라이스가 10mm 미만(= bottom padding만 넘친 경우)이면 빈 페이지 방지
+      const isLastSlice = sliceY + sliceH >= img.naturalHeight;
+      if (isLastSlice && sliceContentH < 10) break;
       const sliceCanvas = document.createElement('canvas');
       sliceCanvas.width = img.naturalWidth; sliceCanvas.height = sliceH;
       const sliceCtx = sliceCanvas.getContext('2d')!;
       sliceCtx.drawImage(canvas, 0, sliceY, img.naturalWidth, sliceH, 0, 0, img.naturalWidth, sliceH);
       const sliceUrl = sliceCanvas.toDataURL('image/jpeg', 0.92);
-      const sliceContentH = cW * (sliceH / img.naturalWidth);
       if (!firstSlice) pdf.addPage();
       pdf.addImage(sliceUrl, 'JPEG', M, M, cW, sliceContentH);
       sliceY += sliceH; firstSlice = false;
