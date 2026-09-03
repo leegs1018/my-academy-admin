@@ -894,21 +894,21 @@ export default function AiQuestionsPage() {
     if (activeMainTab === 'history') fetchHistory();
   }, [activeMainTab]);
 
-  // ── 모의고사 cascade useEffects ──
+  // ── 모의고사 cascade useEffects (학년 → 년도 → 시험명) ──
   useEffect(() => {
-    supabase.from('mock_exam_passages').select('year').order('year', { ascending: false })
-      .then(({ data }) => { setMockYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+    supabase.from('mock_exam_passages').select('grade').order('grade', { ascending: true })
+      .then(({ data }) => { setMockGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, []);
 
   useEffect(() => {
-    if (!mockSelectedYear) return;
-    setMockSelectedGrade(''); setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
-    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(mockSelectedYear)).order('grade', { ascending: true })
-      .then(({ data }) => { setMockGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
-  }, [mockSelectedYear]);
+    if (!mockSelectedGrade) return;
+    setMockSelectedYear(''); setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    supabase.from('mock_exam_passages').select('year').eq('grade', mockSelectedGrade).order('year', { ascending: false })
+      .then(({ data }) => { setMockYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+  }, [mockSelectedGrade]);
 
   useEffect(() => {
-    if (!mockSelectedYear || !mockSelectedGrade) return;
+    if (!mockSelectedGrade || !mockSelectedYear) return;
     setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).order('institution', { ascending: true })
       .then(({ data }) => {
@@ -920,7 +920,7 @@ export default function AiQuestionsPage() {
         });
         setMockInstitutions(unique);
       });
-  }, [mockSelectedYear, mockSelectedGrade]);
+  }, [mockSelectedGrade, mockSelectedYear]);
 
   useEffect(() => {
     if (!mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
@@ -2361,9 +2361,9 @@ export default function AiQuestionsPage() {
             <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               {[
-                { label: '년도', value: mockSelectedYear, onChange: setMockSelectedYear, disabled: false, options: mockYears.map(y => ({ value: String(y), label: `${y}년` })) },
-                { label: '학년', value: mockSelectedGrade, onChange: setMockSelectedGrade, disabled: !mockSelectedYear, options: mockGrades.map(g => ({ value: g, label: g })) },
-                { label: '시험명/기관', value: mockSelectedInstitution, onChange: setMockSelectedInstitution, disabled: !mockSelectedGrade, options: mockInstitutions.map(i => ({ value: i, label: i })) },
+                { label: '학년', value: mockSelectedGrade, onChange: setMockSelectedGrade, disabled: false, options: mockGrades.map(g => ({ value: g, label: g })) },
+                { label: '년도', value: mockSelectedYear, onChange: setMockSelectedYear, disabled: !mockSelectedGrade, options: mockYears.map(y => ({ value: String(y), label: `${y}년` })) },
+                { label: '시험명/기관', value: mockSelectedInstitution, onChange: setMockSelectedInstitution, disabled: !mockSelectedYear, options: mockInstitutions.map(i => ({ value: i, label: i })) },
               ].map(({ label, value, onChange, disabled, options }) => (
                 <div key={label}>
                   <label className="block text-xs font-black text-gray-400 mb-1.5">{label}</label>
