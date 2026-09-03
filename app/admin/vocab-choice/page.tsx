@@ -1341,7 +1341,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
       <div id={id} style={PDF_BASE}>
         <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
+          <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
           <tbody>
             {sentences.map((s, si) => {
               const rawParts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
@@ -1571,7 +1571,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
         {/* ── 상단: 제목 + 내용요약(테두리 없음) + 키워드(테두리만) ── */}
         {(titleEn || titleKo || koreanSummary || keywordBullets.length > 0) && (
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
-            <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
+            <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
             <tbody>
               <tr>
                 {/* 왼쪽: 제목 + 내용 요약 — 테두리 없음 */}
@@ -1623,7 +1623,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
 
         {/* ── 본문 / 해석 2단 테이블 ── */}
         <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
-          <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
+          <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
           <tbody>
             {(sentences || []).map((s, i) => (
               <tr key={i}>
