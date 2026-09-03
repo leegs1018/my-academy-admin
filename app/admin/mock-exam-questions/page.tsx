@@ -506,21 +506,21 @@ export default function MockExamQuestionsPage() {
 
   useEffect(() => { setPdfSortedQuestions([]); }, [questions, pdfLayout]);
 
-  // 캐스케이드 셀렉트
+  // 캐스케이드 셀렉트 (학년 → 년도 → 시험명)
   useEffect(() => {
-    supabase.from('mock_exam_passages').select('year').order('year', { ascending: false })
-      .then(({ data }) => { setYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+    supabase.from('mock_exam_passages').select('grade').order('grade', { ascending: true })
+      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, []);
 
   useEffect(() => {
-    if (!selectedYear) return;
-    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
-    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear)).order('grade', { ascending: true })
-      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
-  }, [selectedYear]);
+    if (!selectedGrade) return;
+    setSelectedYear(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
+    supabase.from('mock_exam_passages').select('year').eq('grade', selectedGrade).order('year', { ascending: false })
+      .then(({ data }) => { setYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+  }, [selectedGrade]);
 
   useEffect(() => {
-    if (!selectedYear || !selectedGrade) return;
+    if (!selectedGrade || !selectedYear) return;
     setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({}); setLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).order('institution', { ascending: true })
       .then(({ data }) => {
@@ -532,7 +532,7 @@ export default function MockExamQuestionsPage() {
         });
         setInstitutions(unique);
       });
-  }, [selectedYear, selectedGrade]);
+  }, [selectedGrade, selectedYear]);
 
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
@@ -873,9 +873,9 @@ export default function MockExamQuestionsPage() {
           <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             {[
-              { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
-              { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
-              { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
+              { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: false, options: grades.map(g => ({ value: g, label: g })) },
+              { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: !selectedGrade, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
+              { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedYear, options: institutions.map(i => ({ value: i, label: i })) },
             ].map(({ label, value, onChange, disabled, options }) => (
               <div key={label}>
                 <label className="block text-xs font-black text-gray-400 mb-1.5">{label}</label>
@@ -921,7 +921,7 @@ export default function MockExamQuestionsPage() {
               )}
             </div>
           )}
-          {!selectedYear && <p className="text-sm text-gray-400 font-medium">년도를 선택하면 학년, 시험명/기관, 문제번호를 차례로 선택할 수 있습니다.</p>}
+          {!selectedGrade && <p className="text-sm text-gray-400 font-medium">학년을 선택하면 년도, 시험명/기관, 문제번호를 차례로 선택할 수 있습니다.</p>}
 
           {/* 선택된 지문 미리보기 */}
           {sortedSelectedNumbers.length > 0 && (

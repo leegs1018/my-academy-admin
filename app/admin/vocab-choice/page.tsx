@@ -2567,19 +2567,19 @@ export default function WorkbookPage() {
     }).catch(() => { setPricingLoaded(true); });
   }, []);
 
-  // Mock cascade selectors
+  // Mock cascade selectors (학년 → 년도 → 시험명)
   useEffect(() => {
-    supabase.from('mock_exam_passages').select('year').order('year', { ascending: false })
-      .then(({ data }) => { setYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+    supabase.from('mock_exam_passages').select('grade').order('grade', { ascending: true })
+      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
   }, []);
   useEffect(() => {
-    if (!selectedYear) return;
-    setSelectedGrade(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
-    supabase.from('mock_exam_passages').select('grade').eq('year', parseInt(selectedYear))
-      .then(({ data }) => { setGrades([...new Set((data ?? []).map((r: { grade: string }) => r.grade))]); });
-  }, [selectedYear]);
+    if (!selectedGrade) return;
+    setSelectedYear(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
+    supabase.from('mock_exam_passages').select('year').eq('grade', selectedGrade).order('year', { ascending: false })
+      .then(({ data }) => { setYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
+  }, [selectedGrade]);
   useEffect(() => {
-    if (!selectedYear || !selectedGrade) return;
+    if (!selectedGrade || !selectedYear) return;
     setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade)
       .then(({ data }) => {
@@ -2587,7 +2587,7 @@ export default function WorkbookPage() {
         unique.sort((a, b) => (parseInt(a.match(/^(\d+)/)?.[1] ?? '99')) - (parseInt(b.match(/^(\d+)/)?.[1] ?? '99')));
         setInstitutions(unique);
       });
-  }, [selectedYear, selectedGrade]);
+  }, [selectedGrade, selectedYear]);
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
     setSelectedNumbers([]); setPassageMap({});
@@ -3096,9 +3096,9 @@ export default function WorkbookPage() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: false, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
-                  { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: !selectedYear, options: grades.map(g => ({ value: g, label: g })) },
-                  { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedGrade, options: institutions.map(i => ({ value: i, label: i })) },
+                  { label: '학년', value: selectedGrade, onChange: setSelectedGrade, disabled: false, options: grades.map(g => ({ value: g, label: g })) },
+                  { label: '년도', value: selectedYear, onChange: setSelectedYear, disabled: !selectedGrade, options: years.map(y => ({ value: String(y), label: `${y}년` })) },
+                  { label: '시험명/기관', value: selectedInstitution, onChange: setSelectedInstitution, disabled: !selectedYear, options: institutions.map(i => ({ value: i, label: i })) },
                 ].map(({ label, value, onChange, disabled, options }) => (
                   <div key={label}>
                     <label className="block text-xs font-black text-slate-500 mb-1">{label}</label>
