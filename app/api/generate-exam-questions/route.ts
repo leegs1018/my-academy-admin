@@ -1237,8 +1237,11 @@ STEP 3
 Generate A/B/C groupings:
 - Intro: 1~2 sentences that can stand alone as an opening
 - A, B, C: remaining sentences grouped by logical role
-- Determine the ONLY correct order based on logical progression, referential cohesion, and discourse continuity
-- State which choice number (1~5) the correct order maps to: 1=(A)-(B)-(C), 2=(A)-(C)-(B), 3=(B)-(A)-(C), 4=(B)-(C)-(A), 5=(C)-(A)-(B)
+- CRITICAL: The correct reading order MUST always be (A)→(B)→(C). The answer is ALWAYS 1 = ① (A)-(B)-(C).
+  · (A) = the FIRST logical segment (follows directly from the intro)
+  · (B) = the SECOND logical segment
+  · (C) = the THIRD / concluding logical segment
+- Do NOT arrange segments so that any other order is correct. Only (A)-(B)-(C) must be the valid reading order.
 
 STEP 4
 Verify:
@@ -1534,8 +1537,9 @@ export async function POST(request: Request) {
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'a2' | 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
       const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 4 : 4;
-      // sentence_order, grammar는 지문/오류 위치가 AI가 자연스럽게 결정하므로 targetAnswer 강제 불가
-      const targetAnswer = (questionType === 'sentence_order' || questionType === 'grammar') ? undefined : Math.floor(Math.random() * 5) + 1;
+      // grammar는 오류 위치를 AI가 결정하므로 targetAnswer 강제 불가
+      // sentence_order는 셔플 전 항상 answer=1 고정 → AI가 (A)→(B)→(C) 순서를 정답으로 작성하도록 강제
+      const targetAnswer = questionType === 'grammar' ? undefined : (questionType === 'sentence_order' ? 1 : Math.floor(Math.random() * 5) + 1);
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       const isMultiStep = MULTI_STEP_TYPES.has(questionType);
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1561,7 +1565,7 @@ export async function POST(request: Request) {
             }
 
             if (analysis) {
-              const step2Instruction = (questionType === 'sentence_order' || questionType === 'grammar')
+              const step2Instruction = questionType === 'grammar'
                 ? `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 오류 위치와 구조를 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, undefined)}`
                 : `위 분석을 바탕으로 문제를 생성하라. 분석에서 결정한 구조와 정답(${targetAnswer}번)을 정확히 반영할 것.\n\n${buildExamPrompt(text, [questionType], difficulty, targetAnswer)}`;
               messages = [
