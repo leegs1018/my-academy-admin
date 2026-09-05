@@ -9,6 +9,7 @@ interface Passage {
   grade: string;
   exam_name: string;
   question_number: number;
+  question_group: string | null;
   passage_text: string;
   created_at: string;
 }
@@ -19,7 +20,29 @@ interface EditForm {
   grade: string;
   exam_name: string;
   question_number: string;
+  question_group: string;
   passage_text: string;
+}
+
+function parseQuestionInput(raw: string): { question_number: number; question_group: string | null } {
+  const trimmed = raw.trim();
+  const firstNum = parseInt(trimmed.match(/\d+/)?.[0] ?? '0');
+  const isGroup = /[-,]/.test(trimmed) || /^\d+\s+\d+/.test(trimmed);
+  return {
+    question_number: firstNum,
+    question_group: isGroup ? trimmed : null,
+  };
+}
+
+function questionLabel(p: Passage): string {
+  if (!p.question_group) return `${p.question_number}번`;
+  const g = p.question_group;
+  if (g.includes('-')) {
+    const [s, e] = g.split('-').map(Number);
+    return Array.from({ length: e - s + 1 }, (_, i) => s + i).join('·') + '번';
+  }
+  if (g.includes(',')) return g.split(',').map(s => s.trim()).join('·') + '번';
+  return `${p.question_number}번`;
 }
 
 const INSTITUTIONS = [
@@ -50,6 +73,7 @@ export default function MockExamsPage() {
   const [grade, setGrade] = useState('1학년');
   const [questionNumber, setQuestionNumber] = useState('');
   const [passageText, setPassageText] = useState('');
+  // question_number는 raw 입력, 저장 시 parseQuestionInput으로 파싱
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -68,7 +92,7 @@ export default function MockExamsPage() {
   // 모달
   const [viewingPassage, setViewingPassage] = useState<Passage | null>(null);
   const [editingPassage, setEditingPassage] = useState<Passage | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ year: '', institution: INSTITUTIONS[0], grade: '1학년', exam_name: '', question_number: '', passage_text: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ year: '', institution: INSTITUTIONS[0], grade: '1학년', exam_name: '', question_number: '', question_group: '', passage_text: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -128,6 +152,8 @@ export default function MockExamsPage() {
       setError('모든 항목을 입력해주세요.');
       return;
     }
+    const parsed = parseQuestionInput(questionNumber);
+    if (!parsed.question_number) { setError('문제 번호가 유효하지 않습니다.'); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/superadmin/mock-exams', {
@@ -138,7 +164,8 @@ export default function MockExamsPage() {
           institution,
           grade,
           exam_name: institution,
-          question_number: parseInt(questionNumber),
+          question_number: parsed.question_number,
+          question_group: parsed.question_group,
           passage_text: passageText.trim(),
         }),
       });
@@ -170,7 +197,8 @@ export default function MockExamsPage() {
       institution: p.institution,
       grade: p.grade ?? '1학년',
       exam_name: p.exam_name,
-      question_number: String(p.question_number),
+      question_number: p.question_group ?? String(p.question_number),
+      question_group: p.question_group ?? '',
       passage_text: p.passage_text,
     });
     setEditError('');
@@ -183,6 +211,8 @@ export default function MockExamsPage() {
       setEditError('모든 항목을 입력해주세요.');
       return;
     }
+    const parsed = parseQuestionInput(editForm.question_number);
+    if (!parsed.question_number) { setEditError('문제 번호가 유효하지 않습니다.'); return; }
     setEditSaving(true);
     try {
       const res = await fetch('/api/superadmin/mock-exams', {
@@ -194,7 +224,8 @@ export default function MockExamsPage() {
           institution: editForm.institution,
           grade: editForm.grade,
           exam_name: editForm.institution,
-          question_number: parseInt(editForm.question_number),
+          question_number: parsed.question_number,
+          question_group: parsed.question_group,
           passage_text: editForm.passage_text.trim(),
         }),
       });
@@ -281,11 +312,10 @@ export default function MockExamsPage() {
                 </button>
               </div>
               <input
-                type="number"
+                type="text"
                 value={questionNumber}
                 onChange={e => setQuestionNumber(e.target.value)}
-                placeholder="18"
-                min="1" max="50"
+                placeholder="예: 18, 41-42, 43-45"
                 className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500 placeholder-slate-600"
               />
             </div>
@@ -461,7 +491,7 @@ export default function MockExamsPage() {
                     <td className="px-4 py-3 font-bold text-white">{p.year}</td>
                     <td className="px-4 py-3 text-slate-300 font-medium">{p.grade}</td>
                     <td className="px-4 py-3 text-slate-300 font-medium">{p.institution}</td>
-                    <td className="px-4 py-3 text-slate-300 font-medium">{p.question_number}번</td>
+                    <td className="px-4 py-3 text-slate-300 font-medium">{questionLabel(p)}</td>
                     <td
                       className="px-4 py-3 text-slate-400 font-medium max-w-xs truncate cursor-pointer hover:text-indigo-300 transition-colors"
                       onClick={() => setViewingPassage(p)}
@@ -500,7 +530,7 @@ export default function MockExamsPage() {
           <div className="absolute inset-0 bg-black/70" />
           <div className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-base font-black text-white">{viewingPassage.year}년 {viewingPassage.grade} {viewingPassage.institution} — {viewingPassage.question_number}번</h3>
+              <h3 className="text-base font-black text-white">{viewingPassage.year}년 {viewingPassage.grade} {viewingPassage.institution} — {questionLabel(viewingPassage)}</h3>
               <button onClick={() => setViewingPassage(null)} className="text-slate-400 hover:text-white transition-colors text-xl font-bold">✕</button>
             </div>
             <div className="p-6 overflow-y-auto">
@@ -543,9 +573,9 @@ export default function MockExamsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-400 mb-1.5 uppercase tracking-wider">문제 번호</label>
-                  <input type="number" value={editForm.question_number} onChange={e => setEditForm(f => ({ ...f, question_number: e.target.value }))}
-                    min="1" max="50"
-                    className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500" />
+                  <input type="text" value={editForm.question_number} onChange={e => setEditForm(f => ({ ...f, question_number: e.target.value }))}
+                    placeholder="예: 18, 41-42, 43-45"
+                    className="w-full bg-slate-800 border border-slate-700 text-white font-medium text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-indigo-500 placeholder-slate-600" />
                 </div>
               </div>
               <div>

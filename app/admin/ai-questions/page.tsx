@@ -761,7 +761,7 @@ export default function AiQuestionsPage() {
   const [mockYears, setMockYears] = useState<number[]>([]);
   const [mockGrades, setMockGrades] = useState<string[]>([]);
   const [mockInstitutions, setMockInstitutions] = useState<string[]>([]);
-  const [mockQuestionNumbers, setMockQuestionNumbers] = useState<number[]>([]);
+  const [mockQuestionEntries, setMockQuestionEntries] = useState<{ question_number: number; question_group: string | null }[]>([]);
   const [mockSelectedYear, setMockSelectedYear] = useState('');
   const [mockSelectedGrade, setMockSelectedGrade] = useState('');
   const [mockSelectedInstitution, setMockSelectedInstitution] = useState('');
@@ -925,8 +925,8 @@ export default function AiQuestionsPage() {
   useEffect(() => {
     if (!mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
     setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
-    supabase.from('mock_exam_passages').select('question_number').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution).order('question_number')
-      .then(({ data }) => { setMockQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
+    supabase.from('mock_exam_passages').select('question_number, question_group').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution).order('question_number')
+      .then(({ data }) => { setMockQuestionEntries((data ?? []).map((r: { question_number: number; question_group: string | null }) => ({ question_number: r.question_number, question_group: r.question_group ?? null }))); });
   }, [mockSelectedYear, mockSelectedGrade, mockSelectedInstitution]);
 
   // ── 이미지 처리 ──
@@ -2384,20 +2384,30 @@ export default function AiQuestionsPage() {
                       className="text-xs font-black text-gray-400 hover:text-red-400 transition-all">전체 해제</button>
                   )}
                 </div>
-                {mockQuestionNumbers.length === 0 ? (
+                {mockQuestionEntries.length === 0 ? (
                   <p className="text-sm text-gray-400">등록된 문제가 없습니다.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {mockQuestionNumbers.map(n => {
-                      const nStr = String(n);
+                    {mockQuestionEntries.map(entry => {
+                      const nStr = String(entry.question_number);
                       const isSelected = mockSelectedNumbers.includes(nStr);
                       const isLoading = mockLoadingNumbers.has(nStr);
+                      const label = (() => {
+                        const g = entry.question_group;
+                        if (!g) return `${entry.question_number}번`;
+                        if (g.includes('-')) {
+                          const [s, e] = g.split('-').map(Number);
+                          return Array.from({ length: e - s + 1 }, (_, i) => s + i).join('·') + '번';
+                        }
+                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번';
+                        return `${entry.question_number}번`;
+                      })();
                       return (
-                        <button key={n} onClick={() => toggleMockNumber(nStr)} disabled={isLoading}
+                        <button key={nStr} onClick={() => toggleMockNumber(nStr)} disabled={isLoading}
                           className={`px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all ${
                             isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
                           } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
-                          {isLoading ? '...' : `${n}번`}
+                          {isLoading ? '...' : label}
                         </button>
                       );
                     })}
@@ -2411,7 +2421,14 @@ export default function AiQuestionsPage() {
                 {mockSortedSelectedNumbers.map(num => (
                   <div key={num} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-black text-slate-500">{num}번 지문 미리보기</p>
+                      <p className="text-xs font-black text-slate-500">{(() => {
+                        const entry = mockQuestionEntries.find(e => String(e.question_number) === num);
+                        if (!entry?.question_group) return `${num}번 지문 미리보기`;
+                        const g = entry.question_group;
+                        if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문 미리보기'; }
+                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문 미리보기';
+                        return `${num}번 지문 미리보기`;
+                      })()}</p>
                       <button onClick={() => toggleMockNumber(num)} className="text-xs text-gray-400 hover:text-red-400 font-black transition-all">✕</button>
                     </div>
                     {mockLoadingNumbers.has(num) ? (

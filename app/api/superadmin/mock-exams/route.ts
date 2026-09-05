@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       grade: string;
       exam_name: string;
       question_number: number;
+      question_group?: string | null;
       passage_text: string;
     };
 
@@ -55,6 +56,7 @@ export async function PATCH(request: Request) {
       grade: string;
       exam_name: string;
       question_number: number;
+      question_group?: string | null;
       passage_text: string;
     };
 

@@ -2510,7 +2510,7 @@ export default function WorkbookPage() {
   const [years, setYears] = useState<number[]>([]);
   const [grades, setGrades] = useState<string[]>([]);
   const [institutions, setInstitutions] = useState<string[]>([]);
-  const [questionNumbers, setQuestionNumbers] = useState<number[]>([]);
+  const [questionEntries, setQuestionEntries] = useState<{ question_number: number; question_group: string | null }[]>([]);
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
@@ -2597,10 +2597,15 @@ export default function WorkbookPage() {
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
     setSelectedNumbers([]); setPassageMap({});
-    supabase.from('mock_exam_passages').select('question_number')
+    supabase.from('mock_exam_passages').select('question_number, question_group')
       .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
       .order('question_number')
-      .then(({ data }) => { setQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)); });
+      .then(({ data }) => {
+        setQuestionEntries((data ?? []).map((r: { question_number: number; question_group: string | null }) => ({
+          question_number: r.question_number,
+          question_group: r.question_group ?? null,
+        })));
+      });
   }, [selectedYear, selectedGrade, selectedInstitution]);
 
   const toggleNumber = async (num: string) => {
@@ -3116,20 +3121,30 @@ export default function WorkbookPage() {
                   </div>
                 ))}
               </div>
-              {questionNumbers.length > 0 && (
+              {questionEntries.length > 0 && (
                 <div>
                   <label className="block text-xs font-black text-slate-500 mb-2">문제번호 (여러 개 선택 가능)</label>
                   <div className="flex flex-wrap gap-2">
-                    {questionNumbers.map(n => {
-                      const num = String(n);
+                    {questionEntries.map(entry => {
+                      const num = String(entry.question_number);
                       const isSelected = selectedNumbers.includes(num);
                       const isLoading = loadingNumbers.has(num);
+                      const label = (() => {
+                        const g = entry.question_group;
+                        if (!g) return `${entry.question_number}번`;
+                        if (g.includes('-')) {
+                          const [s, e] = g.split('-').map(Number);
+                          return Array.from({ length: e - s + 1 }, (_, i) => s + i).join('·') + '번';
+                        }
+                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번';
+                        return `${entry.question_number}번`;
+                      })();
                       return (
-                        <button key={n} onClick={() => toggleNumber(num)} disabled={isLoading}
+                        <button key={num} onClick={() => toggleNumber(num)} disabled={isLoading}
                           className={`px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
                             isSelected ? 'bg-slate-900 border-slate-900 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                           } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
-                          {isLoading ? '...' : `${n}번`}
+                          {isLoading ? '...' : label}
                         </button>
                       );
                     })}
@@ -3142,7 +3157,17 @@ export default function WorkbookPage() {
                     passageMap[num] && (
                       <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-black text-slate-900">{num}번 지문</p>
+                          <p className="text-xs font-black text-slate-900">{(() => {
+                            const entry = questionEntries.find(e => String(e.question_number) === num);
+                            if (!entry?.question_group) return `${num}번 지문`;
+                            const g = entry.question_group;
+                            if (g.includes('-')) {
+                              const [s, e2] = g.split('-').map(Number);
+                              return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문';
+                            }
+                            if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문';
+                            return `${num}번 지문`;
+                          })()}</p>
                           <p className="text-xs text-slate-400 font-bold">{passageMap[num].trim().length}자</p>
                         </div>
                         <p className="text-sm text-slate-600 font-medium leading-relaxed select-none"

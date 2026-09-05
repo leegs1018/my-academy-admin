@@ -305,7 +305,7 @@ export default function PdfEditorPage() {
   const [mockYears, setMockYears] = useState<number[]>([]);
   const [mockGrades, setMockGrades] = useState<string[]>([]);
   const [mockInstitutions, setMockInstitutions] = useState<string[]>([]);
-  const [mockQuestionNumbers, setMockQuestionNumbers] = useState<number[]>([]);
+  const [mockQuestionEntries, setMockQuestionEntries] = useState<{ question_number: number; question_group: string | null }[]>([]);
   const [mockSelectedYear, setMockSelectedYear] = useState('');
   const [mockSelectedGrade, setMockSelectedGrade] = useState('');
   const [mockSelectedInstitution, setMockSelectedInstitution] = useState('');
@@ -393,10 +393,13 @@ export default function PdfEditorPage() {
   useEffect(() => {
     if (!mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
     setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
-    supabase.from('mock_exam_passages').select('question_number')
+    supabase.from('mock_exam_passages').select('question_number, question_group')
       .eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution)
       .order('question_number')
-      .then(({ data }) => setMockQuestionNumbers((data ?? []).map((r: { question_number: number }) => r.question_number)));
+      .then(({ data }) => setMockQuestionEntries((data ?? []).map((r: { question_number: number; question_group: string | null }) => ({
+        question_number: r.question_number,
+        question_group: r.question_group ?? null,
+      }))));
   }, [mockSelectedYear, mockSelectedGrade, mockSelectedInstitution]);
 
   // ── Mock 탭 자동저장 트리거 ──
@@ -1555,20 +1558,30 @@ export default function PdfEditorPage() {
                   </div>
                 ))}
               </div>
-              {mockQuestionNumbers.length > 0 && (
+              {mockQuestionEntries.length > 0 && (
                 <div>
                   <label className="block text-xs font-black text-slate-400 mb-2">문제번호 (여러 개 선택 가능)</label>
                   <div className="flex flex-wrap gap-2">
-                    {mockQuestionNumbers.map(n => {
-                      const num = String(n);
+                    {mockQuestionEntries.map(entry => {
+                      const num = String(entry.question_number);
                       const isSelected = mockSelectedNumbers.includes(num);
                       const isLoading = mockLoadingNumbers.has(num);
+                      const label = (() => {
+                        const g = entry.question_group;
+                        if (!g) return `${entry.question_number}번`;
+                        if (g.includes('-')) {
+                          const [s, e] = g.split('-').map(Number);
+                          return Array.from({ length: e - s + 1 }, (_, i) => s + i).join('·') + '번';
+                        }
+                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번';
+                        return `${entry.question_number}번`;
+                      })();
                       return (
-                        <button key={n} onClick={() => toggleMockNumber(num)} disabled={isLoading}
+                        <button key={num} onClick={() => toggleMockNumber(num)} disabled={isLoading}
                           className={`px-3 py-1.5 rounded-xl text-sm font-black border-2 transition-all ${
                             isSelected ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
                           } ${isLoading ? 'opacity-50 cursor-wait' : ''}`}>
-                          {isLoading ? '...' : `${n}번`}
+                          {isLoading ? '...' : label}
                         </button>
                       );
                     })}
@@ -1579,7 +1592,14 @@ export default function PdfEditorPage() {
                 <div className="mt-4 space-y-2">
                   {mockSortedSelectedNumbers.map(num => mockPassageMap[num] && (
                     <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                      <p className="text-xs font-black text-indigo-600 mb-1">{num}번 지문</p>
+                      <p className="text-xs font-black text-indigo-600 mb-1">{(() => {
+                        const entry = mockQuestionEntries.find(e => String(e.question_number) === num);
+                        if (!entry?.question_group) return `${num}번 지문`;
+                        const g = entry.question_group;
+                        if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문'; }
+                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문';
+                        return `${num}번 지문`;
+                      })()}</p>
                       <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2 select-none"
                         style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
                         onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
