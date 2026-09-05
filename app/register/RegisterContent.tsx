@@ -80,9 +80,24 @@ export default function RegisterContent() {
       if (authError) throw authError;
 
       if (data.user) {
-        // 기본 보너스 100C, 프로필 완성 시 추가 200C
-        const BASE_BONUS = 100;
-        const PROFILE_BONUS = 200;
+        // 보너스 금액을 con_pricing에서 조회 (없으면 기본값)
+        let BASE_BONUS = 100;
+        let PROFILE_BONUS = 200;
+        let referralBonusAmt = 400;
+        try {
+          const res = await fetch('/api/credits/pricing');
+          if (res.ok) {
+            const pricingData = await res.json();
+            const items: { feature_key: string; cost_per_use: number }[] = pricingData.pricing ?? [];
+            const signupRow = items.find(p => p.feature_key === 'signup_bonus');
+            const profileRow = items.find(p => p.feature_key === 'profile_completion_bonus');
+            const referralRow = items.find(p => p.feature_key === 'signup_bonus_referral');
+            if (signupRow) BASE_BONUS = signupRow.cost_per_use;
+            if (profileRow) PROFILE_BONUS = profileRow.cost_per_use;
+            if (referralRow) referralBonusAmt = referralRow.cost_per_use;
+          }
+        } catch {}
+
         const profileComplete = isProfileComplete(formData.academyName, formData.academyPhone, formData.mobile);
         let initialPoints = BASE_BONUS + (profileComplete ? PROFILE_BONUS : 0);
 
@@ -91,17 +106,6 @@ export default function RegisterContent() {
         let referralExtra = 0;
         const enteredCode = formData.referralCode?.trim().toUpperCase();
         if (enteredCode) {
-          // DB에서 추천인 추가 보너스 조회
-          let referralBonusAmt = 400;
-          try {
-            const res = await fetch('/api/credits/pricing');
-            if (res.ok) {
-              const pricingData = await res.json();
-              const items: { feature_key: string; cost_per_use: number }[] = pricingData.pricing ?? [];
-              const extra = items.find(p => p.feature_key === 'signup_bonus_referral');
-              if (extra) referralBonusAmt = extra.cost_per_use;
-            }
-          } catch {}
 
           const { data: referrer } = await supabase
             .from('academy_config')

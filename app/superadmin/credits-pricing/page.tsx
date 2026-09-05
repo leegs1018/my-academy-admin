@@ -131,9 +131,9 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
 const SECTIONS: SectionConfig[] = [
   {
     key: 'signup', label: '가입 CON', color: 'text-yellow-400',
-    keys: ['signup_bonus', 'signup_bonus_referral', 'referral_reward'],
+    keys: ['signup_bonus', 'profile_completion_bonus', 'signup_bonus_referral', 'referral_reward'],
     noToggle: true,
-    note: '추천인 코드 없이 가입 시 기본 CON · 신규회원은 두 항목 합산 · 추천인은 referral_reward 적립',
+    note: '가입 기본 CON · 프로필 완성 보너스 · 추천인 코드 사용 시 추가 · 추천인 적립',
   },
   {
     key: 'sms', label: '메시지 발송 (SMS / 알림톡)', color: 'text-violet-400',

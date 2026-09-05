@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-// 프로필 완성 보너스 200C — 학원명 + (전화번호 or 휴대폰) 첫 완성 시 1회 지급
+// 프로필 완성 보너스 — 학원명 + (전화번호 or 휴대폰) 첫 완성 시 1회 지급
+// 금액은 con_pricing.profile_completion_bonus에서 읽음 (없으면 200C 기본)
 export async function POST(request: NextRequest) {
   const auth = request.headers.get('authorization');
   if (!auth?.startsWith('Bearer ')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -23,7 +24,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, skipped: true });
   }
 
-  const BONUS = 200;
+  // 금액을 con_pricing 테이블에서 읽기 (없으면 200 기본값)
+  const { data: pricingRow } = await db
+    .from('con_pricing')
+    .select('cost_per_use')
+    .eq('feature_key', 'profile_completion_bonus')
+    .single();
+  const BONUS: number = pricingRow?.cost_per_use ?? 200;
 
   // 현재 잔액 조회
   const { data: academy } = await db

@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
       const randomName = RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)] + '_' + (Math.floor(Math.random() * 900) + 100);
       const kioskCode = Math.floor(100000 + Math.random() * 900000).toString();
       const ownReferralCode = Math.random().toString(36).slice(2, 10).toUpperCase();
-      const BASE_BONUS = 100;
+      // 가입 보너스 금액: con_pricing 에서 읽기 (없으면 100 기본)
+      const { data: bonusPricingRow } = await admin
+        .from('con_pricing').select('cost_per_use').eq('feature_key', 'signup_bonus').single();
+      const BASE_BONUS: number = bonusPricingRow?.cost_per_use ?? 100;
 
       await admin.from('academy_config').insert({
         user_id: userId,
