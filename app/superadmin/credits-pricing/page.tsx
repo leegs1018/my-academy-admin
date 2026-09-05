@@ -37,6 +37,17 @@ const WB_TYPE_LABELS: Record<string, string> = {
 };
 const getWbLabel = (k: string) => WB_TYPE_LABELS[k.replace(/^wb_(direct|mock)_/, '')] ?? k;
 
+const KEY_DISPLAY_NAMES: Record<string, string> = {
+  signup_bonus: '가입 보너스',
+  profile_completion_bonus: '프로필 완성',
+  signup_bonus_referral: '추천인 코드 사용 보너스',
+  referral_reward: '추천인 적립',
+};
+const getKeyLabel = (k: string) => {
+  if (k.startsWith('wb_')) return getWbLabel(k);
+  return KEY_DISPLAY_NAMES[k] ?? k;
+};
+
 // ─── feature key 목록 ─────────────────────────────────────────────────────────
 
 const WB_DIRECT_KEYS = [
@@ -250,7 +261,7 @@ export default function ConPricingPage() {
 
   const handleInsert = async (key: string) => {
     setInserting(key);
-    const name = key.startsWith('wb_') ? getWbLabel(key) : key;
+    const name = getKeyLabel(key);
     try {
       const res = await fetch('/api/superadmin/credits/pricing', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -382,7 +393,7 @@ export default function ConPricingPage() {
 
   const renderMissingRow = (k: string, showToggle: boolean) => {
     const isIns = inserting === k;
-    const name = k.startsWith('wb_') ? getWbLabel(k) : k;
+    const name = getKeyLabel(k);
     const colSpanExtra = showToggle ? 1 : 0;
     return (
       <tr key={k} className="border-t border-slate-800 opacity-40">
