@@ -2694,7 +2694,10 @@ export default function WorkbookPage() {
           const res = await fetch('/api/generate-workbook', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ passages: passageTexts, type, tab: activeTab, difficulty, academy_id: session.user.id }),
+            body: JSON.stringify({
+              passages: passageTexts, type, tab: activeTab, difficulty, academy_id: session.user.id,
+              ...(activeTab === 'mock' ? { mockMeta: { year: selectedYear, grade: selectedGrade, institution: selectedInstitution, numbers: sortedSelectedNumbers } } : {}),
+            }),
           });
           const json = await res.json() as { success?: boolean; results?: WorkbookResult[]; error?: string; required?: number; balance?: number };
           if (!res.ok || !json.success) {

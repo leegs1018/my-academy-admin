@@ -674,7 +674,7 @@ export default function PdfEditorPage() {
           const res = await fetch('/api/process-pdf', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook' }),
+            body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook', mockMeta: { year: mockSelectedYear, grade: mockSelectedGrade, institution: mockSelectedInstitution, numbers: mockSortedSelectedNumbers } }),
           });
           const json = JSON.parse(await res.text()) as { data?: GeneratedMaterials; error?: string };
           if (!res.ok) throw new Error(json.error || `${num}번 생성 오류`);

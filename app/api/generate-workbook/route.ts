@@ -775,12 +775,13 @@ function redistributeVocabAnswers(passage: string, answerKey: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { passages, type, tab, difficulty, academy_id } = await request.json() as {
+    const { passages, type, tab, difficulty, academy_id, mockMeta } = await request.json() as {
       passages: string[];
       type: WorkbookType;
       tab?: 'input' | 'mock';
       difficulty?: string;
       academy_id?: string;
+      mockMeta?: { year: string; grade: string; institution: string; numbers: string[] };
     };
     const featureKey = `${(tab ?? 'input') === 'input' ? 'wb_direct' : 'wb_mock'}_${type}`;
 
@@ -806,7 +807,9 @@ export async function POST(request: Request) {
           p_academy_id: academy_id,
           p_amount: totalCost,
           p_feature_key: featureKey,
-          p_description: `워크북 생성 (${type} × ${validPassages.length}지문)`,
+          p_description: tab === 'mock' && mockMeta
+            ? `워크북 (모의) ${type} · ${mockMeta.year}년 ${mockMeta.grade} ${mockMeta.institution.split('/')[0]} ${mockMeta.numbers.join('·')}번`
+            : `워크북 (직접) ${type} × ${validPassages.length}지문`,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {

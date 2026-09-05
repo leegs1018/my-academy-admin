@@ -1436,11 +1436,15 @@ export async function POST(request: Request) {
       difficulty?: 'a2' | 'b1' | 'b2' | 'c1' | 'c2';
       academy_id?: string;
       feature_key?: string;
+      mockMeta?: { year: string; grade: string; institution: string; numbers: string[] };
     };
 
     const { text, academy_id } = body;
     const examFeatureKey = body.feature_key || 'ai_question_per_type';
-    const examFeatureDesc = examFeatureKey === 'mock_exam_question_per_type' ? '모의고사변형 문제 생성' : '실전변형 문제 생성';
+    const isMockFeature = examFeatureKey === 'mock_exam_question_per_type';
+    const examFeatureDesc = body.mockMeta
+      ? `실전변형 (모의고사) · ${body.mockMeta.year}년 ${body.mockMeta.grade} ${body.mockMeta.institution.split('/')[0]} ${body.mockMeta.numbers.join('·')}번`
+      : isMockFeature ? '모의고사변형 문제 생성' : '실전변형 (직접)';
 
     // 신규 typeConfigs 방식 또는 구버전 questionTypes+difficulty 방식 모두 지원
     let enabledConfigs: TypeConfigInput[];

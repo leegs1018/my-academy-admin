@@ -129,9 +129,14 @@ function extractJson(text: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { text, difficulty, academy_id, feature_key: featureKeyParam } = await request.json() as { text: string; difficulty: string; academy_id?: string; feature_key?: string };
+    const { text, difficulty, academy_id, feature_key: featureKeyParam, mockMeta } = await request.json() as {
+      text: string; difficulty: string; academy_id?: string; feature_key?: string;
+      mockMeta?: { year: string; grade: string; institution: string; numbers: string[] };
+    };
     const featureKey = featureKeyParam || 'pdf_analysis';
-    const featureDesc = featureKey === 'mock_workbook' ? '모의고사 툴/워크북 생성' : '지문분석 툴/워크북 생성';
+    const featureDesc = mockMeta
+      ? `지문분석 (모의고사) · ${mockMeta.year}년 ${mockMeta.grade} ${mockMeta.institution.split('/')[0]} ${mockMeta.numbers.join('·')}번`
+      : featureKey === 'mock_workbook' ? '모의고사 툴/워크북 생성' : '지문분석 (직접)';
 
     if (!text || text.trim().length < 50) {
       return NextResponse.json(
