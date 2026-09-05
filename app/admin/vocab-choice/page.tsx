@@ -2519,7 +2519,7 @@ export default function WorkbookPage() {
   const [loadingNumbers, setLoadingNumbers] = useState<Set<string>>(new Set());
 
   // Shared: type, difficulty, generation
-  const [selectedTypes, setSelectedTypes] = useState<Set<WorkbookType>>(new Set(['vocab_choice']));
+  const [selectedTypes, setSelectedTypes] = useState<Set<WorkbookType>>(new Set(['passage_translation']));
   const [difficulty, setDifficulty] = useState<Difficulty>('b2');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
