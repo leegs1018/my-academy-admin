@@ -1576,7 +1576,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
         {/* ── 상단: 제목 + 내용요약(테두리 없음) + 키워드(테두리만) ── */}
         {(titleEn || titleKo || koreanSummary || keywordBullets.length > 0) && (
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
-            <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
+            <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
             <tbody>
               <tr>
                 {/* 왼쪽: 제목 + 내용 요약 — 테두리 없음 */}
@@ -1592,7 +1592,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                     </div>
                   )}
                   {koreanSummary && (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 12, lineHeight: 1.75, textAlign: 'justify' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11, lineHeight: 1.75, textAlign: 'justify' }}>
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         border: '1.5px solid #374151', borderRadius: '50%',
@@ -1605,16 +1605,17 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
                 </td>
                 {/* 오른쪽: 키워드 불렛 — 테두리 박스 */}
                 {keywordBullets.length > 0 && (
-                  <td style={{ verticalAlign: 'middle' }}>
+                  <td style={{ verticalAlign: 'middle', paddingLeft: 12 }}>
                     <div style={{
                       border: '1.5px solid #94a3b8', borderRadius: 6,
-                      padding: '12px 18px', textAlign: 'center',
+                      padding: '8px 14px', textAlign: 'center',
+                      display: 'inline-block', minWidth: 0, width: '100%',
                     }}>
                       {keywordBullets.slice(0, 2).map((b, bi) => (
                         <React.Fragment key={bi}>
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: 13.5, lineHeight: 1.65 }}>{b}</p>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 12, lineHeight: 1.6 }}>{b}</p>
                           {bi < Math.min(keywordBullets.length, 2) - 1 && (
-                            <p style={{ margin: '3px 0', fontSize: 12, color: '#64748b' }}>↓</p>
+                            <p style={{ margin: '2px 0', fontSize: 11, color: '#64748b' }}>↓</p>
                           )}
                         </React.Fragment>
                       ))}
@@ -1628,7 +1629,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
 
         {/* ── 본문 / 해석 2단 테이블 ── */}
         <table style={{ width: '100%', borderCollapse: 'collapse', flex: 1 }}>
-          <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
+          <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
           <tbody>
             {(sentences || []).map((s, i) => (
               <tr key={i}>
