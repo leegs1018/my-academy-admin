@@ -21,21 +21,6 @@ interface Summary {
   by_feature: Record<string, number>;
 }
 
-const FEATURE_LABELS: Record<string, string> = {
-  pdf_analysis: '지문분석',
-  pdf_analysis_direct: '지문분석',
-  mock_workbook: '모의고사 툴',
-  ai_question_per_type: '실전변형 문제',
-  mock_exam_question_per_type: '모의고사변형 문제',
-  vocab_choice: '어휘 선택 문제',
-  sms: 'SMS',
-  lms: 'LMS',
-  payapp_charge: '카드결제',
-  payapp_refund: '카드결제 환불',
-  admin_deduct: '관리자 차감',
-};
-
-// 워크북 세부 유형 레이블
 const WB_TYPE_LABELS: Record<string, string> = {
   passage_analysis: '구문분석', passage_translation: '지문해석지',
   translation: '문장해석', word_order: '단어배열', english_writing: '영작',
@@ -48,22 +33,47 @@ const WB_TYPE_LABELS: Record<string, string> = {
   combo_vocab_grammar: '어휘+어법', combo_grammar_insert: '어법+문장삽입',
 };
 
-function featureLabel(key: string | null): string {
+function featureLabel(key: string | null, description?: string): string {
   if (!key) return '-';
-  if (FEATURE_LABELS[key]) return FEATURE_LABELS[key];
-  // 워크북 (wb_direct_*, wb_mock_*)
+  const desc = description ?? '';
+
+  // 지문분석
+  if (key === 'pdf_analysis' || key === 'pdf_analysis_direct') {
+    if (/모의|mock/i.test(desc)) return '지문분석 (모의고사)';
+    if (/ocr|이미지/i.test(desc)) return '지문분석 (직접-OCR)';
+    return '지문분석 (직접)';
+  }
+
+  // 워크북 직접
   if (key.startsWith('wb_direct_')) {
     const type = key.replace('wb_direct_', '');
-    return `워크북 (직접) ${WB_TYPE_LABELS[type] ?? type}`;
+    return `워크북 (직접) · ${WB_TYPE_LABELS[type] ?? type}`;
   }
+  // 워크북 모의
   if (key.startsWith('wb_mock_')) {
     const type = key.replace('wb_mock_', '');
-    return `워크북 (모의) ${WB_TYPE_LABELS[type] ?? type}`;
+    return `워크북 (모의) · ${WB_TYPE_LABELS[type] ?? type}`;
   }
-  // 실전변형 유형별 (ai_type_*, mock_ai_type_*)
-  if (key.startsWith('ai_type_')) return `실전변형 (${key.replace('ai_type_', '')})`;
-  if (key.startsWith('mock_ai_type_')) return `모의변형 (${key.replace('mock_ai_type_', '')})`;
-  return key;
+
+  // 실전변형
+  if (key === 'ai_question_per_type') return '실전변형 (직접)';
+  if (key === 'mock_exam_question_per_type') return '실전변형 (모의고사)';
+  if (key.startsWith('ai_type_')) return `실전변형 직접 · ${key.replace('ai_type_', '')}`;
+  if (key.startsWith('mock_ai_type_')) return `실전변형 모의 · ${key.replace('mock_ai_type_', '')}`;
+
+  // 기타
+  const STATIC: Record<string, string> = {
+    mock_workbook: '모의고사 툴',
+    vocab_choice: '어휘선택',
+    sms: 'SMS', lms: 'LMS',
+    payapp_charge: '카드결제', payapp_refund: '카드결제 환불',
+    admin_deduct: '관리자 차감',
+  };
+  return STATIC[key] ?? key;
+}
+
+function toLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 const FEATURE_FILTER_OPTIONS = [
@@ -203,6 +213,20 @@ export default function ConHistoryPage() {
             </button>
           </div>
         </div>
+        {/* 날짜 퀵버튼 */}
+        <div className="flex gap-2">
+          {([
+            { label: '오늘', fn: () => { const d = toLocalDate(new Date()); setStartDate(d); setEndDate(d); } },
+            { label: '어제', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = toLocalDate(d); setStartDate(s); setEndDate(s); } },
+            { label: '7일', fn: () => { const s = new Date(); s.setDate(s.getDate() - 6); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
+            { label: '30일', fn: () => { const s = new Date(); s.setDate(s.getDate() - 29); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
+          ] as const).map(({ label, fn }) => (
+            <button key={label} onClick={fn}
+              className="px-3 py-1.5 text-xs font-black bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg border border-slate-700 hover:border-indigo-500 transition-all">
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-black text-slate-400 mb-1.5">시작일</label>
@@ -295,8 +319,8 @@ export default function ConHistoryPage() {
                       {t.type === 'charge' ? '충전' : '사용'}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-xs font-bold text-slate-400 whitespace-nowrap">{featureLabel(t.feature_key)}</td>
-                  <td className="py-3 px-4 text-xs font-bold text-slate-300 max-w-[200px] truncate">{t.description}</td>
+                  <td className="py-3 px-4 text-xs font-bold text-slate-400 whitespace-nowrap">{featureLabel(t.feature_key, t.description)}</td>
+                  <td className="py-3 px-4 text-xs font-bold text-slate-300 max-w-xs" title={t.description}>{t.description}</td>
                   <td className="py-3 px-4 text-right font-black whitespace-nowrap">
                     <span className={t.type === 'charge' ? 'text-emerald-400' : 'text-red-400'}>
                       {t.type === 'charge' ? '+' : '-'}{t.amount.toLocaleString()} C
