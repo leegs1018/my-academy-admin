@@ -142,6 +142,52 @@ export default function DashboardPage() {
         <StatCard label="Active Classes" value={stats.classCount} unit="개" color="border-orange-500" icon="🏫" />
       </div>
 
+      {/* AI 문제 생성 섹션 */}
+      <section>
+        <div className="flex items-center gap-3 mb-5">
+          <span className="w-2.5 h-7 bg-violet-500 rounded-full"></span>
+          <h2 className="text-2xl font-black text-gray-900">AI 문제 생성</h2>
+          <span className="text-xs bg-violet-100 text-violet-700 font-black px-3 py-1 rounded-full uppercase tracking-widest">NEW</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <Link href="/admin/pdf-editor" className="group relative bg-gradient-to-br from-indigo-600 to-indigo-800 p-7 rounded-[2.5rem] shadow-xl hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-8 -mt-8 blur-2xl"></div>
+            <div className="relative">
+              <span className="text-4xl mb-4 block">📝</span>
+              <h3 className="text-xl font-black text-white mb-1.5">지문 분석</h3>
+              <p className="text-indigo-200 text-sm font-bold leading-relaxed mb-5">지문을 입력하면 AI가 자동으로<br/>어휘·구문·요약을 분석해드려요</p>
+              <span className="inline-flex items-center gap-2 text-white font-black text-sm group-hover:gap-3 transition-all">
+                바로가기 <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </span>
+            </div>
+          </Link>
+
+          <Link href="/admin/vocab-choice" className="group relative bg-gradient-to-br from-emerald-500 to-teal-700 p-7 rounded-[2.5rem] shadow-xl hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-8 -mt-8 blur-2xl"></div>
+            <div className="relative">
+              <span className="text-4xl mb-4 block">📒</span>
+              <h3 className="text-xl font-black text-white mb-1.5">워크북</h3>
+              <p className="text-emerald-100 text-sm font-bold leading-relaxed mb-5">어휘·어법·해석 등 다양한 유형의<br/>워크북 PDF를 자동 생성해드려요</p>
+              <span className="inline-flex items-center gap-2 text-white font-black text-sm group-hover:gap-3 transition-all">
+                바로가기 <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </span>
+            </div>
+          </Link>
+
+          <Link href="/admin/ai-questions" className="group relative bg-gradient-to-br from-orange-500 to-rose-600 p-7 rounded-[2.5rem] shadow-xl hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-8 -mt-8 blur-2xl"></div>
+            <div className="relative">
+              <span className="text-4xl mb-4 block">🎯</span>
+              <h3 className="text-xl font-black text-white mb-1.5">실전 변형문제</h3>
+              <p className="text-orange-100 text-sm font-bold leading-relaxed mb-5">수능 스타일의 변형문제를<br/>AI가 즉시 출제해드려요</p>
+              <span className="inline-flex items-center gap-2 text-white font-black text-sm group-hover:gap-3 transition-all">
+                바로가기 <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </span>
+            </div>
+          </Link>
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* 진행 중인 수업 현황 */}
         <section className="bg-slate-900 p-8 rounded-[3rem] shadow-2xl text-white relative overflow-hidden">
