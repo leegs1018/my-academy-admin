@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   const db = createAdminClient();
   const { data, error } = await db
     .from('system_notices')
-    .insert([{ title, content, is_important: !!is_important, is_published: true }])
+    .insert([{ title, content, is_important: !!is_important }])
     .select()
     .single();
 
