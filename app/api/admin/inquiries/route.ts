@@ -61,13 +61,13 @@ export async function POST(request: NextRequest) {
   // 관리자 SMS 알림
   try {
     const admin = createAdminClient();
-    const { data: notifySetting } = await admin
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'admin_notify_phone')
-      .single();
-    const adminPhone = notifySetting?.value?.trim();
-    if (adminPhone) {
+    const [phoneRes, toggleRes] = await Promise.all([
+      admin.from('site_settings').select('value').eq('key', 'admin_notify_phone').single(),
+      admin.from('site_settings').select('value').eq('key', 'notify_inquiry_sms').single(),
+    ]);
+    const adminPhone = phoneRes.data?.value?.trim();
+    const smsEnabled = (toggleRes.data?.value ?? 'true') !== 'false';
+    if (adminPhone && smsEnabled) {
       const { data: academy } = await admin
         .from('academy_config')
         .select('academy_name')

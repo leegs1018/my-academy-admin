@@ -91,13 +91,13 @@ export async function GET(request: NextRequest) {
 
       // 슈퍼어드민 신규 가입 알림 SMS (newUser는 위에서 이미 조회됨)
       try {
-        const { data: notifySetting } = await admin
-          .from('site_settings')
-          .select('value')
-          .eq('key', 'admin_notify_phone')
-          .single();
-        const adminPhone = notifySetting?.value?.trim();
-        if (adminPhone) {
+        const [phoneRes, toggleRes] = await Promise.all([
+          admin.from('site_settings').select('value').eq('key', 'admin_notify_phone').single(),
+          admin.from('site_settings').select('value').eq('key', 'notify_signup_sms').single(),
+        ]);
+        const adminPhone = phoneRes.data?.value?.trim();
+        const smsEnabled = (toggleRes.data?.value ?? 'true') !== 'false';
+        if (adminPhone && smsEnabled) {
           const userEmail = newUser?.email ?? '';
           await sendPpurioSms(
             adminPhone,

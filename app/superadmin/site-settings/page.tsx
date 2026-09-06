@@ -29,7 +29,7 @@ const SECTIONS = [
   {
     title: '🔔 관리자 알림 설정',
     fields: [
-      { key: 'admin_notify_phone', label: '신규 가입 알림 수신 번호 (예: 01012345678)' },
+      { key: 'admin_notify_phone', label: '알림 수신 번호 (예: 01012345678)' },
     ],
   },
   {
@@ -186,6 +186,29 @@ export default function SiteSettingsPage() {
                 />
               </div>
             ))}
+            {section.title === '🔔 관리자 알림 설정' && (
+              <div className="pt-2 space-y-3 border-t border-slate-800">
+                {[
+                  { key: 'notify_signup_sms', label: '가입 SMS 관리자 발송' },
+                  { key: 'notify_inquiry_sms', label: '문의 SMS 관리자 발송' },
+                ].map(toggle => {
+                  const isOn = (values[toggle.key] ?? 'true') !== 'false';
+                  return (
+                    <div key={toggle.key} className="flex items-center justify-between">
+                      <span className="text-sm font-black text-slate-300">{toggle.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => setValues(prev => ({ ...prev, [toggle.key]: isOn ? 'false' : 'true' }))}
+                        className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${isOn ? 'bg-indigo-600' : 'bg-slate-700'}`}
+                      >
+                        <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${isOn ? 'left-7' : 'left-1'}`} />
+                      </button>
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-slate-600 font-bold">※ OFF 시 수신 번호가 설정되어 있어도 문자가 발송되지 않습니다</p>
+              </div>
+            )}
           </div>
         </div>
       ))}

@@ -61,13 +61,13 @@ export async function POST(request: NextRequest) {
 
     // 관리자 신규 가입 알림 SMS
     try {
-      const { data: notifySetting } = await db
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'admin_notify_phone')
-        .single();
-      const adminPhone = notifySetting?.value?.trim();
-      if (adminPhone) {
+      const [phoneRes, toggleRes] = await Promise.all([
+        db.from('site_settings').select('value').eq('key', 'admin_notify_phone').single(),
+        db.from('site_settings').select('value').eq('key', 'notify_signup_sms').single(),
+      ]);
+      const adminPhone = phoneRes.data?.value?.trim();
+      const smsEnabled = (toggleRes.data?.value ?? 'true') !== 'false';
+      if (adminPhone && smsEnabled) {
         const { data: academyData } = await db
           .from('academy_config')
           .select('academy_name')
