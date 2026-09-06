@@ -11,6 +11,7 @@ interface Analytics {
   todayVisitors: number;
   todayConUsage: number;
   todayConCharge: number;
+  referrerSources: { source: string; count: number }[];
   monthlyData: { month: string; count: number }[];
   weeklyData: { week: string; count: number; range: string }[];
   top5: { academy_id: string; academy_name: string; student_count: number }[];
@@ -81,6 +82,28 @@ export default function SuperAdminDashboard() {
           ))}
         </div>
       </div>
+
+      {/* 오늘 유입 경로 */}
+      {(data?.referrerSources?.length ?? 0) > 0 && (
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+          <div className="px-6 py-3 bg-slate-800/60 flex items-center gap-2">
+            <span className="text-sm font-black text-sky-400">🔗 오늘 유입 경로</span>
+            <span className="text-xs font-bold text-slate-500">— 총 {data?.todayVisitors ?? 0}명</span>
+          </div>
+          <div className="px-6 py-4 flex flex-wrap gap-3">
+            {(data?.referrerSources ?? []).map(({ source, count }) => {
+              const pct = data?.todayVisitors ? Math.round((count / data.todayVisitors) * 100) : 0;
+              return (
+                <div key={source} className="flex items-center gap-2 bg-slate-800 rounded-xl px-4 py-2.5 border border-slate-700">
+                  <span className="font-black text-white text-sm">{source}</span>
+                  <span className="font-black text-sky-400 text-sm">{count}명</span>
+                  <span className="text-xs font-bold text-slate-500">{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 전체 KPI 카드 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

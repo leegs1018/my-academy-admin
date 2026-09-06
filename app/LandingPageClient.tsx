@@ -205,7 +205,13 @@ export default function LandingPageClient() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setIsLoggedIn(!!session));
     // 방문자 추적 (IP 기반, 하루 1회)
-    fetch('/api/track-visit', { method: 'POST' }).catch(() => {});
+    const referrer = document.referrer;
+    const utmSource = new URLSearchParams(window.location.search).get('utm_source') ?? '';
+    fetch('/api/track-visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referrer, utmSource }),
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {

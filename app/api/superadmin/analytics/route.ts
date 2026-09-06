@@ -52,14 +52,25 @@ export async function GET(request: NextRequest) {
     // 오늘 메인페이지 방문자 (IP 기반 unique)
     db
       .from('site_visits')
-      .select('*', { count: 'exact', head: true })
+      .select('referrer_source')
       .eq('visited_date', todayStr),
   ]);
 
   const totalSms = (smsCountRes.data || []).reduce((sum: number, r: any) => sum + (r.total_count || 0), 0);
 
   // 오늘 메인페이지 방문자 (IP 기반, site_visits 테이블)
-  const todayVisitors = todayVisitRes.count ?? 0;
+  const todayVisitRows = todayVisitRes.data ?? [];
+  const todayVisitors = todayVisitRows.length;
+
+  // 유입 경로별 집계
+  const sourceMap: Record<string, number> = {};
+  for (const row of todayVisitRows) {
+    const src = (row.referrer_source as string | null) ?? '직접';
+    sourceMap[src] = (sourceMap[src] ?? 0) + 1;
+  }
+  const referrerSources = Object.entries(sourceMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([source, count]) => ({ source, count }));
 
   // 오늘 CON 사용량·충전량
   let todayConUsage = 0;
@@ -127,6 +138,7 @@ export async function GET(request: NextRequest) {
     todayVisitors,
     todayConUsage,
     todayConCharge,
+    referrerSources,
     monthlyData,
     weeklyData,
     top5,
