@@ -18,7 +18,7 @@ function parseReferrerSource(referrer: string, utmSource: string): string {
   try {
     const host = new URL(referrer).hostname.replace(/^www\./, '');
     if (host.includes('naver.')) return '네이버';
-    if (host.includes('threads.net')) return '쓰레드';
+    if (host.includes('threads.net') || host.includes('threads.com')) return '쓰레드';
     if (host.includes('instagram.com')) return '인스타그램';
     if (host.includes('kakao.') || host.includes('kakaotalk.')) return '카카오';
     if (host.includes('google.')) return '구글';
