@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createAdminClient } from '@/lib/supabase-admin';
+import { sendPpurioSms } from '@/lib/ppurio';
 
 export async function GET(request: NextRequest) {
   const supabase = createServerClient(
@@ -55,5 +57,29 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 관리자 SMS 알림
+  try {
+    const admin = createAdminClient();
+    const { data: notifySetting } = await admin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'admin_notify_phone')
+      .single();
+    const adminPhone = notifySetting?.value?.trim();
+    if (adminPhone) {
+      const { data: academy } = await admin
+        .from('academy_config')
+        .select('academy_name')
+        .eq('user_id', user.id)
+        .single();
+      const academyName = academy?.academy_name ?? user.email ?? '(알 수 없음)';
+      await sendPpurioSms(
+        adminPhone,
+        `[CON EDU] 새 문의사항\n학원: ${academyName}\n제목: ${title}`,
+      );
+    }
+  } catch { /* 알림 실패는 문의 등록에 영향 없음 */ }
+
   return NextResponse.json({ inquiry: data }, { status: 201 });
 }
