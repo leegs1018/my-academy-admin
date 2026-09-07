@@ -676,7 +676,7 @@ export default function SMSPage() {
         <>
         <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-2xl px-4 py-3 text-sm text-yellow-700">
           <span className="text-base mt-0.5">⚠️</span>
-          <span className="font-bold">접수 건수는 뿌리오 API 접수 기준이며, 뿌리오 잔액이 부족한 경우 실제 전송이 실패합니다. 발송 후 <a href="https://www.ppurio.com" target="_blank" rel="noreferrer" className="underline font-black">뿌리오 대시보드</a>에서 실패 내역을 확인해주세요.</span>
+          <span className="font-bold">문자 미수신 시 관리자에게 문의 부탁드립니다.</span>
         </div>
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
