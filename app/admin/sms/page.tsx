@@ -710,8 +710,8 @@ export default function SMSPage() {
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">SMS/LMS</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">사용 CON</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">수신자</th>
-                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">접수</th>
-                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">접수실패</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">성공</th>
+                    <th className="py-3 px-4 text-center text-xs font-black text-gray-400">실패</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">상세</th>
                     <th className="py-3 px-4 text-center text-xs font-black text-gray-400">삭제</th>
                   </tr>
@@ -888,11 +888,11 @@ export default function SMSPage() {
                 </div>
                 <div className="bg-green-50 rounded-2xl p-3">
                   <p className="text-2xl font-black text-green-500">{selectedLog.success_count}</p>
-                  <p className="text-xs text-green-400 font-bold mt-1">접수</p>
+                  <p className="text-xs text-green-400 font-bold mt-1">성공</p>
                 </div>
                 <div className="bg-red-50 rounded-2xl p-3">
                   <p className="text-2xl font-black text-red-400">{selectedLog.fail_count || 0}</p>
-                  <p className="text-xs text-red-400 font-bold mt-1">접수실패</p>
+                  <p className="text-xs text-red-400 font-bold mt-1">실패</p>
                 </div>
               </div>
               <div>
@@ -934,12 +934,11 @@ export default function SMSPage() {
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-bounce-once">
           <span className="text-2xl">📤</span>
           <div>
-            <p className="font-black">발송 접수 완료</p>
+            <p className="font-black">발송 완료</p>
             <p className="text-sm text-gray-300">
-              접수 <span className="text-green-400 font-black">{sendResult.success}건</span>
-              {sendResult.fail > 0 && <> · 접수실패 <span className="text-red-400 font-black">{sendResult.fail}건</span></>}
+              성공 <span className="text-green-400 font-black">{sendResult.success}건</span>
+              {sendResult.fail > 0 && <> · 실패 <span className="text-red-400 font-black">{sendResult.fail}건</span></>}
             </p>
-            <p className="text-xs text-yellow-400 mt-0.5">※ 뿌리오 잔액 부족 시 실제 전송이 실패할 수 있습니다</p>
           </div>
         </div>
       )}
