@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sendAlimtalk, sendPpurioSms } from '@/lib/ppurio';
+import { getFeaturePrice, getConBalance } from '@/lib/credits';
+import { createAdminClient } from '@/lib/supabase-admin';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
@@ -39,6 +41,20 @@ export async function POST(req: Request) {
         status: status as '등원' | '하원',
       }, academy_id);
       console.log('[attendance/notify] 알림톡 결과:', JSON.stringify(result));
+
+      // 알림톡 발송 이력 기록 (CON 차감은 alimtalk/send에서 처리)
+      if (academy_id) {
+        await supabaseAdmin.from('sms_logs').insert({
+          academy_id,
+          message: `[알림톡] ${academyName} ${studentName} ${status} (${displayDate})`,
+          recipient_type: 'parent',
+          recipients: [{ name: studentName, phone: to, status: result.ok ? 'success' : 'fail', error: result.error }],
+          total_count: 1,
+          success_count: result.ok ? 1 : 0,
+          fail_count: result.ok ? 0 : 1,
+        });
+      }
+
       return NextResponse.json(result);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '알림톡 발송 오류';
@@ -49,9 +65,42 @@ export async function POST(req: Request) {
 
   // SMS 발송 (Ppurio)
   const smsText = `[${academyName || '학원'}] ${studentName} 학생이 ${displayDate} 수업에 ${status}하였습니다.`;
+  const msgType = Buffer.byteLength(smsText, 'utf8') > 90 ? 'lms' : 'sms';
+
   try {
+    // CON 차감
+    if (academy_id) {
+      const pricePerMsg = await getFeaturePrice(msgType);
+      if (pricePerMsg > 0) {
+        const balance = await getConBalance(academy_id);
+        if (balance >= pricePerMsg) {
+          const db = createAdminClient();
+          await db.rpc('deduct_con', {
+            p_academy_id: academy_id,
+            p_amount: pricePerMsg,
+            p_feature_key: msgType,
+            p_description: `출결 ${msgType.toUpperCase()} 발송 (${studentName} ${status})`,
+          });
+        }
+      }
+    }
+
     const result = await sendPpurioSms(to, smsText, academy_id);
     console.log('[attendance/notify] SMS 결과:', JSON.stringify(result));
+
+    // 발송 이력 기록
+    if (academy_id) {
+      await supabaseAdmin.from('sms_logs').insert({
+        academy_id,
+        message: smsText,
+        recipient_type: 'parent',
+        recipients: [{ name: studentName, phone: to, status: result.ok ? 'success' : 'fail', error: result.error }],
+        total_count: 1,
+        success_count: result.ok ? 1 : 0,
+        fail_count: result.ok ? 0 : 1,
+      });
+    }
+
     return NextResponse.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'SMS 발송 오류';
