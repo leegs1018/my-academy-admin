@@ -67,6 +67,9 @@ export default function SMSPage() {
   const [selectedRecipient, setSelectedRecipient] = useState<any>(null);
   const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
   const [isDeletingLogs, setIsDeletingLogs] = useState(false);
+  const [logsOffset, setLogsOffset] = useState(0);
+  const [hasMoreLogs, setHasMoreLogs] = useState(false);
+  const [isLoadingMoreLogs, setIsLoadingMoreLogs] = useState(false);
 
   // SMS/LMS 단가 로드
   useEffect(() => {
@@ -105,12 +108,15 @@ export default function SMSPage() {
       const [studentsRes, templatesRes, logsRes] = await Promise.all([
         supabase.from('students').select('*').eq('academy_id', uid).order('name', { ascending: true }),
         supabase.from('sms_templates').select('*').eq('academy_id', uid).order('created_at', { ascending: false }),
-        supabase.from('sms_logs').select('*').eq('academy_id', uid).order('created_at', { ascending: false }),
+        supabase.from('sms_logs').select('*').eq('academy_id', uid).order('created_at', { ascending: false }).limit(50),
       ]);
 
       setStudents(studentsRes.data || []);
       setTemplates(templatesRes.data || []);
-      setLogs(logsRes.data || []);
+      const logsData = logsRes.data || [];
+      setLogs(logsData);
+      setLogsOffset(logsData.length);
+      setHasMoreLogs(logsData.length === 50);
       setLoading(false);
     };
     init();
@@ -282,6 +288,22 @@ export default function SMSPage() {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedLogIds(next);
+  };
+
+  const loadMoreLogs = async () => {
+    if (isLoadingMoreLogs || !userId) return;
+    setIsLoadingMoreLogs(true);
+    const { data } = await supabase
+      .from('sms_logs')
+      .select('*')
+      .eq('academy_id', userId)
+      .order('created_at', { ascending: false })
+      .range(logsOffset, logsOffset + 49);
+    const newLogs = data || [];
+    setLogs(prev => [...prev, ...newLogs]);
+    setLogsOffset(prev => prev + newLogs.length);
+    setHasMoreLogs(newLogs.length === 50);
+    setIsLoadingMoreLogs(false);
   };
 
   const handleDeleteLogs = async () => {
@@ -776,6 +798,17 @@ export default function SMSPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {hasMoreLogs && (
+            <div className="px-6 py-4 border-t border-gray-100 text-center">
+              <button
+                onClick={loadMoreLogs}
+                disabled={isLoadingMoreLogs}
+                className="px-6 py-2.5 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all disabled:opacity-50"
+              >
+                {isLoadingMoreLogs ? '로딩 중...' : '더 보기'}
+              </button>
             </div>
           )}
         </div>

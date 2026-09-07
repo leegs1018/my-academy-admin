@@ -32,6 +32,23 @@ export async function POST(req: Request) {
 
   if (method === 'alimtalk') {
     try {
+      // CON 차감
+      if (academy_id) {
+        const price = await getFeaturePrice('alimtalk');
+        if (price > 0) {
+          const balance = await getConBalance(academy_id);
+          if (balance >= price) {
+            const db = createAdminClient();
+            await db.rpc('deduct_con', {
+              p_academy_id: academy_id,
+              p_amount: price,
+              p_feature_key: 'alimtalk',
+              p_description: `출결 알림톡 발송 (${studentName} ${status})`,
+            });
+          }
+        }
+      }
+
       const result = await sendAlimtalk({
         type: 'attendance',
         to,
@@ -42,7 +59,7 @@ export async function POST(req: Request) {
       }, academy_id);
       console.log('[attendance/notify] 알림톡 결과:', JSON.stringify(result));
 
-      // 알림톡 발송 이력 기록 (CON 차감은 alimtalk/send에서 처리)
+      // 알림톡 발송 이력 기록
       if (academy_id) {
         await supabaseAdmin.from('sms_logs').insert({
           academy_id,
