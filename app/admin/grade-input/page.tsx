@@ -78,6 +78,9 @@ export default function GradeInputPage() {
   const [selectedGradeRecipient, setSelectedGradeRecipient] = useState<any>(null);
   const [selectedGradeLogIds, setSelectedGradeLogIds] = useState<Set<string>>(new Set());
   const [isDeletingGradeLogs, setIsDeletingGradeLogs] = useState(false);
+  const [gradeLogsOffset, setGradeLogsOffset] = useState(0);
+  const [hasMoreGradeLogs, setHasMoreGradeLogs] = useState(false);
+  const [isLoadingMoreGradeLogs, setIsLoadingMoreGradeLogs] = useState(false);
 
   // ── 성적 발송 템플릿 ──────────────────────────────
   const [gradeTemplates, setGradeTemplates] = useState<GradeTemplate[]>([]);
@@ -109,8 +112,11 @@ export default function GradeInputPage() {
       setSmsEnabled(enabled);
       setSendMethod('alimtalk');
 
-      const { data: logs } = await supabase.from('sms_logs').select('*').eq('academy_id', uid).order('created_at', { ascending: false });
-      if (logs) setGradeLogs(logs);
+      const { data: logs } = await supabase.from('sms_logs').select('*').eq('academy_id', uid).order('created_at', { ascending: false }).limit(50);
+      const logsData = logs || [];
+      setGradeLogs(logsData);
+      setGradeLogsOffset(logsData.length);
+      setHasMoreGradeLogs(logsData.length === 50);
     };
     getUser();
   }, []);
@@ -442,6 +448,22 @@ export default function GradeInputPage() {
     if (allGradeLogsSelected) setSelectedGradeLogIds(new Set());
     else setSelectedGradeLogIds(new Set(gradeLogs.map(l => l.id)));
   };
+  const loadMoreGradeLogs = async () => {
+    if (isLoadingMoreGradeLogs || !userId) return;
+    setIsLoadingMoreGradeLogs(true);
+    const { data } = await supabase
+      .from('sms_logs')
+      .select('*')
+      .eq('academy_id', userId)
+      .order('created_at', { ascending: false })
+      .range(gradeLogsOffset, gradeLogsOffset + 49);
+    const newLogs = data || [];
+    setGradeLogs(prev => [...prev, ...newLogs]);
+    setGradeLogsOffset(prev => prev + newLogs.length);
+    setHasMoreGradeLogs(newLogs.length === 50);
+    setIsLoadingMoreGradeLogs(false);
+  };
+
   const handleDeleteGradeLogs = async () => {
     const ids = [...selectedGradeLogIds];
     if (!confirm(`선택한 ${ids.length}건을 삭제할까요?`)) return;
@@ -1161,6 +1183,17 @@ export default function GradeInputPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {hasMoreGradeLogs && (
+            <div className="px-6 py-4 border-t border-gray-100 text-center">
+              <button
+                onClick={loadMoreGradeLogs}
+                disabled={isLoadingMoreGradeLogs}
+                className="px-6 py-2.5 text-sm font-black text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-all disabled:opacity-50"
+              >
+                {isLoadingMoreGradeLogs ? '로딩 중...' : '더 보기'}
+              </button>
             </div>
           )}
         </div>
