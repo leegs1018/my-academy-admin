@@ -2130,7 +2130,7 @@ export default function AiQuestionsPage() {
                             <span className="text-xs font-black text-gray-400">문제 품질</span>
                             <button
                               disabled={!!rated}
-                              onClick={() => handleRateQuestion(idx, 'good', q, ratingHistoryId, questionRatings, setQuestionRatings, aiPrice ?? 1)}
+                              onClick={() => handleRateQuestion(idx, 'good', q, ratingHistoryId, questionRatings, setQuestionRatings, typePricing[q.type] ?? aiPrice ?? 20)}
                               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
                                 ${rated === 'good' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-gray-200 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
                             >
@@ -2138,7 +2138,7 @@ export default function AiQuestionsPage() {
                             </button>
                             <button
                               disabled={!!rated}
-                              onClick={() => handleRateQuestion(idx, 'bad', q, ratingHistoryId, questionRatings, setQuestionRatings, aiPrice ?? 1)}
+                              onClick={() => handleRateQuestion(idx, 'bad', q, ratingHistoryId, questionRatings, setQuestionRatings, typePricing[q.type] ?? aiPrice ?? 20)}
                               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
                                 ${rated === 'bad' ? 'bg-rose-500 text-white border-rose-500' : 'border-gray-200 text-gray-400 hover:border-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
                             >
@@ -2689,7 +2689,7 @@ export default function AiQuestionsPage() {
                             <span className="text-xs font-black text-gray-400">문제 품질</span>
                             <button
                               disabled={!!rated}
-                              onClick={() => handleRateQuestion(idx, 'good', q, mockRatingHistoryId, mockQuestionRatings, setMockQuestionRatings, aiPrice ?? 1)}
+                              onClick={() => handleRateQuestion(idx, 'good', q, mockRatingHistoryId, mockQuestionRatings, setMockQuestionRatings, mockTypePricing[q.type] ?? typePricing[q.type] ?? aiPrice ?? 20)}
                               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
                                 ${rated === 'good' ? 'bg-emerald-500 text-white border-emerald-500' : 'border-gray-200 text-gray-400 hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
                             >
@@ -2697,7 +2697,7 @@ export default function AiQuestionsPage() {
                             </button>
                             <button
                               disabled={!!rated}
-                              onClick={() => handleRateQuestion(idx, 'bad', q, mockRatingHistoryId, mockQuestionRatings, setMockQuestionRatings, aiPrice ?? 1)}
+                              onClick={() => handleRateQuestion(idx, 'bad', q, mockRatingHistoryId, mockQuestionRatings, setMockQuestionRatings, mockTypePricing[q.type] ?? typePricing[q.type] ?? aiPrice ?? 20)}
                               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-black transition-all border
                                 ${rated === 'bad' ? 'bg-rose-500 text-white border-rose-500' : 'border-gray-200 text-gray-400 hover:border-rose-400 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed'}`}
                             >
