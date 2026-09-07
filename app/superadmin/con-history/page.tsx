@@ -61,13 +61,22 @@ function featureLabel(key: string | null, description?: string): string {
   if (key.startsWith('ai_type_')) return `실전변형 직접 · ${key.replace('ai_type_', '')}`;
   if (key.startsWith('mock_ai_type_')) return `실전변형 모의 · ${key.replace('mock_ai_type_', '')}`;
 
+  // 출결 SMS/LMS (description에 '출결' 포함)
+  if ((key === 'sms' || key === 'lms') && /출결/.test(desc)) {
+    return `출결 ${key.toUpperCase()}`;
+  }
+
   // 기타
   const STATIC: Record<string, string> = {
     mock_workbook: '모의고사 툴',
     vocab_choice: '어휘선택',
     sms: 'SMS', lms: 'LMS',
+    kiosk: '키오스크 SMS',
+    alimtalk: '알림톡',
     payapp_charge: '카드결제', payapp_refund: '카드결제 환불',
     admin_deduct: '관리자 차감',
+    signup_bonus: '가입 보너스', profile_completion_bonus: '프로필 완성 보너스',
+    signup_bonus_referral: '추천인 코드 보너스', referral_reward: '추천인 적립',
   };
   return STATIC[key] ?? key;
 }
@@ -85,6 +94,8 @@ const FEATURE_FILTER_OPTIONS = [
   { value: 'wb_mock', label: '워크북 (모의고사)' },
   { value: 'sms', label: 'SMS' },
   { value: 'lms', label: 'LMS' },
+  { value: 'kiosk', label: '키오스크 SMS' },
+  { value: 'alimtalk', label: '알림톡' },
 ];
 
 function getThisMonthRange() {
