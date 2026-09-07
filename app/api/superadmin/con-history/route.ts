@@ -51,12 +51,12 @@ export async function GET(request: NextRequest) {
       query = query.eq('feature_key', featureFilter);
     }
   }
-  if (startDate) query = query.gte('created_at', startDate);
-  if (endDate) {
-    const endDateObj = new Date(endDate);
-    endDateObj.setDate(endDateObj.getDate() + 1);
-    query = query.lt('created_at', endDateObj.toISOString().split('T')[0]);
-  }
+  // KST 날짜 → UTC ISO 변환 (KST = UTC+9)
+  const toKstStartUTC = (d: string) => new Date(d + 'T00:00:00+09:00').toISOString();
+  const toKstEndUTC   = (d: string) => { const dt = new Date(d + 'T00:00:00+09:00'); dt.setDate(dt.getDate() + 1); return dt.toISOString(); };
+
+  if (startDate) query = query.gte('created_at', toKstStartUTC(startDate));
+  if (endDate)   query = query.lt('created_at', toKstEndUTC(endDate));
 
   const from = (page - 1) * pageSize;
   const { data: transactions, count, error } = await query.range(from, from + pageSize - 1);
@@ -76,12 +76,8 @@ export async function GET(request: NextRequest) {
     else if (featureFilter === 'wb_mock') summaryQuery = summaryQuery.like('feature_key', 'wb_mock_%');
     else summaryQuery = summaryQuery.eq('feature_key', featureFilter);
   }
-  if (startDate) summaryQuery = summaryQuery.gte('created_at', startDate);
-  if (endDate) {
-    const endDateObj = new Date(endDate);
-    endDateObj.setDate(endDateObj.getDate() + 1);
-    summaryQuery = summaryQuery.lt('created_at', endDateObj.toISOString().split('T')[0]);
-  }
+  if (startDate) summaryQuery = summaryQuery.gte('created_at', toKstStartUTC(startDate));
+  if (endDate)   summaryQuery = summaryQuery.lt('created_at', toKstEndUTC(endDate));
 
   const { data: summaryRows } = await summaryQuery;
   const summary: {
