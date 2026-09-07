@@ -71,6 +71,9 @@ async function getPpurioConfig(academy_id?: string) {
 
 const PPURIO_BASE = process.env.PPURIO_PROXY_URL ?? 'http://49.247.137.90:3000';
 
+// 토큰 캐시 (24시간 유효 → 23시간으로 보수적으로 캐싱)
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+
 // Ppurio changeWord 변수: 한글 2바이트 기준 100바이트 한도
 function truncate100(str: string): string {
   let bytes = 0;
@@ -89,6 +92,10 @@ function truncate100(str: string): string {
 }
 
 async function getToken(account: string, apiKey: string): Promise<string> {
+  const cacheKey = `${account}:${apiKey}`;
+  const cached = tokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
+
   const res = await fetch(`${PPURIO_BASE}/token`, {
     method: 'POST',
     headers: {
@@ -97,6 +104,8 @@ async function getToken(account: string, apiKey: string): Promise<string> {
   });
   const data = await res.json() as { token?: string };
   if (!data.token) throw new Error(`토큰 발급 실패: ${JSON.stringify(data)}`);
+
+  tokenCache.set(cacheKey, { token: data.token, expiresAt: Date.now() + 23 * 60 * 60 * 1000 });
   return data.token;
 }
 
