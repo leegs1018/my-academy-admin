@@ -673,11 +673,6 @@ export default function SMSPage() {
 
       {/* ─── 발송 이력 탭 ─── */}
       {activeTab === 'logs' && (
-        <>
-        <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-2xl px-4 py-3 text-sm text-yellow-700">
-          <span className="text-base mt-0.5">⚠️</span>
-          <span className="font-bold">문자 미수신 시 관리자에게 문의 부탁드립니다.</span>
-        </div>
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg font-black text-gray-700">발송 이력</h2>
@@ -932,7 +927,6 @@ export default function SMSPage() {
             </div>
           </div>
         </div>
-        </>
       )}
 
       {/* ─── 발송 결과 토스트 ─── */}
