@@ -872,6 +872,40 @@ export async function POST(request: Request) {
         }
       }
 
+      // paragraph_order: shuffled_paragraphs 표시 순서 강제 셔플 (AI가 순서대로 반환하는 문제 방지)
+      if (type === 'paragraph_order' && Array.isArray(parsed.shuffled_paragraphs)) {
+        const arr = parsed.shuffled_paragraphs as Array<{label: string; text: string}>;
+        if (arr.length >= 2) {
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          parsed.shuffled_paragraphs = arr;
+        }
+      }
+
+      // combo_grammar_order: (B)~(E) 단락 표시 순서를 강제 셔플
+      // AI가 항상 논리 순서대로 반환하므로 코드에서 직접 섞어 학생이 맞춰야 하도록 함
+      if (type === 'combo_grammar_order' && Array.isArray(parsed.paragraphs)) {
+        const paras = parsed.paragraphs as Array<{label: string; text: string}>;
+        if (paras.length >= 3) {
+          const fixed = paras[0]; // (A) 고정
+          const rest = paras.slice(1);
+          // Fisher-Yates 셔플
+          for (let i = rest.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [rest[i], rest[j]] = [rest[j], rest[i]];
+          }
+          // 원래 순서 그대로인 경우 한 번 더 스왑
+          const origLabels = paras.slice(1).map(p => p.label);
+          const isStillOriginal = rest.every((p, i) => p.label === origLabels[i]);
+          if (isStillOriginal && rest.length > 1) {
+            [rest[0], rest[1]] = [rest[1], rest[0]];
+          }
+          parsed.paragraphs = [fixed, ...rest];
+        }
+      }
+
       results.push({ ...parsed, _original_text: text.trim() });
     }
 
