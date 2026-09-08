@@ -2827,6 +2827,23 @@ export default function WorkbookPage() {
     // 한국어 요약 (passage_translation)
     if (typeof result.korean_summary === 'string')
       fields.push({ key: 'korean_summary', label: '한국어 요약', value: result.korean_summary });
+    // 1번 선택지 (combo_vocab_fill, combo_vocab_grammar)
+    if (Array.isArray(result.q1_choices)) {
+      (result.q1_choices as Array<{label:string;word:string}>).forEach((c, i) =>
+        fields.push({ key: `q1_choices.${i}.word`, label: `1번 선택지 ${c.label}`, value: c.word ?? '' }));
+    }
+    // 2번 문장완성 (combo_vocab_fill)
+    if (Array.isArray(result.q2_items)) {
+      (result.q2_items as Array<Record<string,unknown>>).forEach((item, i) => {
+        const blank = item.blank as string;
+        if (typeof item.ko === 'string')
+          fields.push({ key: `q2_items.${i}.ko`, label: `${blank} 한국어`, value: item.ko });
+        if (Array.isArray(item.words))
+          fields.push({ key: `q2_items.${i}.words`, label: `${blank} 보기 단어`, value: (item.words as string[]).join(' / ') });
+        if (typeof item.answer === 'string')
+          fields.push({ key: `q2_items.${i}.answer`, label: `${blank} 정답`, value: item.answer });
+      });
+    }
     // 콤보 유형 섹션 지문
     if (result.section1 && typeof (result.section1 as WorkbookResult).passage === 'string')
       fields.push({ key: 'section1.passage', label: '1번 지문', value: (result.section1 as WorkbookResult).passage as string });
@@ -2849,7 +2866,10 @@ export default function WorkbookPage() {
           r[parts[0]] = f.value;
         } else if (parts.length === 3) {
           const arr = [...(r[parts[0]] as Array<Record<string,unknown>>)];
-          arr[parseInt(parts[1])] = { ...arr[parseInt(parts[1])], [parts[2]]: f.value };
+          const val = parts[2] === 'words'
+            ? f.value.split('/').map((w: string) => w.trim()).filter(Boolean)
+            : f.value;
+          arr[parseInt(parts[1])] = { ...arr[parseInt(parts[1])], [parts[2]]: val };
           r[parts[0]] = arr;
         } else if (parts.length === 2) {
           const section = { ...(r[parts[0]] as Record<string,unknown>) };
