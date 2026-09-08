@@ -7,6 +7,7 @@ const FEATURE_GROUP: Record<string, string[]> = {
   workbook: ['pdf_analysis', 'mock_workbook'],
   exam:     ['ai_question_per_type', 'mock_exam_question_per_type'],
   vocab:    ['vocab_choice'],
+  alimtalk: ['alimtalk'],
   kiosk:    ['kiosk'],
   sms:      ['sms'],
   lms:      ['lms'],

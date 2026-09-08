@@ -81,6 +81,14 @@ function featureLabel(key: string | null, description?: string): string {
   return STATIC[key] ?? key;
 }
 
+function translateDesc(desc: string | null): string {
+  if (!desc) return '-';
+  return Object.entries(WB_TYPE_LABELS).reduce(
+    (s, [en, ko]) => s.replace(new RegExp(`\\b${en}\\b`, 'g'), ko),
+    desc
+  );
+}
+
 function toLocalDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -331,7 +339,7 @@ export default function ConHistoryPage() {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-xs font-bold text-slate-400 whitespace-nowrap">{featureLabel(t.feature_key, t.description)}</td>
-                  <td className="py-3 px-4 text-xs font-bold text-slate-300 max-w-xs" title={t.description}>{t.description}</td>
+                  <td className="py-3 px-4 text-xs font-bold text-slate-300 max-w-xs" title={t.description ?? ''}>{translateDesc(t.description)}</td>
                   <td className="py-3 px-4 text-right font-black whitespace-nowrap">
                     <span className={t.type === 'charge' ? 'text-emerald-400' : 'text-red-400'}>
                       {t.type === 'charge' ? '+' : '-'}{t.amount.toLocaleString()} C

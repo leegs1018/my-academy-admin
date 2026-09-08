@@ -30,6 +30,8 @@ const FEATURE_LABELS: Record<string, { label: string; color: string }> = {
   // 문자
   sms:                           { label: 'SMS',            color: 'text-green-600 dark:text-green-400' },
   lms:                           { label: 'LMS',            color: 'text-teal-600 dark:text-teal-400' },
+  // 알림톡
+  alimtalk:                      { label: '알림톡',         color: 'text-indigo-500 dark:text-indigo-400' },
   // 키오스크
   kiosk:                         { label: '키오스크',       color: 'text-orange-500 dark:text-orange-400' },
   // 카드결제
@@ -43,6 +45,7 @@ const FEATURE_OPTIONS = [
   { value: 'workbook', label: '워크북' },
   { value: 'exam',     label: '실전변형' },
   { value: 'vocab',    label: '어휘선택' },
+  { value: 'alimtalk', label: '알림톡' },
   { value: 'kiosk',    label: '키오스크' },
   { value: 'sms',      label: 'SMS 문자' },
   { value: 'lms',      label: 'LMS 문자' },

@@ -3,6 +3,18 @@ import OpenAI from 'openai';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
+const WB_TYPE_LABELS: Record<string, string> = {
+  passage_analysis: '구문분석', passage_translation: '지문해석지',
+  translation: '문장해석', word_order: '단어배열', english_writing: '영작',
+  vocab_choice: '어휘고르기', vocab_fill: '어휘채우기',
+  grammar_choice: '어법고르기', grammar_correct: '어법고치기', grammar_correct_adv: '어법고치기(심화)',
+  combo_grammar_order: '어법+순서', combo_vocab_fill: '영작+어휘',
+  summary_sentence: '요약문', paragraph_order: '문단배열', sentence_insertion: '문장삽입',
+  suneung_vocab_right: '적절한어휘', suneung_vocab_wrong: '부적절한어휘',
+  suneung_grammar_right: '맞는어법', suneung_grammar_wrong: '틀린어법',
+  combo_vocab_grammar: '어휘+어법', combo_grammar_insert: '어법+문장삽입',
+};
+
 export const maxDuration = 120;
 
 export type WorkbookType =
@@ -809,7 +821,7 @@ export async function POST(request: Request) {
           p_feature_key: featureKey,
           p_description: tab === 'mock' && mockMeta
             ? `워크북 (모의) ${type} · ${mockMeta.year}년 ${mockMeta.grade} ${mockMeta.institution.split('/')[0]} ${mockMeta.numbers.join('·')}번`
-            : `워크북 (직접) ${type} × ${validPassages.length}지문`,
+            : `워크북 (직접) ${WB_TYPE_LABELS[type] ?? type} × ${validPassages.length}지문`,
         });
         if (deductError) {
           if (deductError.message?.includes('INSUFFICIENT_CON')) {
