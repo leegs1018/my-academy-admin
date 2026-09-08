@@ -2547,6 +2547,11 @@ export default function WorkbookPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // 편집 모달
+  type EditField = { key: string; label: string; value: string };
+  const [editModal, setEditModal] = useState<{ typeIdx: number; resultIdx: number; fields: EditField[] } | null>(null);
+  const [editFields, setEditFields] = useState<EditField[]>([]);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       if (s) {
@@ -2781,6 +2786,58 @@ export default function WorkbookPage() {
     } finally {
       setSavingHistory(false);
     }
+  };
+
+  // ── 편집 헬퍼 ────────────────────────────────────────
+  const openEditModal = () => {
+    const result = allResults[activeTypeTab]?.results[activeResultTab];
+    if (!result) return;
+    const fields: EditField[] = [];
+    if (typeof result.passage === 'string')
+      fields.push({ key: 'passage', label: '지문', value: result.passage });
+    if (typeof result.fixed_paragraph === 'string')
+      fields.push({ key: 'fixed_paragraph', label: '고정 문단', value: result.fixed_paragraph });
+    if (Array.isArray(result.shuffled_paragraphs))
+      (result.shuffled_paragraphs as Array<{label:string;text:string}>).forEach((p, i) =>
+        fields.push({ key: `shuffled_paragraphs.${i}.text`, label: `단락 (${p.label})`, value: p.text }));
+    if (Array.isArray(result.paragraphs))
+      (result.paragraphs as Array<{label:string;text:string}>).forEach((p, i) =>
+        fields.push({ key: `paragraphs.${i}.text`, label: `문단 ${p.label}`, value: p.text }));
+    if (result.section1 && typeof (result.section1 as WorkbookResult).passage === 'string')
+      fields.push({ key: 'section1.passage', label: '1번 지문', value: (result.section1 as WorkbookResult).passage as string });
+    if (result.section2 && typeof (result.section2 as WorkbookResult).passage === 'string')
+      fields.push({ key: 'section2.passage', label: '2번 지문', value: (result.section2 as WorkbookResult).passage as string });
+    setEditFields(fields.map(f => ({ ...f })));
+    setEditModal({ typeIdx: activeTypeTab, resultIdx: activeResultTab, fields });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editModal) return;
+    setAllResults(prev => {
+      const next = [...prev];
+      const tr = { ...next[editModal.typeIdx] };
+      const results = [...tr.results];
+      let r = { ...results[editModal.resultIdx] };
+      for (const f of editFields) {
+        const parts = f.key.split('.');
+        if (parts.length === 1) {
+          r[parts[0]] = f.value;
+        } else if (parts.length === 3) {
+          const arr = [...(r[parts[0]] as Array<Record<string,unknown>>)];
+          arr[parseInt(parts[1])] = { ...arr[parseInt(parts[1])], [parts[2]]: f.value };
+          r[parts[0]] = arr;
+        } else if (parts.length === 2) {
+          const section = { ...(r[parts[0]] as Record<string,unknown>) };
+          section[parts[1]] = f.value;
+          r[parts[0]] = section;
+        }
+      }
+      results[editModal.resultIdx] = r;
+      tr.results = results;
+      next[editModal.typeIdx] = tr;
+      return next;
+    });
+    setEditModal(null);
   };
 
   const handleDownloadPdf = async (withAnswer: boolean) => {
@@ -3344,6 +3401,10 @@ export default function WorkbookPage() {
                         {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
                       </button>
                     )}
+                    <button onClick={openEditModal}
+                      className="px-4 py-2 text-xs font-black bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl transition-all">
+                      ✏️ 편집
+                    </button>
                     <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
                       className="px-4 py-2 text-xs font-black bg-slate-700 hover:bg-slate-900 text-white rounded-xl transition-all disabled:opacity-50">
                       {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
@@ -3655,6 +3716,45 @@ export default function WorkbookPage() {
             }
           })
         )}
+        {/* ── 편집 모달 ── */}
+        {editModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="text-lg font-black text-gray-800">지문 편집</h3>
+                <button onClick={() => setEditModal(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+              </div>
+              <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+                {editFields.map((field, i) => (
+                  <div key={i}>
+                    <label className="text-xs font-black text-gray-500 mb-1.5 block">{field.label}</label>
+                    <textarea
+                      value={editFields[i].value}
+                      onChange={e => {
+                        const next = [...editFields];
+                        next[i] = { ...next[i], value: e.target.value };
+                        setEditFields(next);
+                      }}
+                      rows={field.key.includes('section') || field.key === 'passage' ? 8 : 4}
+                      className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm font-medium focus:border-blue-400 focus:outline-none resize-y leading-relaxed"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+                <button onClick={() => setEditModal(null)}
+                  className="px-5 py-2.5 text-sm font-black text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all">
+                  취소
+                </button>
+                <button onClick={handleSaveEdit}
+                  className="px-5 py-2.5 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all">
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {allResults.length > 0 && (() => {
           const maxPassages = Math.max(...allResults.map(r => r.results.length));
           const baseTitle = (activeTab === 'input' ? inputTitle : mockTitle) || '워크북';
