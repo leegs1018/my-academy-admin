@@ -2793,16 +2793,41 @@ export default function WorkbookPage() {
     const result = allResults[activeTypeTab]?.results[activeResultTab];
     if (!result) return;
     const fields: EditField[] = [];
+    // 단일 passage 텍스트
     if (typeof result.passage === 'string')
       fields.push({ key: 'passage', label: '지문', value: result.passage });
+    // 삽입 문장 (sentence_insertion)
+    if (typeof result.insert_sentence === 'string')
+      fields.push({ key: 'insert_sentence', label: '삽입 문장', value: result.insert_sentence });
+    // 고정 문단 (paragraph_order)
     if (typeof result.fixed_paragraph === 'string')
       fields.push({ key: 'fixed_paragraph', label: '고정 문단', value: result.fixed_paragraph });
+    // 셔플 문단 배열 (paragraph_order)
     if (Array.isArray(result.shuffled_paragraphs))
       (result.shuffled_paragraphs as Array<{label:string;text:string}>).forEach((p, i) =>
         fields.push({ key: `shuffled_paragraphs.${i}.text`, label: `단락 (${p.label})`, value: p.text }));
+    // 문단 배열 (combo_grammar_order)
     if (Array.isArray(result.paragraphs))
       (result.paragraphs as Array<{label:string;text:string}>).forEach((p, i) =>
         fields.push({ key: `paragraphs.${i}.text`, label: `문단 ${p.label}`, value: p.text }));
+    // 문장 배열 (translation / english_writing / vocab_fill / grammar_correct_adv / passage_translation / passage_analysis)
+    if (Array.isArray(result.sentences)) {
+      (result.sentences as Array<Record<string, unknown>>).forEach((s, i) => {
+        const num = (s.num ?? i + 1) as number;
+        if (typeof s.en === 'string')
+          fields.push({ key: `sentences.${i}.en`, label: `문장 ${num} (영어)`, value: s.en });
+        if (typeof s.ko === 'string')
+          fields.push({ key: `sentences.${i}.ko`, label: `문장 ${num} (한국어)`, value: s.ko });
+        if (typeof s.text === 'string' && typeof s.en !== 'string')
+          fields.push({ key: `sentences.${i}.text`, label: `문장 ${num}`, value: s.text as string });
+        if (typeof s.answer === 'string')
+          fields.push({ key: `sentences.${i}.answer`, label: `문장 ${num} (정답)`, value: s.answer as string });
+      });
+    }
+    // 한국어 요약 (passage_translation)
+    if (typeof result.korean_summary === 'string')
+      fields.push({ key: 'korean_summary', label: '한국어 요약', value: result.korean_summary });
+    // 콤보 유형 섹션 지문
     if (result.section1 && typeof (result.section1 as WorkbookResult).passage === 'string')
       fields.push({ key: 'section1.passage', label: '1번 지문', value: (result.section1 as WorkbookResult).passage as string });
     if (result.section2 && typeof (result.section2 as WorkbookResult).passage === 'string')
@@ -3735,7 +3760,7 @@ export default function WorkbookPage() {
                         next[i] = { ...next[i], value: e.target.value };
                         setEditFields(next);
                       }}
-                      rows={field.key.includes('section') || field.key === 'passage' ? 8 : 4}
+                      rows={field.key.includes('section') || field.key === 'passage' || field.key.endsWith('text') && (field.key.startsWith('shuffled') || field.key.startsWith('paragraphs')) ? 4 : field.key.startsWith('sentences') ? 2 : 4}
                       className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm font-medium focus:border-blue-400 focus:outline-none resize-y leading-relaxed"
                     />
                   </div>
