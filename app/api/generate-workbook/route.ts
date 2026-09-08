@@ -181,7 +181,7 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 1. 반드시 마침표(.)가 있는 위치에서만 문장을 나눕니다. 쉼표(,), 세미콜론(;), 콜론(:)은 문장 분리 기준이 아닙니다.
 2. 각 문장은 반드시 완전한 문장(대문자 시작, 마침표로 끝)이어야 합니다.
 3. 중간에 쉼표로 연결된 절들은 하나의 문장으로 묶습니다.
-4. 지문 전체에서 10~15개 문장을 선택합니다.
+4. 지문 전체 문장을 모두 포함합니다 (생략 금지). 문장이 많아도 하나도 빠뜨리지 마세요.
 5. 각 문장에 번호를 붙이고, 영어 원문을 절대 변형하지 않으며 자연스러운 한국어 해석을 제공합니다.
 
 출력 형식 (순수 JSON만):
@@ -214,7 +214,7 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     case 'english_writing':
       return header('아래 영어 지문으로 영작하기 문제를 생성하세요.') +
 `생성 규칙:
-1. 10~12문장을 선택합니다.
+1. 지문 전체 문장을 모두 포함합니다 (생략 금지). 문장이 많아도 하나도 빠뜨리지 마세요.
 2. 한국어 번역을 제시하고 학생이 원본 영어 문장을 영작합니다.
 3. 힌트: 각 문장의 첫 단어와 마지막 단어를 제공합니다.
 4. 원문 영어 문장은 절대 변형하지 않습니다.
@@ -842,7 +842,7 @@ export async function POST(request: Request) {
       const prompt = buildPrompt(text.trim(), type, diff);
       const response = await client.chat.completions.create({
         model: 'gpt-5.1',
-        max_completion_tokens: 4096,
+        max_completion_tokens: 16000,
         messages: [{ role: 'user', content: prompt }],
       });
       const rawText = response.choices[0]?.message?.content ?? '';
@@ -870,6 +870,22 @@ export async function POST(request: Request) {
         if (s1?.passage && s1?.answer_key) {
           s1.passage = redistributeVocabAnswers(s1.passage as string, s1.answer_key as string);
         }
+      }
+
+      // combo_vocab_fill: q2_items의 words 배열 강제 셔플 (AI가 정답 순서로 반환하는 문제 방지)
+      if (type === 'combo_vocab_fill' && Array.isArray(parsed.q2_items)) {
+        const items = parsed.q2_items as Array<Record<string, unknown>>;
+        for (const item of items) {
+          if (Array.isArray(item.words) && (item.words as unknown[]).length > 1) {
+            const words = [...(item.words as string[])];
+            for (let i = words.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [words[i], words[j]] = [words[j], words[i]];
+            }
+            item.words = words;
+          }
+        }
+        parsed.q2_items = items;
       }
 
       // paragraph_order: shuffled_paragraphs 표시 순서 강제 셔플 (AI가 순서대로 반환하는 문제 방지)
