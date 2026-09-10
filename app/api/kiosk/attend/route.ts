@@ -124,6 +124,8 @@ export async function POST(req: Request) {
 
     if (notificationMethod === 'alimtalk') {
       // 알림톡 발송
+      const alimtalkPrice = await getFeaturePrice('alimtalk');
+      const alimtalkBalance = await getConBalance(academy_id);
       try {
         smsResult = await sendAlimtalk({
           type: 'attendance',
@@ -135,6 +137,14 @@ export async function POST(req: Request) {
         }, academy_id);
       } catch (e: unknown) {
         smsResult = { ok: false, error: e instanceof Error ? e.message : '알림톡 발송 오류' };
+      }
+      if (smsResult.ok && alimtalkPrice > 0 && alimtalkBalance >= alimtalkPrice) {
+        await supabaseAdmin.rpc('deduct_con', {
+          p_academy_id: academy_id,
+          p_amount: alimtalkPrice,
+          p_feature_key: 'alimtalk',
+          p_description: `키오스크 알림톡 발송 (${student.name} ${action})`,
+        });
       }
     } else {
       // SMS 발송
