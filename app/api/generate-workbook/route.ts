@@ -59,11 +59,12 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     // ── 어휘 선택 ────────────────────────────────────────────────────────────
     case 'vocab_choice':
       return header('아래 영어 지문으로 어휘 선택 문제를 생성하세요.') +
-`[핵심 규칙] 각 문장마다 2~3개의 어휘 선택지를 삽입합니다.
-짧은 문장(단어 10개 이하)은 2개, 긴 문장(단어 11개 이상)은 3개를 원칙으로 합니다.
+`[핵심 규칙] 각 문장마다 3~4개의 어휘 선택지를 삽입합니다.
+짧은 문장(단어 10개 이하)은 3개, 긴 문장(단어 11개 이상)은 4개를 원칙으로 합니다.
+⚠️ 문장당 최소 3개 이상 — 1개나 2개만 삽입하는 것은 절대 금지입니다. 8문장 지문이면 최소 24개 이상 생성합니다.
 
 생성 규칙:
-1. 지문의 모든 문장에서 각 문장마다 2~3개의 어휘/표현을 선택합니다.
+1. 지문의 모든 문장에서 각 문장마다 3~4개의 어휘/표현을 선택합니다.
    - 관사(a/an/the), 접속사(and/but/or), be동사(is/are/was)는 가급적 제외합니다.
    - 대신 명사, 동사, 형용사, 부사, 전치사를 우선 선택합니다.
 2. 각 위치에 번호[어휘A / 어휘B] 형식으로 선택지 2개만 만듭니다. (정답 1개 + 오답 1개)
@@ -73,6 +74,11 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 4. 원문 문장 구조와 단어를 그대로 유지합니다. 문장 어순 변경 금지.
 5. 선택 어휘 위치에만 번호와 대괄호를 삽입합니다. 나머지 텍스트는 원문 그대로.
 6. 정답이 앞 선택지(A)와 뒤 선택지(B)에 고르게 분포되도록 합니다. (약 50:50)
+
+⚠️⚠️ 출제 금지 대상 (매우 중요):
+- 숫자, 연도, 통계치, 퍼센트(%) 등 수치 표현은 절대 선택지로 만들지 않습니다. (예: "1997", "50%", "three" 같은 수사 금지)
+- 인명, 지명, 브랜드명, 기관명 등 고유명사는 절대 선택지로 만들지 않습니다.
+- 지문의 주제·내용과 직접 관련된 일반 어휘(핵심 명사, 동사, 형용사, 부사)만 선택합니다. 문맥과 무관하거나 지엽적인 단어는 제외합니다.
 
 중요: 선택지는 반드시 영어 단어로만 작성합니다. 한국어 번역 절대 금지.
 출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
@@ -109,8 +115,8 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
     case 'grammar_choice':
       return header('아래 영어 지문으로 어법 선택 문제를 생성하세요.') +
 `생성 규칙:
-1. 각 문장마다 반드시 3개의 어법 포인트를 선택하여 선택지로 만듭니다. 전체 25~35개.
-   ⚠️ 문장당 정확히 3개 — 2개나 1개 금지. 8문장 지문이면 24개 생성.
+1. 각 문장마다 3~4개의 어법 포인트를 선택하여 선택지로 만듭니다.
+   ⚠️ 문장당 최소 3개 이상 — 1개나 2개만 삽입하는 것은 절대 금지입니다. 8문장 지문이면 최소 24개 이상 생성합니다.
    포인트 유형: to부정사/동명사, 능동/수동, 주어-동사 수 일치, 관계사(who/whose/which/that),
    접속사, 형용사/부사, 시제, 전치사, 현재분사/과거분사 등
 2. 각 위치에 반드시 숫자[형태A / 형태B] 형식으로 표시합니다. 선택지는 2개입니다.
@@ -743,6 +749,47 @@ function extractJson(text: string): string {
   return text.trim();
 }
 
+// 숫자/수치 표현이 선택지로 들어간 어휘 문항 제거 (내용과 무관한 어휘 방지용 안전장치)
+function stripIrrelevantVocabChoices(passage: string, answerKey: string): { passage: string; answerKey: string } {
+  const choiceRegex = /(\d+)\[([^\]]+)\]/g;
+  const isNumericLike = (s: string) => /^[\d,.]+%?$/.test(s.trim()) || /^\d+(st|nd|rd|th)$/i.test(s.trim());
+
+  const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
+  const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
+  const answerMap: Record<number, string> = {};
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim(); });
+
+  type Item = { index: number; length: number; num: number; opts: string[]; answer: string; drop: boolean };
+  const items: Item[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = choiceRegex.exec(passage)) !== null) {
+    const num = parseInt(match[1]);
+    const opts = match[2].split(/\s*\/\s*/).map(o => o.trim());
+    const answer = answerMap[num] || opts[0];
+    const drop = opts.some(isNumericLike);
+    items.push({ index: match.index, length: match[0].length, num, opts, answer, drop });
+  }
+  if (items.length === 0 || !items.some(it => it.drop)) return { passage, answerKey };
+
+  let newPassage = '';
+  let cursor = 0;
+  let seq = 1;
+  const newKeyParts: string[] = [];
+  for (const item of items) {
+    newPassage += passage.slice(cursor, item.index);
+    if (item.drop) {
+      newPassage += item.answer;
+    } else {
+      newPassage += `${seq}[${item.opts.join(' / ')}]`;
+      newKeyParts.push(`${seq}. ${item.answer}`);
+      seq++;
+    }
+    cursor = item.index + item.length;
+  }
+  newPassage += passage.slice(cursor);
+  return { passage: newPassage, answerKey: newKeyParts.join('  ') };
+}
+
 // 어휘 선택 정답 위치 균등 분산 (기존 로직 재사용)
 function redistributeVocabAnswers(passage: string, answerKey: string): string {
   const choiceRegex = /(\d+)\[([^\]]+)\]/g;
@@ -856,7 +903,9 @@ export async function POST(request: Request) {
 
       // 어휘 선택 계열 정답 분산 후처리
       if (type === 'vocab_choice' && parsed.passage && parsed.answer_key) {
-        parsed.passage = redistributeVocabAnswers(parsed.passage as string, parsed.answer_key as string);
+        const stripped = stripIrrelevantVocabChoices(parsed.passage as string, parsed.answer_key as string);
+        parsed.passage = redistributeVocabAnswers(stripped.passage, stripped.answerKey);
+        parsed.answer_key = stripped.answerKey;
       }
       if (type === 'grammar_choice' && parsed.passage) {
         // AI가 [1. opt / opt] 포맷으로 생성할 때 → 1[opt / opt] 로 정규화

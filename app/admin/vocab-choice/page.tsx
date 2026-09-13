@@ -168,6 +168,47 @@ function parseVocabPassage(passage: string, answerKey: string): VocabChunk[] {
   return chunks;
 }
 
+// ── 선택형 문항(어휘고르기/어법고르기) 구조화 편집용 ──
+type EditChoiceChunk =
+  | { type: 'text'; text: string }
+  | { type: 'choice'; num: number; options: string[]; correctIdx: number };
+
+function parseChoiceChunksForEdit(passage: string, answerKey: string): EditChoiceChunk[] {
+  const answerMap: Record<number, string> = {};
+  const keyParts = answerKey.split(/\d+\.\s*/g).filter(Boolean);
+  const nums = [...answerKey.matchAll(/(\d+)\./g)].map(m => parseInt(m[1]));
+  nums.forEach((n, i) => { answerMap[n] = (keyParts[i] || '').trim(); });
+
+  const chunks: EditChoiceChunk[] = [];
+  const choiceRegex = /(\d+)\[((?:[^\[\]]|\[[^\]]*\])+)\]/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = choiceRegex.exec(passage)) !== null) {
+    if (match.index > lastIndex) chunks.push({ type: 'text', text: passage.slice(lastIndex, match.index) });
+    const num = parseInt(match[1]);
+    const options = match[2].split(/\s*\/\s*/).map(o => o.trim()).filter(o => o !== '');
+    const ans = (answerMap[num] || '').toLowerCase();
+    const foundIdx = options.findIndex(o => o.toLowerCase() === ans);
+    chunks.push({ type: 'choice', num, options, correctIdx: foundIdx >= 0 ? foundIdx : 0 });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < passage.length) chunks.push({ type: 'text', text: passage.slice(lastIndex) });
+  return chunks;
+}
+
+function serializeChoiceChunks(chunks: EditChoiceChunk[]): { passage: string; answerKey: string } {
+  let passage = '';
+  const keyParts: string[] = [];
+  let seq = 1;
+  for (const c of chunks) {
+    if (c.type === 'text') { passage += c.text; continue; }
+    passage += `${seq}[${c.options.join(' / ')}]`;
+    keyParts.push(`${seq}. ${c.options[c.correctIdx] ?? c.options[0] ?? ''}`);
+    seq++;
+  }
+  return { passage, answerKey: keyParts.join('  ') };
+}
+
 async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean): Promise<boolean> {
   const el = document.getElementById(elementId);
   if (!el) return false;
@@ -2547,10 +2588,12 @@ export default function WorkbookPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  // 편집 모달
+  // 편집 패널
   type EditField = { key: string; label: string; value: string };
-  const [editModal, setEditModal] = useState<{ typeIdx: number; resultIdx: number; fields: EditField[] } | null>(null);
+  const [editModal, setEditModal] = useState<{ typeIdx: number; resultIdx: number } | null>(null);
   const [editFields, setEditFields] = useState<EditField[]>([]);
+  const [editChunks, setEditChunks] = useState<EditChoiceChunk[] | null>(null);
+  const [editRawMode, setEditRawMode] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -2790,11 +2833,19 @@ export default function WorkbookPage() {
 
   // ── 편집 헬퍼 ────────────────────────────────────────
   const openEditModal = () => {
+    const wbType = allResults[activeTypeTab]?.type;
     const result = allResults[activeTypeTab]?.results[activeResultTab];
     if (!result) return;
+    const isChoiceType = wbType === 'vocab_choice' || wbType === 'grammar_choice';
+    setEditRawMode(false);
+    if (isChoiceType && typeof result.passage === 'string' && typeof result.answer_key === 'string') {
+      setEditChunks(parseChoiceChunksForEdit(result.passage, result.answer_key));
+    } else {
+      setEditChunks(null);
+    }
     const fields: EditField[] = [];
-    // 단일 passage 텍스트
-    if (typeof result.passage === 'string')
+    // 단일 passage 텍스트 (선택형 문항은 구조화 편집기를 사용하므로 제외)
+    if (typeof result.passage === 'string' && !isChoiceType)
       fields.push({ key: 'passage', label: '지문', value: result.passage });
     // 삽입 문장 (sentence_insertion)
     if (typeof result.insert_sentence === 'string')
@@ -2850,7 +2901,7 @@ export default function WorkbookPage() {
     if (result.section2 && typeof (result.section2 as WorkbookResult).passage === 'string')
       fields.push({ key: 'section2.passage', label: '2번 지문', value: (result.section2 as WorkbookResult).passage as string });
     setEditFields(fields.map(f => ({ ...f })));
-    setEditModal({ typeIdx: activeTypeTab, resultIdx: activeResultTab, fields });
+    setEditModal({ typeIdx: activeTypeTab, resultIdx: activeResultTab });
   };
 
   const handleSaveEdit = () => {
@@ -2861,6 +2912,8 @@ export default function WorkbookPage() {
       const results = [...tr.results];
       let r = { ...results[editModal.resultIdx] };
       for (const f of editFields) {
+        if (f.key === '__raw_passage') { r.passage = f.value; continue; }
+        if (f.key === '__raw_answerKey') { r.answer_key = f.value; continue; }
         const parts = f.key.split('.');
         if (parts.length === 1) {
           r[parts[0]] = f.value;
@@ -2877,12 +2930,75 @@ export default function WorkbookPage() {
           r[parts[0]] = section;
         }
       }
+      if (editChunks) {
+        const { passage, answerKey } = serializeChoiceChunks(editChunks);
+        r.passage = passage;
+        r.answer_key = answerKey;
+      }
       results[editModal.resultIdx] = r;
       tr.results = results;
       next[editModal.typeIdx] = tr;
       return next;
     });
     setEditModal(null);
+    setEditChunks(null);
+  };
+
+  const enableRawEdit = () => {
+    if (!editChunks) return;
+    const { passage, answerKey } = serializeChoiceChunks(editChunks);
+    setEditFields(prev => [
+      ...prev,
+      { key: '__raw_passage', label: '지문 원문', value: passage },
+      { key: '__raw_answerKey', label: '정답', value: answerKey },
+    ]);
+    setEditChunks(null);
+    setEditRawMode(true);
+  };
+
+  const disableRawEdit = () => {
+    const passageField = editFields.find(f => f.key === '__raw_passage');
+    const keyField = editFields.find(f => f.key === '__raw_answerKey');
+    if (passageField && keyField) {
+      setEditChunks(parseChoiceChunksForEdit(passageField.value, keyField.value));
+    }
+    setEditFields(prev => prev.filter(f => f.key !== '__raw_passage' && f.key !== '__raw_answerKey'));
+    setEditRawMode(false);
+  };
+
+  const updateChoiceOption = (chunkIdx: number, optIdx: number, value: string) => {
+    setEditChunks(prev => {
+      if (!prev) return prev;
+      const c = prev[chunkIdx];
+      if (c.type !== 'choice') return prev;
+      const options = [...c.options];
+      options[optIdx] = value;
+      const next = [...prev];
+      next[chunkIdx] = { ...c, options };
+      return next;
+    });
+  };
+
+  const setChoiceAnswer = (chunkIdx: number, optIdx: number) => {
+    setEditChunks(prev => {
+      if (!prev) return prev;
+      const c = prev[chunkIdx];
+      if (c.type !== 'choice') return prev;
+      const next = [...prev];
+      next[chunkIdx] = { ...c, correctIdx: optIdx };
+      return next;
+    });
+  };
+
+  const removeChoiceItem = (chunkIdx: number) => {
+    setEditChunks(prev => {
+      if (!prev) return prev;
+      const c = prev[chunkIdx];
+      if (c.type !== 'choice') return prev;
+      const next = [...prev];
+      next[chunkIdx] = { type: 'text', text: c.options[c.correctIdx] ?? c.options[0] ?? '' };
+      return next;
+    });
   };
 
   const handleDownloadPdf = async (withAnswer: boolean) => {
@@ -3056,6 +3172,13 @@ export default function WorkbookPage() {
   );
   const currentTypeResult = allResults[activeTypeTab];
   const currentType = currentTypeResult?.type;
+
+  // 편집 패널: 선택지 항목(choice chunk)에 순서대로 번호를 매김
+  const editChunkNumbers: number[] = [];
+  if (editChunks) {
+    let seq = 0;
+    for (const c of editChunks) editChunkNumbers.push(c.type === 'choice' ? ++seq : 0);
+  }
 
   // ─── render ────────────────────────────────────────────────────────────────
 
@@ -3761,23 +3884,129 @@ export default function WorkbookPage() {
             }
           })
         )}
-        {/* ── 편집 모달 ── */}
+        {/* ── 편집 패널 (우측 슬라이드) ── */}
         {editModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="text-lg font-black text-gray-800">지문 편집</h3>
-                <button onClick={() => setEditModal(null)} className="text-gray-400 hover:text-gray-600 text-xl font-bold">✕</button>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => { setEditModal(null); setEditChunks(null); }}>
+            <div
+              onClick={e => e.stopPropagation()}
+              className="fixed right-0 top-0 h-full w-full sm:w-[480px] bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+            >
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between shrink-0">
+                <div>
+                  <h3 className="text-lg font-black text-gray-800">문항 편집</h3>
+                  {editChunks && (
+                    <p className="text-xs font-bold text-gray-400 mt-0.5">
+                      선택지 {editChunks.filter(c => c.type === 'choice').length}개
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => { setEditModal(null); setEditChunks(null); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 text-lg font-bold transition-colors">✕</button>
               </div>
-              <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-                {editFields.map((field, i) => (
-                  <div key={i}>
+
+              <div className="overflow-y-auto flex-1 px-6 py-5 space-y-6">
+                {/* 선택형 문항(어휘고르기/어법고르기) 구조화 편집 */}
+                {editChunks && !editRawMode && (
+                  <>
+                    <div>
+                      <p className="text-xs font-black text-gray-400 mb-2 uppercase tracking-wide">미리보기</p>
+                      <div className="text-sm leading-8 text-gray-700 bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                        {editChunks.map((c, i) => c.type === 'text' ? (
+                          <span key={i}>{c.text}</span>
+                        ) : (
+                          <span key={i} className="inline whitespace-nowrap mx-0.5">
+                            <sup className="text-[10px] font-black text-violet-500">{editChunkNumbers[i]}</sup>
+                            <span className="font-black text-gray-400">[</span>
+                            {c.options.map((o, oi) => (
+                              <span key={oi}>
+                                {oi > 0 && <span className="text-gray-300 mx-0.5">/</span>}
+                                <span className={oi === c.correctIdx ? 'font-black text-emerald-600' : 'text-gray-400'}>{o || '　'}</span>
+                              </span>
+                            ))}
+                            <span className="font-black text-gray-400">]</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-wide">선택지 편집</p>
+                        <button onClick={enableRawEdit} className="text-[11px] font-bold text-gray-400 hover:text-violet-600 transition-colors">
+                          원문 직접 수정 →
+                        </button>
+                      </div>
+                      <div className="space-y-2.5">
+                        {editChunks.map((c, i) => {
+                          if (c.type !== 'choice') return null;
+                          return (
+                            <div key={i} className="border-2 border-gray-100 rounded-2xl p-3 hover:border-violet-100 transition-colors">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-black text-violet-500">{editChunkNumbers[i]}번</span>
+                                <button onClick={() => removeChoiceItem(i)}
+                                  className="text-[11px] font-bold text-gray-300 hover:text-red-500 transition-colors">
+                                  문항에서 제외
+                                </button>
+                              </div>
+                              <div className="flex gap-2">
+                                {c.options.map((o, oi) => (
+                                  <div key={oi}
+                                    className={`flex-1 rounded-xl border-2 px-3 py-2 transition-colors ${oi === c.correctIdx ? 'border-emerald-400 bg-emerald-50' : 'border-gray-200'}`}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setChoiceAnswer(i, oi)}
+                                      className={`text-[10px] font-black mb-1 cursor-pointer hover:underline ${oi === c.correctIdx ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                      {oi === c.correctIdx ? '✓ 정답' : '오답으로 표시'}
+                                    </button>
+                                    <input
+                                      value={o}
+                                      onChange={e => updateChoiceOption(i, oi, e.target.value)}
+                                      className="w-full bg-transparent text-sm font-bold text-gray-800 focus:outline-none block"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {editChunks.filter(c => c.type === 'choice').length === 0 && (
+                          <p className="text-sm text-gray-400 font-bold py-6 text-center">편집 가능한 선택지가 없습니다.</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 원문 직접 수정 모드 (선택형 문항의 안전장치) */}
+                {editRawMode && (
+                  <div>
+                    <button onClick={disableRawEdit} className="text-[11px] font-bold text-gray-400 hover:text-violet-600 mb-3 transition-colors">
+                      ← 선택지 편집으로 돌아가기
+                    </button>
+                    {editFields.filter(f => f.key === '__raw_passage' || f.key === '__raw_answerKey').map((field) => (
+                      <div key={field.key} className="mb-4">
+                        <label className="text-xs font-black text-gray-500 mb-1.5 block">{field.label}</label>
+                        <textarea
+                          value={field.value}
+                          onChange={e => setEditFields(prev => prev.map(f => f.key === field.key ? { ...f, value: e.target.value } : f))}
+                          rows={field.key === '__raw_passage' ? 12 : 4}
+                          className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm font-medium focus:border-violet-400 focus:outline-none resize-y leading-relaxed"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 그 외 일반 필드(문장/문단/번역 등) */}
+                {editFields.filter(f => f.key !== '__raw_passage' && f.key !== '__raw_answerKey').map((field, i) => (
+                  <div key={field.key}>
                     <label className="text-xs font-black text-gray-500 mb-1.5 block">{field.label}</label>
                     <textarea
-                      value={editFields[i].value}
+                      value={field.value}
                       onChange={e => {
+                        const idx = editFields.findIndex(f => f.key === field.key);
                         const next = [...editFields];
-                        next[i] = { ...next[i], value: e.target.value };
+                        next[idx] = { ...next[idx], value: e.target.value };
                         setEditFields(next);
                       }}
                       rows={field.key.includes('section') || field.key === 'passage' || field.key.endsWith('text') && (field.key.startsWith('shuffled') || field.key.startsWith('paragraphs')) ? 4 : field.key.startsWith('sentences') ? 2 : 4}
@@ -3786,8 +4015,9 @@ export default function WorkbookPage() {
                   </div>
                 ))}
               </div>
-              <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-                <button onClick={() => setEditModal(null)}
+
+              <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button onClick={() => { setEditModal(null); setEditChunks(null); }}
                   className="px-5 py-2.5 text-sm font-black text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all">
                   취소
                 </button>
