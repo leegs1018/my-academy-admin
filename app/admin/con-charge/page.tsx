@@ -5,6 +5,9 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 const PACKAGES = [
+  { amount: 100,   price: '1,000원',   bonus: 0 },
+  { amount: 300,   price: '3,000원',   bonus: 0 },
+  { amount: 500,   price: '5,000원',   bonus: 0 },
   { amount: 1000,  price: '10,000원',  bonus: 0 },
   { amount: 3000,  price: '30,000원',  bonus: 5 },
   { amount: 5000,  price: '50,000원',  bonus: 7 },
