@@ -576,8 +576,12 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   }
 
   // Questions in 2-column layout
-  for (let i = 0; i < questions.length; i++) {
-    const { url, ratio } = await renderEl(buildHtml(questions[i], i + 1), RENDER_W, 6);
+  // 렌더링(toJpeg 캡처)은 문항별로 독립적이므로 병렬로 실행하고,
+  // pdf 배치(placeImage)만 순서를 보존하기 위해 순차 실행한다.
+  const rendered = await Promise.all(
+    questions.map((q, i) => renderEl(buildHtml(q, i + 1), RENDER_W, 6))
+  );
+  for (const { url, ratio } of rendered) {
     placeImage(url, colW * ratio);
   }
 
@@ -669,8 +673,9 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   }
 
   // Answer blocks per question
-  for (let i = 0; i < questions.length; i++) {
-    const q = questions[i];
+  // html 문자열 조립은 순수 동기 작업이라 먼저 모두 만들고,
+  // 비용이 큰 렌더링(toJpeg 캡처)만 병렬로 실행한 뒤 순서대로 배치한다.
+  const answerHtmls = questions.map((q, i) => {
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
     const answerCircle = (q.type === 'grammar' || q.type === 'vocab_paraphrase' || q.type === 'flow')
       ? CIRCLE_NUMS[q.answer - 1]
@@ -695,8 +700,13 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
 
     html += `<p style="font-size:9.5px;color:#374151;line-height:1.65;margin:0;">${esc(q.explanation)}</p>`;
     html += `</div>`;
+    return html;
+  });
 
-    const { url, ratio } = await renderEl(html, RENDER_W, 6);
+  const answerRendered = await Promise.all(
+    answerHtmls.map(html => renderEl(html, RENDER_W, 6))
+  );
+  for (const { url, ratio } of answerRendered) {
     placeImage(url, colW * ratio);
   }
 

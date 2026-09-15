@@ -216,7 +216,12 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
   if (cs.display === 'none' || cs.visibility === 'hidden' || el.offsetHeight === 0) return false;
   const { toJpeg } = await import('html-to-image');
   const W = 210, M = 10, cW = W - 2 * M, maxH = 277;
-  const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
+  // 문항 수가 많아 요소가 매우 길어지면 pixelRatio 2로 캡처 시 캔버스/문자열 크기가
+  // 브라우저 한계(RangeError: Invalid string length)를 넘어설 수 있다.
+  // 요소 높이에 비례해 해상도를 낮춰 캡처 결과 크기를 안전한 범위로 유지한다.
+  const SAFE_CAPTURE_HEIGHT_PX = 3500;
+  const pixelRatio = el.offsetHeight > 0 ? Math.min(2, SAFE_CAPTURE_HEIGHT_PX / el.offsetHeight) : 2;
+  const url = await toJpeg(el, { pixelRatio, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
   const img = document.createElement('img') as HTMLImageElement;
   await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('img load')); img.src = url; });
   const contentH = cW * (img.naturalHeight / img.naturalWidth);
@@ -246,6 +251,14 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
     }
   }
   return true;
+}
+
+function pdfErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : '';
+  if (msg.includes('Invalid string length')) {
+    return '생성된 문항 수가 많아 PDF 변환 중 오류가 발생했습니다. 유형 수를 줄이거나 지문을 나눠서 다시 시도해주세요.';
+  }
+  return msg || 'PDF 생성 실패';
 }
 
 async function capturePdfFromElement(elementId: string): Promise<Blob> {
@@ -3005,7 +3018,7 @@ export default function WorkbookPage() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'PDF 생성 실패');
+      alert(pdfErrorMessage(e));
     } finally {
       if (withAnswer) setDownloadingAnswerPdf(false);
       else setDownloadingPdf(false);
@@ -3030,7 +3043,7 @@ export default function WorkbookPage() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'PDF 생성 실패');
+      alert(pdfErrorMessage(e));
     } finally {
       setDownloadingSimplePdf(false);
     }
@@ -3072,7 +3085,7 @@ export default function WorkbookPage() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'PDF 생성 실패');
+      alert(pdfErrorMessage(e));
     } finally {
       setDownloadingAllPdf(false);
     }

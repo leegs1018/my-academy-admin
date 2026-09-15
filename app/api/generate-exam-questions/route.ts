@@ -1627,6 +1627,31 @@ export async function POST(request: Request) {
           }
         }
 
+        // sentence_insertion 검증: ①~⑤가 각 1회씩, 등장 순서대로 존재해야 함
+        // (누락/중복/순서 뒤바뀜이 있으면 answer 번호가 실제 지문상 위치와 어긋나는 오류로 이어짐)
+        if (questionType === 'sentence_insertion') {
+          const siPassage = q!.modified_passage ?? '';
+          const missing = CIRCLES.filter(c => !siPassage.includes(c));
+          if (missing.length > 0) {
+            console.warn(`[sentence_insertion] 누락 번호 ${missing.join('')} — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+          const duplicated = CIRCLES.filter(c => siPassage.split(c).length - 1 !== 1);
+          if (duplicated.length > 0) {
+            console.warn(`[sentence_insertion] 번호 중복 ${duplicated.join('')} — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+          const siPositions = CIRCLES.map(c => siPassage.indexOf(c));
+          const siOutOfOrder = siPositions.some((pos, i) => i > 0 && pos < siPositions[i - 1]);
+          if (siOutOfOrder) {
+            console.warn(`[sentence_insertion] 번호 순서 오류 (positions: ${siPositions.join(',')}) — 재시도 ${attempt + 1}`);
+            if (attempt < MAX_RETRIES) continue;
+            return null;
+          }
+        }
+
         // phrase_meaning 검증: 선지 길이 55자 이상
         if (questionType === 'phrase_meaning') {
           const shortChoices = q!.choices.filter((c: ExamChoice) => c.text.length < 55);
@@ -1844,7 +1869,13 @@ export async function POST(request: Request) {
             return (nextIdx === -1 ? rest : rest.slice(0, nextIdx)).trim();
           };
           const sA = getSeg('A'), sB = getSeg('B'), sC = getSeg('C');
-          if (sA && sB && sC) {
+          const tagOnce = (label: string) => (q!.modified_passage!.split(`(${label})`).length - 1) === 1;
+          const noStrayTag = (seg: string) => !/\([ABC]\)/.test(seg);
+          const extractionIsClean =
+            !!sA && !!sB && !!sC
+            && tagOnce('A') && tagOnce('B') && tagOnce('C')
+            && noStrayTag(sA) && noStrayTag(sB) && noStrayTag(sC);
+          if (extractionIsClean) {
             // (A)/(B)/(C) 이전의 도입부 전체 (형식이 다양하므로 첫 레이블 앞까지 추출)
             const firstSegIdx = q!.modified_passage!.search(/\([ABC]\)/);
             const introPart = firstSegIdx > 0 ? q!.modified_passage!.slice(0, firstSegIdx).trim() : '[주어진 글]';
@@ -1875,7 +1906,7 @@ export async function POST(request: Request) {
             q!.explanation = exp;
             q!.answer = newAnswer;
           } else {
-            console.warn('[sentence_order] 단락 추출 실패 — 셔플 미적용 (sA/sB/sC 중 빈 값 존재)');
+            console.warn('[sentence_order] 단락 추출 실패 또는 태그 오염 — 셔플 미적용 (answer=1 유지)');
           }
         }
 

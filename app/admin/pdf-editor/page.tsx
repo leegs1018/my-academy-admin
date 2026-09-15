@@ -5,6 +5,14 @@ import { flushSync } from 'react-dom';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
+function pdfErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : '';
+  if (msg.includes('Invalid string length')) {
+    return '생성된 내용이 많아 PDF 변환 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+  }
+  return msg || '오류가 발생했습니다.';
+}
+
 interface TFQuestion {
   number: number;
   statement: string;
@@ -88,7 +96,13 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
     const W = 210, M = 5, cW = W - 2 * M;
     const maxRatio = (297 - 2 * M) / cW; // A4 콘텐츠 최대 비율 (287/200 = 1.435)
 
-    const opts = { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
+    // 어휘표·구문분석 항목이 많아 페이지가 매우 길어지면 pixelRatio 2 캡처 시
+    // 캔버스/문자열 크기가 브라우저 한계(Invalid string length)를 넘을 수 있다.
+    // 요소 높이에 비례해 해상도를 낮춰 안전한 범위로 유지한다.
+    const SAFE_CAPTURE_HEIGHT_PX = 3500;
+    const tallestPx = Math.max(page1El.offsetHeight, page2El.offsetHeight);
+    const pixelRatio = tallestPx > 0 ? Math.min(2, SAFE_CAPTURE_HEIGHT_PX / tallestPx) : 2;
+    const opts = { pixelRatio, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
     const [url1, url2] = await Promise.all([
       toJpeg(page1El, opts),
       toJpeg(page2El, opts),
@@ -151,7 +165,11 @@ async function generateMockPdfBlob(hideAnswerArea = false, suffix = ''): Promise
     const { jsPDF } = await import('jspdf');
     const W = 210, M = 5, cW = W - 2 * M;
     const maxRatio = (297 - 2 * M) / cW;
-    const opts = { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
+    // 요소 높이에 비례해 해상도를 낮춰 캡처 결과 크기를 안전한 범위로 유지한다 (Invalid string length 방지)
+    const SAFE_CAPTURE_HEIGHT_PX = 3500;
+    const tallestPx = Math.max(page1El.offsetHeight, page2El.offsetHeight);
+    const pixelRatio = tallestPx > 0 ? Math.min(2, SAFE_CAPTURE_HEIGHT_PX / tallestPx) : 2;
+    const opts = { pixelRatio, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
     const [url1, url2] = await Promise.all([toJpeg(page1El, opts), toJpeg(page2El, opts)]);
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     const addPaged = async (url: string, newPage: boolean) => {
@@ -704,7 +722,7 @@ export default function PdfEditorPage() {
       triggerDownload(blob, `${mockPdfTitle.trim() || `${r?.number}번_워크북`}_문제.pdf`);
     } catch (e) {
       if (isEditing) setMockEditModeIdx(activeMockResultTab);
-      alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
+      alert(`PDF 저장 실패: ${pdfErrorMessage(e)}`);
     } finally { setMockPdfLoading(false); }
   };
 
@@ -716,7 +734,7 @@ export default function PdfEditorPage() {
     try {
       const blob = await buildAnswerPdfBlob(d, mockPdfTitle.trim() || `${r.number}번 워크북`);
       triggerDownload(blob, `${mockPdfTitle.trim() || `${r.number}번_워크북`}_답안해설.pdf`);
-    } catch (e) { alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`); }
+    } catch (e) { alert(`PDF 저장 실패: ${pdfErrorMessage(e)}`); }
     finally { setMockPdfLoading(false); }
   };
 
@@ -882,7 +900,7 @@ export default function PdfEditorPage() {
       if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
       triggerDownload(blob, `${baseName}_문제.pdf`);
     } catch (e) {
-      alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
+      alert(`PDF 저장 실패: ${pdfErrorMessage(e)}`);
     } finally {
       if (wasEditing) setInputEditModeIdx(activeInputResultTab);
       setPdfLoading(false);
@@ -897,7 +915,7 @@ export default function PdfEditorPage() {
       const blob = await buildAnswerPdfBlob(activeInputD, pdfTitle.trim());
       triggerDownload(blob, `${baseName}_답안해설.pdf`);
     } catch (e) {
-      alert(`PDF 저장 실패: ${e instanceof Error ? e.message : '오류'}`);
+      alert(`PDF 저장 실패: ${pdfErrorMessage(e)}`);
     } finally {
       setPdfLoading(false);
     }
