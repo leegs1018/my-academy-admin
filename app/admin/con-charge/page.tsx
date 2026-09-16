@@ -397,13 +397,20 @@ function ConChargeContent() {
                     }
                   </button>
 
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-4 flex items-start gap-2.5">
+                    <span className="text-xl leading-none">⚠️</span>
+                    <p className="text-base font-black text-amber-800 dark:text-amber-400 leading-snug">
+                      등록하신 휴대폰으로 결제 알림톡도 함께 발송됩니다.<br />
+                      PC 팝업과 알림톡 중 <u>한 곳에서만</u> 결제해주세요 — 두 곳 모두 결제할 필요는 없습니다.
+                    </p>
+                  </div>
+
                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 space-y-1">
                     <p className="text-xs font-black text-blue-700 dark:text-blue-400">카드결제 안내</p>
                     <ul className="text-xs font-bold text-blue-600 dark:text-blue-500 space-y-1">
                       <li>• 결제 후 즉시 CON이 자동으로 지급됩니다.</li>
                       <li>• 결제창이 팝업으로 열립니다. 팝업 허용 후 이용해주세요.</li>
                       <li>• 카드, 가상계좌, 계좌이체 등 다양한 결제 수단 지원.</li>
-                      <li className="text-amber-600 dark:text-amber-400">• 등록하신 휴대폰으로 결제 알림톡도 함께 발송됩니다. PC 팝업과 알림톡 중 한 곳에서만 결제해주세요 — 두 곳 모두 결제할 필요는 없습니다.</li>
                     </ul>
                   </div>
                 </>
