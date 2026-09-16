@@ -43,15 +43,29 @@ export async function POST(request: NextRequest) {
   }
 
   // 유료 CON 여부 확인
+  // 단순히 "유료 충전 이력이 있는지"만 보면, 카드결제 후 환불된 건도 충전 기록 자체는
+  // 남아있어 영구히 탈퇴가 막히는 문제가 있었음(카드결제→환불을 반복한 계정 등).
+  // 환불(type='deduct', feature_key='payapp_refund')로 상쇄된 금액을 차감한 "순 유료 충전액"과
+  // 현재 실제 잔액을 함께 확인해, 둘 다 남아있을 때만(=환불도 안 됐고 아직 쓰지도 않은 유료 CON이
+  // 실제로 남아있을 때만) 탈퇴를 막는다.
   const { data: transactions } = await admin
     .from('con_transactions')
     .select('amount, description, type, feature_key')
-    .eq('academy_id', user.id)
-    .eq('type', 'charge');
+    .eq('academy_id', user.id);
 
-  const hasPaidCon = (transactions ?? []).some(
-    tx => tx.amount > 0 && !isFreeCharge(tx.description ?? '', tx.feature_key)
-  );
+  let netPaidCon = 0;
+  for (const tx of transactions ?? []) {
+    if (tx.type === 'charge' && tx.amount > 0 && !isFreeCharge(tx.description ?? '', tx.feature_key)) {
+      netPaidCon += tx.amount;
+    } else if (tx.type === 'deduct' && tx.feature_key === 'payapp_refund') {
+      netPaidCon -= tx.amount;
+    }
+  }
+
+  const { data: cfg } = await admin.from('academy_config').select('points').eq('user_id', user.id).single();
+  const currentBalance = cfg?.points ?? 0;
+
+  const hasPaidCon = netPaidCon > 0 && currentBalance > 0;
 
   if (hasPaidCon) {
     return NextResponse.json(
