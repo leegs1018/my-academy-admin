@@ -34,7 +34,8 @@ interface ExamHistoryItem {
   created_at: string;
   title?: string;
   passage_excerpt: string;
-  passage_full: string;
+  // 이력 목록 조회에서는 용량이 큰 원문 전체를 가져오지 않는다 — "[전체 보기]" 클릭 시 lazy fetch.
+  passage_full?: string;
   question_types: string[];
   question_pdf_path: string;
   answer_pdf_path?: string;
@@ -803,7 +804,7 @@ export default function AiQuestionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [passageModal, setPassageModal] = useState<{ title: string; text: string } | null>(null);
+  const [passageModal, setPassageModal] = useState<{ title: string; text: string; loading?: boolean } | null>(null);
   const [questionRatings, setQuestionRatings] = useState<Record<string, 'good' | 'bad' | null>>({});
   const [mockQuestionRatings, setMockQuestionRatings] = useState<Record<string, 'good' | 'bad' | null>>({});
   const [ratingHistoryId, setRatingHistoryId] = useState<string | null>(null);
@@ -864,22 +865,30 @@ export default function AiQuestionsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setHistoryError('로그인 정보를 확인할 수 없습니다.'); return; }
 
+      // 이력 목록에는 passage_full(원문 전체)처럼 용량이 큰 컬럼을 가져오지 않는다.
+      // 이력이 많아질수록 select('*') 전체 다운로드가 느려지는 원인이었음 — 필요한 항목만 조회하고,
+      // 원문 전체는 "[전체 보기]" 클릭 시 해당 행만 lazy fetch 한다.
+      const HISTORY_PAGE_SIZE = 100;
       let qInput = supabase
         .from('exam_question_history')
-        .select('*')
+        .select('id, created_at, title, passage_excerpt, question_types, question_pdf_path, answer_pdf_path, difficulty')
         .eq('academy_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(HISTORY_PAGE_SIZE);
       let qMock = supabase
         .from('mock_exam_question_history')
-        .select('*')
+        .select('id, created_at, year, grade, institution, question_numbers, question_types, difficulty, question_pdf_path, answer_pdf_path')
         .eq('academy_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(HISTORY_PAGE_SIZE);
 
       if (date) {
         qInput = qInput.gte('created_at', date).lte('created_at', date + 'T23:59:59');
         qMock = qMock.gte('created_at', date).lte('created_at', date + 'T23:59:59');
       }
       if (query) {
+        // select()에 포함하지 않은 컬럼도 필터(ilike)로는 사용 가능 — 원문 전체를
+        // 내려받지 않으면서도 서버(DB)에서 전체 텍스트 검색은 그대로 유지된다.
         qInput = qInput.ilike('passage_full', `%${query}%`);
         qMock = qMock.ilike('institution', `%${query}%`);
       }
@@ -899,6 +908,21 @@ export default function AiQuestionsPage() {
       setHistoryLoading(false);
     }
   }, [searchQuery, searchDate]);
+
+  const openFullPassageModal = useCallback(async (historyId: string, label: string) => {
+    setPassageModal({ title: label, text: '', loading: true });
+    const { data, error } = await supabase.from('exam_question_history').select('passage_full').eq('id', historyId).single();
+    if (error || !data) {
+      setPassageModal({ title: label, text: '지문을 불러오지 못했습니다.', loading: false });
+      return;
+    }
+    let text = data.passage_full ?? '';
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) text = parsed.map((p, i) => `[지문 ${String.fromCharCode(65 + i)}]\n${p}`).join('\n\n');
+    } catch { /* 단일 지문 문자열 그대로 사용 */ }
+    setPassageModal({ title: label, text, loading: false });
+  }, []);
 
   useEffect(() => {
     if (activeMainTab === 'history') fetchHistory();
@@ -1555,7 +1579,9 @@ export default function AiQuestionsPage() {
 
   const filteredHistory = historyList.filter(item => {
     if (!searchQuery) return true;
-    if (item._source === 'input') return item.passage_full?.includes(searchQuery) || item.title?.includes(searchQuery);
+    // 목록에는 지문 전체를 내려받지 않으므로, 입력 중 실시간 필터는 제목/요약(excerpt) 기준으로
+    // 좁혀본다. 지문 전체 텍스트 검색은 Enter/검색 버튼으로 서버(DB)에 다시 질의할 때 적용된다.
+    if (item._source === 'input') return item.passage_excerpt?.includes(searchQuery) || item.title?.includes(searchQuery);
     return item.institution?.includes(searchQuery);
   });
 
@@ -2814,18 +2840,11 @@ export default function AiQuestionsPage() {
                     {item._source === 'input' ? (
                       <div className="space-y-0.5">
                         {item.title && <p className="text-xs font-bold text-slate-700 truncate">{item.title}</p>}
-                        {(() => {
-                          let passages: string[];
-                          try { const p = JSON.parse(item.passage_full); passages = Array.isArray(p) ? p : [item.passage_full]; } catch { passages = [item.passage_full]; }
-                          return passages.map((p, pi) => (
-                            <p key={pi} className="text-xs text-slate-500 line-clamp-1">
-                              {passages.length > 1 && <span className="font-black text-indigo-400 mr-1">{String.fromCharCode(65 + pi)}.</span>}
-                              {p.slice(0, 60)}...
-                              <button onClick={() => setPassageModal({ title: passages.length > 1 ? `지문 ${String.fromCharCode(65 + pi)}` : '원문 지문', text: p })}
-                                className="ml-1 text-indigo-400 hover:text-indigo-600 font-black whitespace-nowrap">[전체 보기]</button>
-                            </p>
-                          ));
-                        })()}
+                        <p className="text-xs text-slate-500 line-clamp-1">
+                          {(item.passage_excerpt ?? '').slice(0, 60)}...
+                          <button onClick={() => openFullPassageModal(item.id, item.title || '원문 지문')}
+                            className="ml-1 text-indigo-400 hover:text-indigo-600 font-black whitespace-nowrap">[전체 보기]</button>
+                        </p>
                       </div>
                     ) : (
                       <div>
@@ -2869,7 +2888,11 @@ export default function AiQuestionsPage() {
               <button onClick={() => setPassageModal(null)} className="text-gray-400 hover:text-gray-600 font-black text-xl">✕</button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{passageModal.text}</p>
+              {passageModal.loading ? (
+                <p className="text-sm text-gray-400 text-center py-8">불러오는 중...</p>
+              ) : (
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{passageModal.text}</p>
+              )}
             </div>
           </div>
         </div>

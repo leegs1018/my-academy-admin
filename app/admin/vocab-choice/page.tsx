@@ -46,7 +46,8 @@ interface HistoryItem {
   id: string;
   title: string | null;
   passage_excerpt: string;
-  passage_full: string;
+  // 이력 목록 조회 시에는 가져오지 않는다 (검색 필터로만 사용) — 화면 표시에는 쓰이지 않음.
+  passage_full?: string;
   source_type: string;
   year: number | null;
   grade: string | null;
@@ -3096,7 +3097,11 @@ export default function WorkbookPage() {
     if (!session) return;
     setHistoryLoading(true); setHistoryError('');
     try {
-      let q = supabase.from('vocab_choice_history').select('*')
+      // passage_full(원문 전체)은 목록 표시에 쓰이지 않으므로 조회에서 제외한다.
+      // 이력이 많아질수록 select('*')로 매번 원문 전체를 내려받는 것이 화면 로딩이
+      // 느려지는 주요 원인이었음 — 검색(ilike)은 select에 없는 컬럼도 필터로 사용 가능하다.
+      let q = supabase.from('vocab_choice_history')
+        .select('id, title, passage_excerpt, source_type, year, grade, institution, question_number, difficulty, pdf_path, answer_pdf_path, created_at')
         .eq('academy_id', session.user.id).order('created_at', { ascending: false });
       if (date) q = q.gte('created_at', date).lt('created_at', new Date(new Date(date).getTime() + 86400000).toISOString());
       if (query) q = q.ilike('passage_full', `%${query}%`);

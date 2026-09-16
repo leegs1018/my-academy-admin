@@ -48,7 +48,9 @@ interface PdfHistoryItem {
   created_at: string;
   title?: string;
   passage_excerpt: string;
-  passage_full: string;
+  // 이력 목록 조회 시에는 용량이 큰 원문 전체를 가져오지 않는다 (Fetch history speed 참고).
+  // "[전체]" 클릭 시 해당 id만 별도로 lazy fetch 한다.
+  passage_full?: string;
   passage_type: string;
   difficulty: string;
   pdf_path: string;
@@ -357,7 +359,7 @@ export default function PdfEditorPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [passageModal, setPassageModal] = useState<{ title: string; text: string } | null>(null);
+  const [passageModal, setPassageModal] = useState<{ title: string; text: string; loading?: boolean } | null>(null);
   const [pdfAnalysisPrice, setPdfAnalysisPrice] = useState<number | null>(null);
   const [printTheme, setPrintTheme] = useState<'color' | 'mono'>('mono');
 
@@ -472,13 +474,23 @@ export default function PdfEditorPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setHistoryError('로그인 정보를 확인할 수 없습니다.'); return; }
 
-      let qInput = supabase.from('pdf_history').select('*').eq('academy_id', user.id).order('created_at', { ascending: false });
-      let qMock = supabase.from('mock_workbook_history').select('*').eq('academy_id', user.id).order('created_at', { ascending: false });
+      // 이력 목록에는 passage_full(원문 전체)처럼 용량이 큰 컬럼을 가져오지 않는다.
+      // 이력이 많아질수록 select('*') 전체 다운로드가 느려지는 원인이었음 — 필요한 항목만 조회하고,
+      // 원문 전체는 "[전체]" 클릭 시 해당 행만 lazy fetch 한다. 검색은 서버 필터(ilike)만으로 충분하다.
+      const HISTORY_PAGE_SIZE = 100;
+      let qInput = supabase.from('pdf_history')
+        .select('id, created_at, title, passage_excerpt, passage_type, difficulty, pdf_path, answer_pdf_path')
+        .eq('academy_id', user.id).order('created_at', { ascending: false }).limit(HISTORY_PAGE_SIZE);
+      let qMock = supabase.from('mock_workbook_history')
+        .select('id, created_at, year, grade, institution, question_number, difficulty, pdf_path, answer_pdf_path')
+        .eq('academy_id', user.id).order('created_at', { ascending: false }).limit(HISTORY_PAGE_SIZE);
       if (date) {
         qInput = qInput.gte('created_at', date).lte('created_at', date + 'T23:59:59');
         qMock = qMock.gte('created_at', date).lte('created_at', date + 'T23:59:59');
       }
       if (query) {
+        // select()에 포함하지 않은 컬럼도 필터(ilike)로는 사용 가능 — 원문 전체를
+        // 내려받지 않으면서도 서버(DB)에서 전체 텍스트 검색은 그대로 유지된다.
         qInput = qInput.ilike('passage_full', `%${query}%`);
         qMock = qMock.ilike('institution', `%${query}%`);
       }
@@ -496,6 +508,16 @@ export default function PdfEditorPage() {
       setHistoryLoading(false);
     }
   }, [searchQuery, searchDate]);
+
+  const openFullPassageModal = useCallback(async (historyId: string) => {
+    setPassageModal({ title: '원문 지문', text: '', loading: true });
+    const { data, error } = await supabase.from('pdf_history').select('passage_full').eq('id', historyId).single();
+    if (error || !data) {
+      setPassageModal({ title: '원문 지문', text: '지문을 불러오지 못했습니다.', loading: false });
+      return;
+    }
+    setPassageModal({ title: '원문 지문', text: data.passage_full ?? '', loading: false });
+  }, []);
 
   useEffect(() => {
     if (activeMainTab === 'history') fetchHistory();
@@ -2021,7 +2043,7 @@ export default function PdfEditorPage() {
                     {item._source === 'input' ? '직접입력' : '모의고사'}
                   </span>
                   {item._source === 'input' ? (
-                    <button onClick={() => setPassageModal({ title: '원문 지문', text: item.passage_full })}
+                    <button onClick={() => openFullPassageModal(item.id)}
                       className="text-xs text-slate-600 font-bold truncate text-left hover:text-indigo-600 hover:underline transition-colors w-full">
                       {item.title ? <span className="font-black">{item.title} — </span> : null}
                       {item.passage_excerpt}
@@ -2067,7 +2089,11 @@ export default function PdfEditorPage() {
               <button onClick={() => setPassageModal(null)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors font-black text-lg">✕</button>
             </div>
             <div className="overflow-y-auto p-6">
-              <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">{passageModal.text}</p>
+              {passageModal.loading ? (
+                <p className="text-slate-400 font-bold text-sm text-center py-8">불러오는 중...</p>
+              ) : (
+                <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-sm">{passageModal.text}</p>
+              )}
             </div>
           </div>
         </div>
