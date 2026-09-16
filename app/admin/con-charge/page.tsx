@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -45,6 +45,12 @@ function ConChargeContent() {
   const [phoneChecked, setPhoneChecked] = useState(false);
   const [phoneInput, setPhoneInput] = useState('');
 
+  // 결제 요청 시 등록된 번호로 카카오 알림톡이 함께 발송되어, 원장님이 PC 팝업이 아니라
+  // 휴대폰 알림톡 쪽에서 결제를 완료할 수도 있다. 그 경우 PC 팝업은 완료 신호(postMessage)를
+  // 받지 못하므로, CON 잔액 증가를 폴링해 어느 채널로 결제하든 완료를 감지한다.
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startingPointsRef = useRef<number>(0);
+
   const selectedAmount = isCustom ? (parseInt(customInput) || 0) : (selected ?? 0);
   const bonusCon = getBonusCon(selectedAmount);
   const totalCon = selectedAmount + bonusCon;
@@ -64,12 +70,17 @@ function ConChargeContent() {
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data === 'payapp_payment_complete') {
+        if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
         setCardSuccess(true);
         setCardLoading(false);
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
   }, []);
 
   useEffect(() => {
@@ -129,6 +140,11 @@ function ConChargeContent() {
     }
 
     try {
+      // 결제 시작 시점의 CON 잔액을 기록해둔다 — 휴대폰 알림톡 쪽에서 결제가 완료되면
+      // PC 팝업은 이를 알 방법이 없으므로, 잔액 증가를 감지해 완료 처리하기 위함.
+      const { data: beforeData } = await supabase.from('academy_config').select('points').eq('user_id', userId).single();
+      startingPointsRef.current = beforeData?.points ?? 0;
+
       const res = await fetch('/api/payapp/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,12 +175,28 @@ function ConChargeContent() {
         return;
       }
 
-      const timer = setInterval(() => {
+      // PC 팝업 또는 휴대폰 알림톡 중 어느 쪽에서 결제를 완료하든 감지할 수 있도록,
+      // 팝업이 닫혔는지뿐 아니라 CON 잔액이 올랐는지도 함께 폴링한다.
+      const pollStart = Date.now();
+      pollTimerRef.current = setInterval(async () => {
+        if (Date.now() - pollStart > 10 * 60 * 1000) { // 10분 초과 시 폴링 중단
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+          setCardLoading(false);
+          return;
+        }
+        const { data: cur } = await supabase.from('academy_config').select('points').eq('user_id', userId).single();
+        if ((cur?.points ?? 0) > startingPointsRef.current) {
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+          setCardSuccess(true);
+          setCardLoading(false);
+          if (!popup.closed) popup.close();
+          return;
+        }
         if (popup.closed) {
-          clearInterval(timer);
+          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
           setCardLoading(false);
         }
-      }, 500);
+      }, 2000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '오류 발생';
       setCardError(msg);
@@ -371,6 +403,7 @@ function ConChargeContent() {
                       <li>• 결제 후 즉시 CON이 자동으로 지급됩니다.</li>
                       <li>• 결제창이 팝업으로 열립니다. 팝업 허용 후 이용해주세요.</li>
                       <li>• 카드, 가상계좌, 계좌이체 등 다양한 결제 수단 지원.</li>
+                      <li className="text-amber-600 dark:text-amber-400">• 등록하신 휴대폰으로 결제 알림톡도 함께 발송됩니다. PC 팝업과 알림톡 중 한 곳에서만 결제해주세요 — 두 곳 모두 결제할 필요는 없습니다.</li>
                     </ul>
                   </div>
                 </>
