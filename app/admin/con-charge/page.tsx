@@ -39,6 +39,12 @@ function ConChargeContent() {
   const [cardError, setCardError] = useState('');
   const [cardSuccess, setCardSuccess] = useState(false);
 
+  // 카드결제는 PayApp 특성상 받는사람 휴대폰번호가 필수인데, 계정에 등록된 번호가 없는
+  // 원장님이 많아(약 절반) 결제 시점에 바로 입력받아 저장 후 진행하도록 한다.
+  const [registeredPhone, setRegisteredPhone] = useState<string | null>(null);
+  const [phoneChecked, setPhoneChecked] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
+
   const selectedAmount = isCustom ? (parseInt(customInput) || 0) : (selected ?? 0);
   const bonusCon = getBonusCon(selectedAmount);
   const totalCon = selectedAmount + bonusCon;
@@ -67,8 +73,13 @@ function ConChargeContent() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserId(session?.user?.id ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      if (!uid) { setPhoneChecked(true); return; }
+      const { data } = await supabase.from('academy_config').select('mobile, academy_phone').eq('user_id', uid).single();
+      setRegisteredPhone(data?.mobile || data?.academy_phone || null);
+      setPhoneChecked(true);
     });
   }, []);
 
@@ -99,6 +110,23 @@ function ConChargeContent() {
     setCardLoading(true);
     setCardError('');
     setCardSuccess(false);
+
+    // 등록된 번호가 없으면 방금 입력한 번호를 먼저 저장한다.
+    if (!registeredPhone) {
+      const digits = phoneInput.replace(/[- ]/g, '');
+      if (!/^01[016789]\d{7,8}$/.test(digits)) {
+        setCardError('결제받을 휴대전화번호를 정확히 입력해주세요. (예: 010-1234-5678)');
+        setCardLoading(false);
+        return;
+      }
+      const { error: phoneErr } = await supabase.from('academy_config').update({ mobile: digits }).eq('user_id', userId);
+      if (phoneErr) {
+        setCardError('휴대전화번호 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        setCardLoading(false);
+        return;
+      }
+      setRegisteredPhone(digits);
+    }
 
     try {
       const res = await fetch('/api/payapp/request', {
@@ -142,7 +170,7 @@ function ConChargeContent() {
       setCardError(msg);
       setCardLoading(false);
     }
-  }, [userId, selectedAmount]);
+  }, [userId, selectedAmount, registeredPhone, phoneInput]);
 
   const packageSummary = (selected || (isCustom && parseInt(customInput) > 0)) && selectedAmount > 0;
 
@@ -297,6 +325,20 @@ function ConChargeContent() {
                   {!packageSummary && (
                     <div className="bg-gray-50 dark:bg-slate-800 rounded-2xl p-5 text-center">
                       <p className="text-sm font-bold text-gray-400 dark:text-slate-500">위에서 충전 패키지를 먼저 선택해주세요.</p>
+                    </div>
+                  )}
+
+                  {packageSummary && phoneChecked && !registeredPhone && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 space-y-2">
+                      <p className="text-xs font-black text-blue-700 dark:text-blue-400">결제받을 휴대전화번호가 필요합니다</p>
+                      <p className="text-[11px] font-bold text-blue-500 dark:text-blue-500/80">카드결제 진행을 위해 계정에 등록된 번호가 없어요. 한 번만 입력하면 다음부터는 바로 결제할 수 있어요.</p>
+                      <input
+                        type="tel"
+                        value={phoneInput}
+                        onChange={e => setPhoneInput(e.target.value)}
+                        placeholder="010-1234-5678"
+                        className="w-full border border-blue-200 dark:border-blue-800 px-3 py-2.5 rounded-xl font-bold text-gray-800 dark:text-white bg-white dark:bg-slate-800 focus:outline-none focus:border-blue-400 text-sm"
+                      />
                     </div>
                   )}
 
