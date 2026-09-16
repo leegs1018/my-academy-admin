@@ -33,6 +33,7 @@ const menuItems: MenuItem[] = [
   { href: '/admin/con-history',  label: 'CON 사용 이력',   icon: '⭐' },
   { href: '/admin/notices',      label: '공지사항',        icon: '📢' },
   { href: '/admin/inquiries',    label: '문의하기',        icon: '💬' },
+  { href: '/admin/account',      label: '계정 정보',       icon: '⚙️' },
 ];
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -420,13 +421,6 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-sm font-bold text-gray-700"
                     >
                       <span>👤</span> 계정 정보
-                    </Link>
-                    <Link
-                      href="/admin/inquiries"
-                      onClick={() => setShowAccountMenu(false)}
-                      className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-sm font-bold text-gray-700"
-                    >
-                      <span>💬</span> 문의하기
                     </Link>
                     <div className="mx-4 border-t border-gray-100 my-1"></div>
                     <button
