@@ -878,12 +878,15 @@ question_text에 지문 내용 포함 절대 금지.
 ━━━━━━━━━━━━━━━━━━
 
 ❌ 새로운 문장 창작 절대 금지.
-✅ 원본 지문의 문장들을 그대로 사용하되, 순서를 재배치하여 [주어진 글] + (A)(B)(C)로 구성.
+✅ 원본 지문의 문장들을 순서 변경 없이 그대로 사용하여 [주어진 글] + (A)(B)(C)로 나눈다.
 
-- 원본 지문의 모든 문장을 유지할 것 (추가·삭제·변형 금지).
-- [주어진 글]에 원본 첫 문장(또는 도입에 적합한 문장)을 배치.
-- 나머지 문장들을 논리적으로 (A)(B)(C) 세 단락으로 묶어 순서를 섞음.
-- 학생이 원래 순서를 추론해야 정답에 도달하도록 설계.
+⚠️⚠️ 핵심 — (A)(B)(C)는 원본 문장을 "재배치"하는 것이 아니라 "연속 구간으로 자르는" 것이다:
+- [주어진 글] 뒤에 남는 문장들을 원본에 등장하는 순서 그대로, 3개의 연속된 구간으로 자른다.
+  (예: 문장이 S2~S7까지 남으면 → (A)=S2~S3, (B)=S4~S5, (C)=S6~S7 처럼 끊어지지 않게 나눈다)
+- (A)에 들어간 문장은 전부 (B)에 들어간 문장보다 원본에서 앞서야 하고, (B)는 전부 (C)보다 앞서야 한다.
+- (C)의 문장 중 일부를 (A)나 (B)에 끼워 넣거나, (A)와 (C)가 원본에서 서로 떨어진 문장을 나눠 갖는 등 구간이 겹치거나 뒤섞이는 것은 절대 금지.
+- 이렇게 자르기만 하면 (A)→(B)→(C) 순서로 읽었을 때 자동으로 원본과 동일한 논리 흐름이 되므로, 정답이 항상 ①이 되는 것은 "추론의 결과"가 아니라 "이렇게 구성했기 때문에 당연한 결과"다. 별도로 그럴듯한 순서를 새로 "설계"하려 하지 말 것.
+- 학생이 푸는 문제의 난이도는 이후 시스템이 (A)(B)(C)의 배치 순서를 섞어서 만들어내므로, 지금 단계에서 일부러 순서를 헷갈리게 만들 필요가 없다.
 
 ━━━━━━━━━━━━━━━━━━
 [modified_passage 구조 — 필수 형식]
@@ -905,8 +908,8 @@ modified_passage는 반드시 아래 형식으로 작성:
 
 규칙:
 - [주어진 글]은 독립적으로 이해 가능한 원본 도입부.
-- (A)(B)(C)는 원본 문장을 묶어 만든 단락. 단락 간 배치 순서를 섞는 것이지, 단락 내 문장 순서는 반드시 원본 지문 순서를 유지해야 한다.
-- Sentences within each segment (A)(B)(C) must appear in the EXACT same order as they appear in the original passage. Do NOT reorder sentences within a segment.
+- (A)(B)(C)는 [주어진 글] 이후 남은 문장을 원본 순서 그대로 3개의 연속 구간으로 자른 것. (A)의 모든 문장이 (B)의 모든 문장보다, (B)의 모든 문장이 (C)의 모든 문장보다 원본에서 먼저 나와야 한다 — 구간이 겹치거나 뒤섞이면 안 됨.
+- Sentences within each segment (A)(B)(C) must appear in the EXACT same order as they appear in the original passage. Do NOT reorder sentences within a segment, and do NOT interleave sentences across segments (all of A's sentences must precede all of B's, which must precede all of C's, in the original passage).
 - 각 단락은 지시어·연결어·대명사를 통해 앞 내용 없이는 이해 불가한 구조여야 함.
 
 [Critical Constraint]
@@ -1236,12 +1239,12 @@ Split the passage ONLY at valid discourse transition points.
 STEP 3
 Generate A/B/C groupings:
 - Intro: 1~2 sentences that can stand alone as an opening
-- A, B, C: remaining sentences grouped by logical role
-- CRITICAL: The correct reading order MUST always be (A)→(B)→(C). The answer is ALWAYS 1 = ① (A)-(B)-(C).
-  · (A) = the FIRST logical segment (follows directly from the intro)
-  · (B) = the SECOND logical segment
-  · (C) = the THIRD / concluding logical segment
-- Do NOT arrange segments so that any other order is correct. Only (A)-(B)-(C) must be the valid reading order.
+- A, B, C: cut the REMAINING sentences into three CONSECUTIVE, NON-OVERLAPPING blocks in their original passage order.
+  · (A) = the earliest remaining sentences (immediately after the intro)
+  · (B) = the next block, entirely AFTER all of A's sentences in the original passage
+  · (C) = the final block, entirely AFTER all of B's sentences in the original passage
+- Do NOT move a sentence out of its natural chronological block (e.g. do not place an early sentence into C while a later sentence goes into A). Every sentence in A must precede every sentence in B, which must precede every sentence in C, in the ORIGINAL passage.
+- This is a mechanical cut, not a creative reordering — because A/B/C are simply consecutive slices of the original passage, reading (A)→(B)→(C) trivially reproduces the original order, which is why the answer is always ① (A)-(B)-(C). Do not try to "design" a cleverer or different correct order.
 
 STEP 4
 Verify:
@@ -1543,7 +1546,12 @@ export async function POST(request: Request) {
       const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 4 : 4;
       // grammar는 오류 위치를 AI가 결정하므로 targetAnswer 강제 불가
       // sentence_order는 셔플 전 항상 answer=1 고정 → AI가 (A)→(B)→(C) 순서를 정답으로 작성하도록 강제
-      const targetAnswer = questionType === 'grammar' ? undefined : (questionType === 'sentence_order' ? 1 : Math.floor(Math.random() * 5) + 1);
+      // sentence_insertion은 임의 번호를 강제하면 AI가 그 번호에 억지로 답을 맞추면서
+      // 실제로는 다른 위치가 더 자연스럽다고 설명하는 자기모순적 결과를 만들어냈다.
+      // 정답 위치는 AI가 스스로 판단하게 하고, 구조 검증만 통과하면 그대로 사용한다.
+      const targetAnswer = (questionType === 'grammar' || questionType === 'sentence_insertion')
+        ? undefined
+        : (questionType === 'sentence_order' ? 1 : Math.floor(Math.random() * 5) + 1);
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       const isMultiStep = MULTI_STEP_TYPES.has(questionType);
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1845,6 +1853,24 @@ export async function POST(request: Request) {
             }
             if (dup) {
               console.warn(`[sentence_order] (C)에 (A)(B) 중복 내용 발견 — 재시도 ${attempt + 1}`);
+              if (attempt < MAX_RETRIES) continue;
+              return null;
+            }
+
+            // 순서 검증: (A)(B)(C)가 실제로 원본 지문에서 앞→뒤 순서를 지키는지 확인.
+            // AI가 "논리적으로 그럴듯한" 순서를 스스로 설계하려다 원본 문장을 뒤섞어
+            // 넣으면, answer=1이 실제로는 틀린 정답이 되어버리는 문제가 있었다.
+            // (A)(B)(C)는 원본을 연속 구간으로 자른 것이어야 하므로, 각 단락 첫 문장의
+            // 원본 내 위치가 A < B < C 순으로 나와야 한다.
+            const lowerText = text.toLowerCase();
+            const findPos = (seg: string): number => {
+              const firstSentence = seg.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
+              if (!firstSentence) return -1;
+              return lowerText.indexOf(firstSentence.slice(0, Math.min(60, firstSentence.length)));
+            };
+            const posA = findPos(sA), posB = findPos(sB), posC = findPos(sC);
+            if (posA === -1 || posB === -1 || posC === -1 || !(posA < posB && posB < posC)) {
+              console.warn(`[sentence_order] 단락 순서가 원본과 불일치 (posA=${posA}, posB=${posB}, posC=${posC}) — 재시도 ${attempt + 1}`);
               if (attempt < MAX_RETRIES) continue;
               return null;
             }
