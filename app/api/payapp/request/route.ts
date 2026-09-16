@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   const { data: cfg } = await supabase
     .from('academy_config')
-    .select('ppurio_sender_number')
+    .select('academy_phone, mobile')
     .eq('user_id', userId)
     .single();
 
@@ -31,7 +31,17 @@ export async function POST(req: NextRequest) {
   const totalCon = conAmount + bonusCon;
   const priceWon = conAmount * 10; // 1 CON = 10원
 
-  const phone = (cfg.ppurio_sender_number || process.env.PAYAPP_RECVPHONE || '01000000000').replace(/[- ]/g, '');
+  // 결제 요청에는 원장님 본인의 휴대전화번호가 필요하다.
+  // (기존에는 SMS 발신용 번호(ppurio_sender_number)를 잘못 재사용해 미설정 시
+  //  더미 번호('01000000000')가 PayApp에 전달되어 "휴대전화번호를 확인하세요" 오류가 났음)
+  const rawPhone = (cfg.mobile || cfg.academy_phone || '').replace(/[- ]/g, '');
+  if (!/^01[016789]\d{7,8}$/.test(rawPhone)) {
+    return NextResponse.json({
+      ok: false,
+      error: '결제를 위해 먼저 계정 정보에서 휴대전화번호를 등록해주세요.',
+    }, { status: 400 });
+  }
+  const phone = rawPhone;
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://conedu.ai.kr';
 
   const params = new URLSearchParams({

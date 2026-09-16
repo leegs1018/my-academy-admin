@@ -64,6 +64,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  useEffect(() => {
+    // 로그인/회원가입 직후 대시보드에 처음 왔을 때 메뉴(사이드바)를 못 찾는 경우가 많아,
+    // 화면이 충분히 넓은 데스크톱/태블릿에서는 기본으로 열어둔다.
+    // 모바일 폭에서는 콘텐츠 공간을 가리므로 기존처럼 닫힌 채로 시작한다.
+    if (window.innerWidth >= 768) setSidebarOpen(true);
+  }, []);
+
   const toggleTheme = () => {
     const next = !isDark;
     setIsDark(next);

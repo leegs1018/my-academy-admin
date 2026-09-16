@@ -247,11 +247,13 @@ export default function DashboardPage() {
       </div>
 
       {/* 퀵 메뉴 */}
-      <nav className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <nav className="grid grid-cols-2 md:grid-cols-3 gap-6">
         <QuickMenu label="출석체크" icon="✅" href="/admin/attendance" color="bg-emerald-50 text-emerald-600" />
         <QuickMenu label="학생등록" icon="👤" href="/admin/student" color="bg-blue-50 text-blue-600" />
         <QuickMenu label="클래스관리" icon="🏫" href="/admin/class" color="bg-indigo-50 text-indigo-600" />
         <QuickMenu label="공지사항" icon="📢" href="/admin/notices" color="bg-yellow-50 text-yellow-600" />
+        <QuickMenu label="문의하기" icon="💬" href="/admin/inquiries" color="bg-rose-50 text-rose-600" />
+        <QuickMenu label="CON 충전" icon="💳" href="/admin/con-charge" color="bg-amber-50 text-amber-600" />
       </nav>
     </div>
   );
