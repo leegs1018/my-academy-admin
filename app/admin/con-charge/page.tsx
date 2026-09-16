@@ -114,10 +114,15 @@ function ConChargeContent() {
         return;
       }
 
+      // 현재 브라우저 창 크기에 맞춰 결제 팝업 크기를 계산해 가운데에 띄운다 (기존 500x700 고정 크기가 작다는 피드백)
+      const popupW = Math.min(720, Math.floor(window.innerWidth * 0.9));
+      const popupH = Math.min(900, Math.floor(window.innerHeight * 0.9));
+      const popupLeft = window.screenX + Math.max(0, Math.floor((window.innerWidth - popupW) / 2));
+      const popupTop = window.screenY + Math.max(0, Math.floor((window.innerHeight - popupH) / 2));
       const popup = window.open(
         data.payurl,
         'payapp_payment',
-        'width=500,height=700,top=100,left=100,scrollbars=yes'
+        `width=${popupW},height=${popupH},top=${popupTop},left=${popupLeft},scrollbars=yes`
       );
 
       if (!popup) {

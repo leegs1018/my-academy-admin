@@ -21,6 +21,7 @@ export default function SuperAdminInquiriesPage() {
   const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null);
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [isEditingAnswer, setIsEditingAnswer] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'answered'>('all');
 
   const fetchInquiries = () => {
@@ -48,6 +49,7 @@ export default function SuperAdminInquiriesPage() {
       ));
       setSelectedInquiry(prev => prev ? { ...prev, answer, status: 'answered' } : null);
       setAnswer('');
+      setIsEditingAnswer(false);
     } else {
       alert('답변 저장에 실패했습니다.');
     }
@@ -116,7 +118,7 @@ export default function SuperAdminInquiriesPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <button onClick={() => { setSelectedInquiry(i); setAnswer(i.answer || ''); }} className="px-3 py-1.5 text-xs font-black text-indigo-400 bg-indigo-900/30 hover:bg-indigo-900/50 rounded-xl transition-all">
+                      <button onClick={() => { setSelectedInquiry(i); setAnswer(i.answer || ''); setIsEditingAnswer(false); }} className="px-3 py-1.5 text-xs font-black text-indigo-400 bg-indigo-900/30 hover:bg-indigo-900/50 rounded-xl transition-all">
                         {i.status === 'pending' ? '답변하기' : '보기'}
                       </button>
                     </td>
@@ -147,17 +149,21 @@ export default function SuperAdminInquiriesPage() {
               </div>
 
               {/* 기존 답변 */}
-              {selectedInquiry.status === 'answered' && selectedInquiry.answer && (
+              {selectedInquiry.status === 'answered' && selectedInquiry.answer && !isEditingAnswer && (
                 <div className="bg-indigo-900/20 border border-indigo-800 rounded-2xl p-4">
-                  <p className="text-xs font-black text-indigo-400 mb-2">답변 완료</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-black text-indigo-400">답변 완료</p>
+                    <button onClick={() => { setAnswer(selectedInquiry.answer || ''); setIsEditingAnswer(true); }}
+                      className="text-xs font-black text-slate-400 hover:text-white transition-colors">✏️ 수정</button>
+                  </div>
                   <p className="text-sm text-white font-medium whitespace-pre-wrap leading-relaxed">{selectedInquiry.answer}</p>
                 </div>
               )}
 
-              {/* 답변 입력 */}
-              {selectedInquiry.status === 'pending' && (
+              {/* 답변 입력 (신규 답변 또는 기존 답변 수정) */}
+              {(selectedInquiry.status === 'pending' || isEditingAnswer) && (
                 <div>
-                  <p className="text-xs font-black text-slate-500 mb-2">답변 작성</p>
+                  <p className="text-xs font-black text-slate-500 mb-2">{isEditingAnswer ? '답변 수정' : '답변 작성'}</p>
                   <textarea
                     rows={5}
                     value={answer}
@@ -169,15 +175,19 @@ export default function SuperAdminInquiriesPage() {
               )}
             </div>
 
-            {selectedInquiry.status === 'pending' && (
+            {(selectedInquiry.status === 'pending' || isEditingAnswer) && (
               <div className="p-6 border-t border-slate-800 flex gap-3">
-                <button onClick={() => setSelectedInquiry(null)} className="flex-1 py-3 font-black text-slate-400 border-2 border-slate-700 rounded-xl">닫기</button>
+                <button
+                  onClick={() => isEditingAnswer ? setIsEditingAnswer(false) : setSelectedInquiry(null)}
+                  className="flex-1 py-3 font-black text-slate-400 border-2 border-slate-700 rounded-xl">
+                  {isEditingAnswer ? '취소' : '닫기'}
+                </button>
                 <button onClick={handleAnswer} disabled={submitting || !answer.trim()} className="flex-[2] py-3 font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all disabled:opacity-50">
-                  {submitting ? '저장 중...' : '✅ 답변 등록'}
+                  {submitting ? '저장 중...' : isEditingAnswer ? '✅ 답변 수정 저장' : '✅ 답변 등록'}
                 </button>
               </div>
             )}
-            {selectedInquiry.status === 'answered' && (
+            {selectedInquiry.status === 'answered' && !isEditingAnswer && (
               <div className="p-6 border-t border-slate-800">
                 <button onClick={() => setSelectedInquiry(null)} className="w-full py-3 font-black text-slate-400 border-2 border-slate-700 rounded-xl">닫기</button>
               </div>

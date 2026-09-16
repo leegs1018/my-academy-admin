@@ -421,6 +421,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                     >
                       <span>👤</span> 계정 정보
                     </Link>
+                    <Link
+                      href="/admin/inquiries"
+                      onClick={() => setShowAccountMenu(false)}
+                      className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-sm font-bold text-gray-700"
+                    >
+                      <span>💬</span> 문의하기
+                    </Link>
                     <div className="mx-4 border-t border-gray-100 my-1"></div>
                     <button
                       onClick={handleLogout}
