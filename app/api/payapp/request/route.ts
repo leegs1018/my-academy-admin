@@ -11,7 +11,7 @@ function getBonus(amount: number) {
 export async function POST(req: NextRequest) {
   const { userId, conAmount } = await req.json() as { userId: string; conAmount: number };
 
-  if (!userId || !conAmount || conAmount < 100) {
+  if (!userId || !conAmount || conAmount < 500) {
     return NextResponse.json({ ok: false, error: '잘못된 요청' }, { status: 400 });
   }
 

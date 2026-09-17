@@ -5,8 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 const PACKAGES = [
-  { amount: 100,   price: '1,000원',   bonus: 0 },
-  { amount: 300,   price: '3,000원',   bonus: 0 },
   { amount: 500,   price: '5,000원',   bonus: 0 },
   { amount: 1000,  price: '10,000원',  bonus: 0 },
   { amount: 3000,  price: '30,000원',  bonus: 5 },
@@ -116,7 +114,7 @@ function ConChargeContent() {
 
   const handleCardPayment = useCallback(async () => {
     if (!userId) { setCardError('로그인이 필요합니다.'); return; }
-    if (selectedAmount < 100) { setCardError('충전할 CON을 먼저 선택해주세요.'); return; }
+    if (selectedAmount < 500) { setCardError('충전할 CON을 먼저 선택해주세요. (최소 500C)'); return; }
 
     setCardLoading(true);
     setCardError('');
@@ -259,8 +257,8 @@ function ConChargeContent() {
             <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
               <input
                 type="number"
-                min="100"
-                placeholder="충전할 CON 입력 (최소 100C)"
+                min="500"
+                placeholder="충전할 CON 입력 (최소 500C)"
                 value={customInput}
                 onFocus={() => { setIsCustom(true); setSelected(null); }}
                 onChange={e => { setCustomInput(e.target.value); setIsCustom(true); setSelected(null); }}
@@ -281,7 +279,7 @@ function ConChargeContent() {
         </div>
         <div className="mt-4 space-y-1">
           <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">1,000 CON = 10,000원 · 부가세 포함</p>
-          <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">최소 충전 금액은 100 CON 이상입니다.</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">최소 충전 금액은 500 CON 이상입니다.</p>
           <p className="text-xs text-gray-400 dark:text-slate-500 font-bold">직접 입력 시 10,000C 이상이면 +10% 추가 적립됩니다.</p>
         </div>
       </div>
