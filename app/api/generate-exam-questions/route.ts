@@ -887,6 +887,10 @@ question_text에 지문 내용 포함 절대 금지.
 - (C)의 문장 중 일부를 (A)나 (B)에 끼워 넣거나, (A)와 (C)가 원본에서 서로 떨어진 문장을 나눠 갖는 등 구간이 겹치거나 뒤섞이는 것은 절대 금지.
 - 이렇게 자르기만 하면 (A)→(B)→(C) 순서로 읽었을 때 자동으로 원본과 동일한 논리 흐름이 되므로, 정답이 항상 ①이 되는 것은 "추론의 결과"가 아니라 "이렇게 구성했기 때문에 당연한 결과"다. 별도로 그럴듯한 순서를 새로 "설계"하려 하지 말 것.
 - 학생이 푸는 문제의 난이도는 이후 시스템이 (A)(B)(C)의 배치 순서를 섞어서 만들어내므로, 지금 단계에서 일부러 순서를 헷갈리게 만들 필요가 없다.
+- ⚠️ 분량 균형: (A)(B)(C)의 문장 수를 최대한 균등하게 나눈다.
+  · 남은 문장 수가 3의 배수면 정확히 1:1:1로 나눈다 (예: 9문장 → 3/3/3).
+  · 아니면 나머지를 하나씩 분배한다 (예: 10문장 → 4/3/3, 11문장 → 4/4/3). 한 구간이 1문장뿐인데 다른 구간이 4문장 이상인 것처럼 극단적으로 치우치면 안 되고, 구간 간 문장 수 차이가 1개를 넘으면 안 된다.
+  · 담화 경계상 이상적인 절단점이 불균등하다면, 절단점을 살짝 조정해서라도 균형을 맞춘다.
 
 ━━━━━━━━━━━━━━━━━━
 [modified_passage 구조 — 필수 형식]
@@ -1245,6 +1249,10 @@ Generate A/B/C groupings:
   · (C) = the final block, entirely AFTER all of B's sentences in the original passage
 - Do NOT move a sentence out of its natural chronological block (e.g. do not place an early sentence into C while a later sentence goes into A). Every sentence in A must precede every sentence in B, which must precede every sentence in C, in the ORIGINAL passage.
 - This is a mechanical cut, not a creative reordering — because A/B/C are simply consecutive slices of the original passage, reading (A)→(B)→(C) trivially reproduces the original order, which is why the answer is always ① (A)-(B)-(C). Do not try to "design" a cleverer or different correct order.
+- ⚠️ BALANCE REQUIREMENT: split the remaining sentence count as evenly as possible across A/B/C.
+  · If the remaining sentence count is divisible by 3, use an EXACT 1:1:1 split (e.g. 9 remaining sentences → A=3, B=3, C=3).
+  · Otherwise distribute the remainder one at a time (e.g. 10 → 4/3/3 or 3/4/3; 11 → 4/4/3). No segment should ever have only 1 sentence while another has 4+, and no segment should differ from another by more than 1 sentence.
+  · Do NOT let discourse-boundary reasoning produce a lopsided split (e.g. A=1, B=5, C=2) — if the "ideal" logical boundary is uneven, adjust the cut point slightly so the sentence counts stay balanced while the segments remain coherent.
 
 STEP 4
 Verify:
@@ -1871,6 +1879,22 @@ export async function POST(request: Request) {
             const posA = findPos(sA), posB = findPos(sB), posC = findPos(sC);
             if (posA === -1 || posB === -1 || posC === -1 || !(posA < posB && posB < posC)) {
               console.warn(`[sentence_order] 단락 순서가 원본과 불일치 (posA=${posA}, posB=${posB}, posC=${posC}) — 재시도 ${attempt + 1}`);
+              if (attempt < MAX_RETRIES) continue;
+              return null;
+            }
+
+            // 태그 정합성 검증: 아래 셔플 로직이 안전하게 동작하려면 (A)(B)(C) 태그가
+            // 각각 정확히 1번씩만 등장하고, 각 구간 내용 안에 다른 태그가 섞여 있으면 안 된다.
+            // 이 검증 없이 셔플 단계에서만 걸러내면(과거 방식) 실패 시 셔플을 조용히
+            // 건너뛰어 정답이 계속 ①(=A부터 시작)에 머무르는 문제가 있었다 — 여기서
+            // 재시도로 처리해 실제로 매번 셔플이 적용되도록 한다.
+            const tagOnce = (label: string) => (passage.split(`(${label})`).length - 1) === 1;
+            const noStrayTag = (seg: string) => !/\([ABC]\)/.test(seg);
+            const extractionIsClean =
+              tagOnce('A') && tagOnce('B') && tagOnce('C')
+              && noStrayTag(sA) && noStrayTag(sB) && noStrayTag(sC);
+            if (!extractionIsClean) {
+              console.warn(`[sentence_order] 태그 중복/오염 감지 — 재시도 ${attempt + 1}`);
               if (attempt < MAX_RETRIES) continue;
               return null;
             }
