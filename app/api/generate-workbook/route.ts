@@ -102,6 +102,10 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
 6. 핵심 명사, 동사, 형용사, 부사를 우선 빈칸으로 선택합니다.
 7. answer_key에는 모든 빈칸 번호와 정답 단어를 나열합니다.
 
+⚠️⚠️ 매우 중요: "ko" 필드에는 _(N:X)_ 형식의 빈칸 마커를 절대 포함하지 마세요.
+"ko"는 빈칸 없이 완성된, 자연스러운 한국어 번역 문장이어야 합니다. (예: "ko": "라푼젤은 오래된 탑에 갇혀 자란 검은 머리 소녀였다.")
+_(N:X)_ 마커는 오직 "en" 필드에만 사용합니다.
+
 출력 형식 (순수 JSON만, 마크다운 코드블록 없이):
 {
   "sentences": [

@@ -334,6 +334,14 @@ function buildVocabFillAnswerMap(answerKey: string): Record<number, string> {
   return map;
 }
 
+// 어휘채우기 한글 번역에 영어 빈칸 마커(_(N:X)_)가 그대로 섞여 나오는 경우가 있어
+// (AI가 지시와 달리 한글 번역에도 마커를 포함시키는 경우) 번호만 남기고 정리해서 보여준다.
+function renderVocabFillKorean(ko: string): React.ReactNode {
+  if (!ko.includes('_(')) return ko;
+  const parts = ko.split(/_\((\d+):[a-zA-Z]\)_/);
+  return parts.map((part, i) => (i % 2 === 0 ? part : <b key={i}>({part})</b>));
+}
+
 function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean }: {
   sentences: Array<{en: string; ko: string}>; answerKey: string; showAnswer: boolean; showKorean: boolean;
 }) {
@@ -366,7 +374,7 @@ function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean
               })}
             </p>
             {showKorean && s.ko && (
-              <p className="text-xs font-medium text-slate-500 mt-0.5 pl-2 border-l-2 border-slate-200">{s.ko}</p>
+              <p className="text-xs font-medium text-slate-500 mt-0.5 pl-2 border-l-2 border-slate-200">{renderVocabFillKorean(s.ko)}</p>
             )}
           </div>
         );
@@ -1411,7 +1419,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
                     {renderBlank(rawParts)}
                   </td>
                   <td style={{ padding: '8px 0 8px 14px', fontSize: 13, lineHeight: 1.85, verticalAlign: 'top', textAlign: 'justify', borderLeft: '1.5px solid #cbd5e1', color: '#444' }}>
-                    {s.ko || ''}
+                    {renderVocabFillKorean(s.ko || '')}
                   </td>
                 </tr>
               );
