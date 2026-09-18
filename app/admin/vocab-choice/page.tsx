@@ -1690,7 +1690,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
               <tr key={i}>
                 <td style={{
                   padding: '8px 14px 8px 0',
-                  fontSize: 15.5, lineHeight: 2.0,
+                  fontSize: 15.5, lineHeight: 2.0, fontWeight: 700,
                   verticalAlign: 'top', textAlign: 'justify',
                 }}>
                   {s.en}
