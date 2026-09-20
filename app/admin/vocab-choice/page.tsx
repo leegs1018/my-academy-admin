@@ -210,7 +210,7 @@ function serializeChoiceChunks(chunks: EditChoiceChunk[]): { passage: string; an
   return { passage, answerKey: keyParts.join('  ') };
 }
 
-async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean): Promise<boolean> {
+async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean, rowSelector: string = '[data-pdf-row="true"]'): Promise<boolean> {
   const el = document.getElementById(elementId);
   if (!el) return false;
   const cs = window.getComputedStyle(el);
@@ -222,6 +222,19 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
   // 요소 높이에 비례해 해상도를 낮춰 캡처 결과 크기를 안전한 범위로 유지한다.
   const SAFE_CAPTURE_HEIGHT_PX = 3500;
   const pixelRatio = el.offsetHeight > 0 ? Math.min(2, SAFE_CAPTURE_HEIGHT_PX / el.offsetHeight) : 2;
+
+  // 페이지가 넘어가는 긴 워크북(예: 단어배열 10~12문항)에서 여러 페이지로 나눌 때,
+  // 문항 한 줄(row) 중간을 그대로 픽셀 높이로 잘라버려 문장 뒷부분이 잘려 보이는 문제가
+  // 있었다. rowSelector로 각 문항 블록의 실제 위치(캡처 전 라이브 DOM 기준)를 미리
+  // 측정해두고, 슬라이스 경계가 문항 중간에 걸리면 그 문항 시작 지점으로 당겨서 자른다.
+  const containerTop = el.getBoundingClientRect().top;
+  const rowBoundaries = rowSelector
+    ? Array.from(el.querySelectorAll(rowSelector)).map(r => {
+        const rect = (r as HTMLElement).getBoundingClientRect();
+        return { top: rect.top - containerTop, bottom: rect.bottom - containerTop };
+      })
+    : [];
+
   const url = await toJpeg(el, { pixelRatio, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
   const img = document.createElement('img') as HTMLImageElement;
   await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('img load')); img.src = url; });
@@ -236,7 +249,17 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
     const pagePixelH = Math.floor(img.naturalHeight * (maxH / contentH));
     let sliceY = 0; let firstSlice = true;
     while (sliceY < img.naturalHeight) {
-      const sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
+      let sliceH = Math.min(pagePixelH, img.naturalHeight - sliceY);
+      // 슬라이스 하단 경계(raster px)가 어떤 문항 블록 중간에 걸리면, 그 블록 시작
+      // 지점까지만 자르고 해당 블록 전체를 다음 페이지로 넘긴다.
+      if (rowBoundaries.length > 0 && sliceY + sliceH < img.naturalHeight) {
+        const tentativeCssY = (sliceY + sliceH) / pixelRatio;
+        const straddling = rowBoundaries.find(r => r.top < tentativeCssY - 0.5 && r.bottom > tentativeCssY + 0.5);
+        if (straddling) {
+          const adjustedH = Math.round(straddling.top * pixelRatio) - sliceY;
+          if (adjustedH > 0) sliceH = adjustedH; // 블록이 한 페이지보다 크면(드묾) 원래 경계 유지
+        }
+      }
       const sliceContentH = cW * (sliceH / img.naturalWidth);
       // 마지막 슬라이스가 10mm 미만(= bottom padding만 넘친 경우)이면 빈 페이지 방지
       const isLastSlice = sliceY + sliceH >= img.naturalHeight;
@@ -555,9 +578,9 @@ function RenderWordOrder({ sentences, showAnswer, showKorean }: {
           <p className="text-xs font-bold text-slate-500">
             ({(s.scrambled || []).join(' / ')})
           </p>
-          <div className="border-b border-slate-300 pb-0.5 flex items-end gap-1 min-h-[22px]">
+          <div className="border-b border-slate-300 pb-0.5 flex flex-wrap items-end gap-1 min-h-[22px]">
             <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
-            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1">{s.answer}</span>}
+            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1 min-w-[200px]">{s.answer}</span>}
           </div>
           {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
         </div>
@@ -574,9 +597,9 @@ function RenderEnglishWriting({ sentences, showAnswer }: {
       {(sentences || []).map((s, i) => (
         <div key={i} className="space-y-1.5">
           <p className="text-sm font-bold text-slate-800 leading-relaxed">{s.ko}</p>
-          <div className="border-b border-slate-300 pb-0.5 flex items-end gap-1 min-h-[22px]">
+          <div className="border-b border-slate-300 pb-0.5 flex flex-wrap items-end gap-1 min-h-[22px]">
             <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
-            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1">{s.answer}</span>}
+            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1 min-w-[200px]">{s.answer}</span>}
           </div>
           {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
         </div>
@@ -1584,14 +1607,14 @@ function PdfWordOrder({ result, isAnswer, title, id, showKorean }: { result: Wor
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
-          <div key={i}>
+          <div key={i} data-pdf-row="true">
             <p style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{s.ko}</p>
             <p style={{ margin: '0 0 4px', fontSize: 15, color: '#000' }}>
               ({(s.scrambled || []).join(' / ')})
             </p>
-            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
+            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 13, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
-              {isAnswer && <span style={{ fontSize: 14, fontWeight: 700, color: '#92400E' }}>{s.answer}</span>}
+              {isAnswer && <span style={{ fontSize: 14, fontWeight: 700, color: '#92400E', flex: 1, minWidth: 200, wordBreak: 'break-word' }}>{s.answer}</span>}
             </div>
             {!isAnswer && <div style={{ borderBottom: '1px solid #CBD5E1', height: 18, marginTop: 6 }}></div>}
           </div>
@@ -1608,11 +1631,11 @@ function PdfEnglishWriting({ result, isAnswer, title, id }: { result: WorkbookRe
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
-          <div key={i}>
+          <div key={i} data-pdf-row="true">
             <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: '#000', lineHeight: 1.9 }}>{s.ko}</p>
-            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
+            <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 13, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
-              {isAnswer && <span style={{ fontSize: 14, fontWeight: 700, color: '#92400E' }}>{s.answer}</span>}
+              {isAnswer && <span style={{ fontSize: 14, fontWeight: 700, color: '#92400E', flex: 1, minWidth: 200, wordBreak: 'break-word' }}>{s.answer}</span>}
             </div>
             {!isAnswer && <div style={{ borderBottom: '1px solid #CBD5E1', height: 18, marginTop: 6 }}></div>}
           </div>
