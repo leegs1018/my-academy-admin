@@ -68,9 +68,15 @@ function buildPrompt(text: string, type: WorkbookType, difficulty: string): stri
    - 관사(a/an/the), 접속사(and/but/or), be동사(is/are/was)는 가급적 제외합니다.
    - 대신 명사, 동사, 형용사, 부사, 전치사를 우선 선택합니다.
 2. 각 위치에 번호[어휘A / 어휘B] 형식으로 선택지 2개만 만듭니다. (정답 1개 + 오답 1개)
-3. 오답은 반드시 정답과 품사가 동일해야 하며, 문맥상 어울리지 않는 단어를 사용합니다.
-   - 명사 ↔ 명사, 동사 ↔ 동사, 형용사 ↔ 형용사, 부사 ↔ 부사, 전치사 ↔ 전치사
-   - 반의어, 동의어 혼동 쌍, 철자 유사 혼동 쌍을 우선 활용합니다.
+3. 오답은 반드시 아래 두 가지 유형 중 하나에 해당해야 합니다. 그 외의 임의의 단어는 오답으로 절대 사용하지 마세요.
+   (a) 철자 혼동어 — 정답과 철자·형태가 비슷해서 헷갈리기 쉬운 단어
+       예: adopt/adapt, affect/effect, quite/quiet, price/prize, though/through, complement/compliment
+   (b) 반의어 — 정답과 의미가 명확히 반대되는 단어
+       예: increase↔decrease, accept↔reject, expand↔shrink, gain↔lose, positive↔negative
+   ⚠️ 절대 금지: 정답과 철자도 다르고 의미도 아무 관련 없는 단어를 오답으로 쓰는 것.
+      (나쁜 예: 정답 "time"의 오답으로 "door"처럼 서로 아무 연관이 없는 단어 — 반드시 피할 것)
+   - 오답은 반드시 정답과 품사가 동일해야 합니다: 명사 ↔ 명사, 동사 ↔ 동사, 형용사 ↔ 형용사, 부사 ↔ 부사, 전치사 ↔ 전치사
+   - 오답을 만들기 전에 스스로 "이 오답이 (a) 철자 혼동어인가, (b) 반의어인가?"를 확인하고, 둘 다 아니면 다른 단어로 교체하세요.
 4. 원문 문장 구조와 단어를 그대로 유지합니다. 문장 어순 변경 금지.
 5. 선택 어휘 위치에만 번호와 대괄호를 삽입합니다. 나머지 텍스트는 원문 그대로.
 6. 정답이 앞 선택지(A)와 뒤 선택지(B)에 고르게 분포되도록 합니다. (약 50:50)
@@ -207,15 +213,14 @@ _(N:X)_ 마커는 오직 "en" 필드에만 사용합니다.
       return header('아래 영어 지문으로 낱말 배열 문제를 생성하세요.') +
 `생성 규칙:
 1. 10~12문장을 선택합니다 (어순 배열이 의미 있는 복문/구조 우선).
-2. 각 문장을 단어 단위로 분리하여 순서를 무작위로 섞습니다.
-3. 마침표/쉼표는 인접한 단어에 붙인 채로 포함합니다.
-4. 문제: 한국어 뜻 + 섞인 단어 목록 → 학생이 영어 문장 완성.
-5. 원문 영어 문장은 절대 변형하지 않습니다.
+2. 각 문장에 대해 자연스러운 한국어 뜻을 작성합니다.
+3. "answer"에는 선택한 문장을 원문 그대로(단어 하나도 빠짐없이, 순서·철자·구두점 모두 원문과 동일하게) 적습니다. 절대 변형하지 않습니다.
+4. 단어를 섞는 작업은 시스템이 별도로 처리하므로, scrambled 배열은 만들지 않습니다 — answer만 정확하게 작성하는 데 집중하세요.
 
 출력 형식 (순수 JSON만):
 {
   "sentences": [
-    { "num": 1, "ko": "한국어 뜻", "scrambled": ["word3", "word1,", "word2"], "answer": "word1 word2 word3," },
+    { "num": 1, "ko": "한국어 뜻", "answer": "원문 문장을 토씨 하나 틀리지 않고 그대로." },
     ...
   ]
 }`;
@@ -753,6 +758,30 @@ function extractJson(text: string): string {
   return text.trim();
 }
 
+// 단어배열: scrambled(섞인 단어 목록)를 AI가 아닌 코드에서 answer로부터 직접 생성한다.
+// AI에게 "정답 문장"과 "섞인 단어 목록"을 각각 따로 만들게 하면, 문장이 길고 복잡할수록
+// 두 값이 서로 어긋나는 경우가 있었다(단어 누락, 다른 문장 단어가 잘못 섞여 들어감 등) —
+// 학생이 정답을 조립할 수 없는 문제로 이어짐. answer만 정확히 받고 섞기는 결정적으로 처리해
+// 이런 불일치가 구조적으로 발생할 수 없게 한다.
+function shuffleWordOrderSentences(sentences: unknown): void {
+  if (!Array.isArray(sentences)) return;
+  for (const s of sentences as Array<Record<string, unknown>>) {
+    const answer = typeof s.answer === 'string' ? s.answer.trim() : '';
+    if (!answer) continue;
+    const words = answer.split(/\s+/);
+    const scrambled = [...words];
+    // 단어가 2개 이상이면 원문과 동일한 순서가 나오지 않도록 재시도
+    for (let attempt = 0; attempt < 10; attempt++) {
+      for (let i = scrambled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [scrambled[i], scrambled[j]] = [scrambled[j], scrambled[i]];
+      }
+      if (words.length < 2 || scrambled.join(' ') !== words.join(' ')) break;
+    }
+    s.scrambled = scrambled;
+  }
+}
+
 // 숫자/수치 표현이 선택지로 들어간 어휘 문항 제거 (내용과 무관한 어휘 방지용 안전장치)
 function stripIrrelevantVocabChoices(passage: string, answerKey: string): { passage: string; answerKey: string } {
   const choiceRegex = /(\d+)\[([^\]]+)\]/g;
@@ -903,6 +932,11 @@ export async function POST(request: Request) {
       } catch {
         results.push({ error: 'AI 응답 파싱 실패. 다시 시도해주세요.' });
         continue;
+      }
+
+      // 단어배열: scrambled를 AI가 아닌 코드에서 answer로부터 결정적으로 생성
+      if (type === 'word_order') {
+        shuffleWordOrderSentences(parsed.sentences);
       }
 
       // 어휘 선택 계열 정답 분산 후처리
