@@ -27,6 +27,9 @@ interface ExamQuestion {
   explanation: string;
   _passageText?: string;
   _passageNumber?: number;
+  // 모의고사 탭에서 서로 다른 시험을 섞어 선택한 경우, 그룹 헤더에 지문 순번 대신
+  // 각 문항이 실제로 어느 시험 몇 번인지 표시하기 위한 라벨 (예: "24년 9월 18번").
+  _examLabel?: string;
 }
 
 interface ExamHistoryItem {
@@ -323,6 +326,26 @@ function renderVocabBlankPassage(text: string) {
   });
 }
 
+// 모의고사 문항 선택 키: 년도/학년/시험명을 문항 번호와 함께 묶어야 서로 다른 시험의
+// 같은 번호(예: 23년 9월 18번, 24년 9월 18번)를 서로 다른 항목으로 구분해서 선택할 수 있다.
+function mockKey(year: string, grade: string, institution: string, num: string): string {
+  return `${year}__${grade}__${institution}__${num}`;
+}
+function parseMockKey(key: string): { year: string; grade: string; institution: string; num: string } {
+  const [year, grade, institution, num] = key.split('__');
+  return { year, grade, institution, num };
+}
+function mockExamLabel(year: string, institution: string): string {
+  const short = institution.split('/')[0]?.trim() || institution;
+  return `${year}년 ${short}`;
+}
+function compareMockKeys(a: string, b: string): number {
+  const pa = parseMockKey(a), pb = parseMockKey(b);
+  if (pa.year !== pb.year) return parseInt(pa.year) - parseInt(pb.year);
+  if (pa.institution !== pb.institution) return pa.institution.localeCompare(pb.institution);
+  return parseInt(pa.num) - parseInt(pb.num);
+}
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -425,7 +448,12 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 
   const buildHtml = (q: ExamQuestion, num: number) => {
     const typeLabel = TYPE_LABEL_MAP[q.type] || q.type;
-    let html = `<div style="font-size:9px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:4px;">${esc(typeLabel)}</div>\n`;
+    // data-pdf-row: 지문이 길어 한 문항 전체가 한 칸/페이지에 안 들어갈 때, 이 표시가 있는
+    // 블록(선택지 하나하나) 경계에서만 안전하게 나눠 배치한다 — 선택지 중간에서 페이지가
+    // 끊겨 ④⑤번이 통째로 잘려 보이는 문제가 있었다. 헤더+지문 부분은 표시하지 않는데,
+    // 지문 자체는 일반 텍스트처럼 페이지 경계에서 자연스럽게 이어져도 무방하지만(교재에서
+    // 흔한 방식) 선택지는 항목 하나가 반드시 통째로 보여야 하기 때문이다.
+    let html = `<div><div style="font-size:9px;font-weight:700;color:#64748b;background:#f1f5f9;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:4px;">${esc(typeLabel)}</div>\n`;
 
     if (q.type === 'vocab_paraphrase') {
       html += instrP(`${num}. ${esc(q.question_text)}`);
@@ -486,6 +514,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     } else {
       html += instrP(`${num}. ${esc(q.question_text)}`);
     }
+    html += `</div>`; // data-pdf-row 헤더+지문 블록 닫기
 
     if (q.type !== 'flow' && q.type !== 'grammar' && q.type !== 'sentence_insertion') {
       html += `<div style="display:flex;flex-direction:column;gap:3px;">`;
@@ -495,11 +524,11 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
           const gm = c.text.match(/^([①②③④⑤])\s*(.+)$/);
           const ch = gm ? gm[1] : (CIRCLE_NUMS[c.number - 1] ?? '');
           const wd = gm ? gm[2] : c.text;
-          html += `<div style="display:flex;gap:4px;align-items:center;"><span style="font-size:12px;font-weight:900;color:#111827;">${esc(ch)}</span><span style="font-size:13px;font-weight:600;color:#1f2937;">${esc(wd)}</span></div>`;
+          html += `<div data-pdf-row="true" style="display:flex;gap:4px;align-items:center;"><span style="font-size:12px;font-weight:900;color:#111827;">${esc(ch)}</span><span style="font-size:13px;font-weight:600;color:#1f2937;">${esc(wd)}</span></div>`;
         } else if (q.type === 'sentence_order' || q.type === 'sentence_insertion') {
-          html += `<div style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</div>`;
+          html += `<div data-pdf-row="true" style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</div>`;
         } else {
-          html += `<div style="display:flex;gap:4px;align-items:flex-start;"><span style="font-weight:900;color:#475569;flex-shrink:0;min-width:14px;font-size:13px;">${CIRCLE_NUMS[j] ?? (j+1)}</span><span style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</span></div>`;
+          html += `<div data-pdf-row="true" style="display:flex;gap:4px;align-items:flex-start;"><span style="font-weight:900;color:#475569;flex-shrink:0;min-width:14px;font-size:13px;">${CIRCLE_NUMS[j] ?? (j+1)}</span><span style="font-size:13px;color:#1e293b;line-height:1.55;">${esc(c.text)}</span></div>`;
         }
       }
       html += `</div>`;
@@ -555,9 +584,56 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
     const ratio = el.scrollHeight / el.offsetWidth;
+    // 문항이 한 칸(컬럼)보다 길 때 안전하게 나눠 배치하기 위해, 캡처 전에
+    // data-pdf-row 블록들의 위치(CSS px, 컨테이너 기준)를 미리 측정해둔다.
+    const containerTop = el.getBoundingClientRect().top;
+    const rowBoundariesCss = Array.from(el.querySelectorAll('[data-pdf-row="true"]')).map(r => {
+      const rect = (r as HTMLElement).getBoundingClientRect();
+      return { top: rect.top - containerTop, bottom: rect.bottom - containerTop };
+    });
     const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
     document.body.removeChild(el);
-    return { url, ratio };
+    return { url, ratio, rowBoundariesCss };
+  };
+
+  // 한 문항(지문+선택지)이 한 칸의 최대 높이보다 길면, 선택지가 중간에서 잘려 보이지
+  // 않도록 안전한 블록 경계(data-pdf-row)에서 여러 조각으로 나눈다. 각 조각은 이후
+  // placeImage()가 기존 로직대로 왼쪽 칸 → 오른쪽 칸 → 새 페이지 순으로 자연스럽게 배치한다.
+  const MAX_COL_H_MM = BOTTOM - M;
+  const sliceIntoColumnSizedPieces = async (
+    item: { url: string; ratio: number; rowBoundariesCss: { top: number; bottom: number }[] }
+  ): Promise<Array<{ url: string; h_mm: number }>> => {
+    const img = document.createElement('img') as HTMLImageElement;
+    await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('img load')); img.src = item.url; });
+    const naturalW = img.naturalWidth, naturalH = img.naturalHeight;
+    const scale = naturalW / RENDER_W; // CSS px -> raster px 배율 (renderEl의 pixelRatio와 동일)
+    const mmPerPx = colW / naturalW;
+    const maxSlicePx = Math.max(1, Math.floor(MAX_COL_H_MM / mmPerPx));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = naturalW; canvas.height = naturalH;
+    const ctx = canvas.getContext('2d')!; ctx.drawImage(img, 0, 0);
+
+    const pieces: Array<{ url: string; h_mm: number }> = [];
+    let sliceY = 0;
+    while (sliceY < naturalH) {
+      let sliceH = Math.min(maxSlicePx, naturalH - sliceY);
+      if (item.rowBoundariesCss.length > 0 && sliceY + sliceH < naturalH) {
+        const tentativeCssY = (sliceY + sliceH) / scale;
+        const straddling = item.rowBoundariesCss.find(r => r.top < tentativeCssY - 0.5 && r.bottom > tentativeCssY + 0.5);
+        if (straddling) {
+          const adjusted = Math.round(straddling.top * scale) - sliceY;
+          if (adjusted > 0) sliceH = adjusted; // 블록 하나가 한 칸보다 큰 극단적 경우엔 원래 경계 유지
+        }
+      }
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = naturalW; sliceCanvas.height = sliceH;
+      const sctx = sliceCanvas.getContext('2d')!;
+      sctx.drawImage(canvas, 0, sliceY, naturalW, sliceH, 0, 0, naturalW, sliceH);
+      pieces.push({ url: sliceCanvas.toDataURL('image/jpeg', 0.92), h_mm: sliceH * mmPerPx });
+      sliceY += sliceH;
+    }
+    return pieces;
   };
 
   // Title spanning both columns
@@ -582,8 +658,14 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
   const rendered = await Promise.all(
     questions.map((q, i) => renderEl(buildHtml(q, i + 1), RENDER_W, 6))
   );
-  for (const { url, ratio } of rendered) {
-    placeImage(url, colW * ratio);
+  for (const item of rendered) {
+    const h_mm_full = colW * item.ratio;
+    if (h_mm_full <= MAX_COL_H_MM) {
+      placeImage(item.url, h_mm_full);
+    } else {
+      const pieces = await sliceIntoColumnSizedPieces(item);
+      for (const piece of pieces) placeImage(piece.url, piece.h_mm);
+    }
   }
 
   finalizePage();
@@ -936,14 +1018,14 @@ export default function AiQuestionsPage() {
 
   useEffect(() => {
     if (!mockSelectedGrade) return;
-    setMockSelectedYear(''); setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    setMockSelectedYear(''); setMockSelectedInstitution('');
     supabase.from('mock_exam_passages').select('year').eq('grade', mockSelectedGrade).order('year', { ascending: false })
       .then(({ data }) => { setMockYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
   }, [mockSelectedGrade]);
 
   useEffect(() => {
     if (!mockSelectedGrade || !mockSelectedYear) return;
-    setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    setMockSelectedInstitution('');
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).order('institution', { ascending: true })
       .then(({ data }) => {
         const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
@@ -958,7 +1040,6 @@ export default function AiQuestionsPage() {
 
   useEffect(() => {
     if (!mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
-    setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('question_number, question_group').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution).order('question_number')
       .then(({ data }) => { setMockQuestionEntries((data ?? []).map((r: { question_number: number; question_group: string | null }) => ({ question_number: r.question_number, question_group: r.question_group ?? null }))); });
   }, [mockSelectedYear, mockSelectedGrade, mockSelectedInstitution]);
@@ -1041,9 +1122,15 @@ export default function AiQuestionsPage() {
   };
   const validConfigs = typeConfigs.filter(c => c.enabled && c.type !== '');
 
-  // pdfSortedQuestions 초기화 (새 문제 생성 시에만 — 레이아웃 변경은 초기화 안 함)
-  useEffect(() => { setPdfSortedQuestions([]); }, [questions]);
-  useEffect(() => { setMockPdfSortedQuestions([]); }, [mockQuestions]);
+  // pdfSortedQuestions 초기화 (새 문제 생성 시 + 레이아웃 변경 시).
+  // "무작위" 레이아웃은 호출마다 다른 순서를 만들어내므로, 레이아웃을 바꾸지 않고
+  // 초기화도 하지 않으면 문제 PDF를 내려받은 뒤 레이아웃을 바꿔 답안 PDF만 다시
+  // 내려받을 때 예전 순서(예: 지문별로 뭉쳐 보이는 순서)가 그대로 재사용되는
+  // 문제가 있었다. 레이아웃이 바뀌면 캐시를 비워 다음 다운로드에서 새로 섞이게 하고,
+  // 같은 레이아웃을 유지하는 동안은(문제→답안 연속 다운로드) 순서가 유지되어
+  // 문제 번호와 답안 번호가 어긋나지 않는다.
+  useEffect(() => { setPdfSortedQuestions([]); }, [questions, pdfLayout, typeConfigs]);
+  useEffect(() => { setMockPdfSortedQuestions([]); }, [mockQuestions, mockPdfLayout, typeConfigs]);
 
   const sortQuestionsForPdf = useCallback((qs: ExamQuestion[]): ExamQuestion[] => {
     if (pdfLayout === 'passage') return [...qs];
@@ -1063,22 +1150,33 @@ export default function AiQuestionsPage() {
 
   // ── 모의고사 탭 함수 ──
   const toggleMockNumber = async (num: string) => {
-    if (mockSelectedNumbers.includes(num)) {
-      setMockSelectedNumbers(prev => prev.filter(n => n !== num));
-      setMockPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    // 선택 항목은 "년도__학년__시험명__번호" 키로 저장해, 서로 다른 시험의 같은 번호를
+    // 서로 다른 항목으로 구분한다 (현재 화면에 보이는 시험 기준으로 토글).
+    const key = mockKey(mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, num);
+    if (mockSelectedNumbers.includes(key)) {
+      setMockSelectedNumbers(prev => prev.filter(k => k !== key));
+      setMockPassageMap(prev => { const next = { ...prev }; delete next[key]; return next; });
     } else {
-      setMockSelectedNumbers(prev => [...prev, num]);
-      setMockLoadingNumbers(prev => new Set([...prev, num]));
+      setMockSelectedNumbers(prev => [...prev, key]);
+      setMockLoadingNumbers(prev => new Set([...prev, key]));
       const { data } = await supabase.from('mock_exam_passages').select('passage_text')
         .eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution)
         .eq('question_number', parseInt(num)).single();
-      setMockPassageMap(prev => ({ ...prev, [num]: data?.passage_text ?? '' }));
-      setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+      setMockPassageMap(prev => ({ ...prev, [key]: data?.passage_text ?? '' }));
+      setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(key); return next; });
     }
   };
 
-  const mockSortedSelectedNumbers = [...mockSelectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
-  const mockAllPassagesReady = mockSelectedNumbers.length > 0 && mockSelectedNumbers.every(n => mockPassageMap[n]) && mockLoadingNumbers.size === 0;
+  // 요약 목록의 ✕ 버튼은 현재 화면의 필터(학년/년도/시험명)와 무관하게 특정 항목을
+  // 직접 키로 지정해 제거해야 한다 — toggleMockNumber는 현재 필터 기준으로 키를
+  // 새로 만들기 때문에, 다른 시험 소속 항목을 제거할 때 엉뚱한 키를 건드리게 된다.
+  const removeMockSelection = (key: string) => {
+    setMockSelectedNumbers(prev => prev.filter(k => k !== key));
+    setMockPassageMap(prev => { const next = { ...prev }; delete next[key]; return next; });
+  };
+
+  const mockSortedSelectedNumbers = [...mockSelectedNumbers].sort(compareMockKeys);
+  const mockAllPassagesReady = mockSelectedNumbers.length > 0 && mockSelectedNumbers.every(k => mockPassageMap[k]) && mockLoadingNumbers.size === 0;
 
   const mockSortQuestionsForPdf = (qs: ExamQuestion[]): ExamQuestion[] => {
     if (mockPdfLayout === 'passage') return [...qs];
@@ -1097,7 +1195,10 @@ export default function AiQuestionsPage() {
   };
 
   const autoSaveMockExamHistory = async (qs: ExamQuestion[], sess: typeof mockSession) => {
-    if (!sess || qs.length === 0 || !mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
+    if (!sess || qs.length === 0 || mockSortedSelectedNumbers.length === 0) return;
+    // 여러 시험을 섞어 선택했을 수 있으므로, 저장 이력의 대표 시험 정보는 선택된 항목 중
+    // 첫 번째 것의 시험 정보를 사용한다 (문항별 상세 시험 정보는 questionNumbers에 담긴 순서로 유추 가능).
+    const { year: repYear, grade: repGrade, institution: repInstitution } = parseMockKey(mockSortedSelectedNumbers[0]);
     setMockAutoSaveStatus('saving');
     try {
       const urlRes = await fetch('/api/storage/get-upload-urls', { method: 'POST', headers: { Authorization: `Bearer ${sess.access_token}` } });
@@ -1120,10 +1221,10 @@ export default function AiQuestionsPage() {
         body: JSON.stringify({
           questionPdfPath: qUrl.path,
           answerPdfPath: aUrl?.path ?? null,
-          year: parseInt(mockSelectedYear),
-          grade: mockSelectedGrade,
-          institution: mockSelectedInstitution,
-          questionNumbers: mockSortedSelectedNumbers.map(n => parseInt(n)),
+          year: parseInt(repYear),
+          grade: repGrade,
+          institution: repInstitution,
+          questionNumbers: mockSortedSelectedNumbers.map(k => parseInt(parseMockKey(k).num)),
           questionTypes: [...new Set(qs.map(q => q.type))],
           difficulty: difficultyLabel,
         }),
@@ -1142,24 +1243,25 @@ export default function AiQuestionsPage() {
   const handleMockGenerate = async () => {
     if (!mockAllPassagesReady || validConfigs.length === 0 || !mockSession) return;
     setMockGenerating(true); setMockQuestions([]); setMockRevealedAnswers(new Set()); setMockAutoSaveStatus('idle');
-    const validNums = mockSortedSelectedNumbers.filter(n => mockPassageMap[n]);
+    const validKeys = mockSortedSelectedNumbers.filter(k => mockPassageMap[k]);
     let completedCount = 0;
-    setMockProgress(`0/${validNums.length}개 지문 생성 중...`);
-    const questionSlots = new Array<ExamQuestion[]>(validNums.length).fill([]);
+    setMockProgress(`0/${validKeys.length}개 지문 생성 중...`);
+    const questionSlots = new Array<ExamQuestion[]>(validKeys.length).fill([]);
     const settled = await Promise.allSettled(
-      validNums.map(async (num, i) => {
-        const text = mockPassageMap[num];
+      validKeys.map(async (key, i) => {
+        const text = mockPassageMap[key];
+        const { year, grade, institution, num } = parseMockKey(key);
         const res = await fetch('/api/generate-exam-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mockSession.access_token}` },
-          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })), feature_key: 'mock_exam_question_per_type', mockMeta: { year: mockSelectedYear, grade: mockSelectedGrade, institution: mockSelectedInstitution, numbers: mockSortedSelectedNumbers } }),
+          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })), feature_key: 'mock_exam_question_per_type', mockMeta: { year, grade, institution, numbers: [num] } }),
         });
         const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
         if (json.error === 'INSUFFICIENT_CON') { setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 }); throw new Error('INSUFFICIENT_CON'); }
         if (!res.ok) throw new Error(json.error || '생성 실패');
-        questionSlots[i] = (json.questions ?? []).map(q => ({ ...q, _passageText: text, _passageNumber: parseInt(num) }));
+        questionSlots[i] = (json.questions ?? []).map(q => ({ ...q, _passageText: text, _passageNumber: i + 1, _examLabel: `${mockExamLabel(year, institution)} ${num}번` }));
         completedCount++;
-        setMockProgress(`${completedCount}/${validNums.length}개 지문 생성 완료...`);
+        setMockProgress(`${completedCount}/${validKeys.length}개 지문 생성 완료...`);
       })
     );
     const firstFailed = settled.find(r => r.status === 'rejected');
@@ -2426,8 +2528,9 @@ export default function AiQuestionsPage() {
                   <div className="flex flex-wrap gap-2">
                     {mockQuestionEntries.map(entry => {
                       const nStr = String(entry.question_number);
-                      const isSelected = mockSelectedNumbers.includes(nStr);
-                      const isLoading = mockLoadingNumbers.has(nStr);
+                      const key = mockKey(mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, nStr);
+                      const isSelected = mockSelectedNumbers.includes(key);
+                      const isLoading = mockLoadingNumbers.has(key);
                       const label = (() => {
                         const g = entry.question_group;
                         if (!g) return `${entry.question_number}번`;
@@ -2454,28 +2557,39 @@ export default function AiQuestionsPage() {
             {!mockSelectedYear && <p className="text-sm text-gray-400 font-medium">년도를 선택하면 학년, 시험명/기관, 문제번호를 차례로 선택할 수 있습니다.</p>}
             {mockSortedSelectedNumbers.length > 0 && (
               <div className="mt-2 space-y-3">
-                {mockSortedSelectedNumbers.map(num => (
-                  <div key={num} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-black text-slate-500">{(() => {
-                        const entry = mockQuestionEntries.find(e => String(e.question_number) === num);
-                        if (!entry?.question_group) return `${num}번 지문 미리보기`;
-                        const g = entry.question_group;
-                        if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문 미리보기'; }
-                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문 미리보기';
-                        return `${num}번 지문 미리보기`;
-                      })()}</p>
-                      <button onClick={() => toggleMockNumber(num)} className="text-xs text-gray-400 hover:text-red-400 font-black transition-all">✕</button>
+                {mockSortedSelectedNumbers.map(key => {
+                  const { year, grade, institution, num } = parseMockKey(key);
+                  // 문제 그룹(예: 41-42번 묶음) 라벨은 현재 화면에 로드된 시험(mockQuestionEntries)에
+                  // 대해서만 조회 가능 — 다른 시험에서 선택한 항목은 우연히 같은 번호와
+                  // 혼동되지 않도록 현재 필터와 정확히 일치할 때만 사용한다.
+                  const isCurrentExam = year === mockSelectedYear && grade === mockSelectedGrade && institution === mockSelectedInstitution;
+                  const entry = isCurrentExam ? mockQuestionEntries.find(e => String(e.question_number) === num) : undefined;
+                  const numberLabel = (() => {
+                    if (!entry?.question_group) return `${num}번 지문 미리보기`;
+                    const g = entry.question_group;
+                    if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문 미리보기'; }
+                    if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문 미리보기';
+                    return `${num}번 지문 미리보기`;
+                  })();
+                  return (
+                    <div key={key} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-black text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">{mockExamLabel(year, institution)}</span>
+                          <p className="text-xs font-black text-slate-500">{numberLabel}</p>
+                        </div>
+                        <button onClick={() => removeMockSelection(key)} className="text-xs text-gray-400 hover:text-red-400 font-black transition-all">✕</button>
+                      </div>
+                      {mockLoadingNumbers.has(key) ? (
+                        <p className="text-sm text-gray-400 animate-pulse">지문 불러오는 중...</p>
+                      ) : mockPassageMap[key] ? (
+                        <p className="text-sm text-slate-700 font-medium leading-relaxed select-none" style={{ textAlign: 'justify', wordBreak: 'break-word' }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>{mockPassageMap[key]}</p>
+                      ) : (
+                        <p className="text-sm text-gray-400">지문 없음</p>
+                      )}
                     </div>
-                    {mockLoadingNumbers.has(num) ? (
-                      <p className="text-sm text-gray-400 animate-pulse">지문 불러오는 중...</p>
-                    ) : mockPassageMap[num] ? (
-                      <p className="text-sm text-slate-700 font-medium leading-relaxed select-none" style={{ textAlign: 'justify', wordBreak: 'break-word' }} onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>{mockPassageMap[num]}</p>
-                    ) : (
-                      <p className="text-sm text-gray-400">지문 없음</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2593,7 +2707,7 @@ export default function AiQuestionsPage() {
                     {showGroupHeader && mockSortedSelectedNumbers.length > 1 && (
                       <div className="flex items-center gap-3 py-2 mb-2">
                         <div className="h-px flex-1 bg-indigo-100" />
-                        <span className="text-xs font-black text-indigo-400 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">📄 {q._passageNumber}번 지문</span>
+                        <span className="text-xs font-black text-indigo-400 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">📄 {q._examLabel ?? `${q._passageNumber}번 지문`}</span>
                         <div className="h-px flex-1 bg-indigo-100" />
                       </div>
                     )}

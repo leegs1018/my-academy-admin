@@ -77,7 +77,12 @@ function newPassageCard(): PassageCard {
 }
 function effectiveText(card: PassageCard): string { return card.mode === 'text' ? card.text : card.ocrText; }
 
-interface WorkbookResult { number: string; passageText: string; materials: GeneratedMaterials; }
+interface WorkbookResult {
+  number: string; passageText: string; materials: GeneratedMaterials;
+  // 모의고사 탭 결과에서만 사용 — 서로 다른 시험을 섞어 선택했을 때 결과마다 자신의
+  // 시험 정보를 갖고 있어야 저장/표시 시 올바른 시험으로 기록된다.
+  year?: string; grade?: string; institution?: string;
+}
 
 
 // ── 클라이언트 사이드 PDF 생성 (Puppeteer 불필요) ──
@@ -271,6 +276,26 @@ function parseTitleKorean(title: string): { english: string; korean: string } {
   return { english: title, korean: '' };
 }
 
+// 모의고사 문항 선택 키: 년도/학년/시험명을 문항 번호와 함께 묶어야 서로 다른 시험의
+// 같은 번호(예: 23년 9월 18번, 24년 9월 18번)를 서로 다른 항목으로 구분해서 선택할 수 있다.
+function mockKey(year: string, grade: string, institution: string, num: string): string {
+  return `${year}__${grade}__${institution}__${num}`;
+}
+function parseMockKey(key: string): { year: string; grade: string; institution: string; num: string } {
+  const [year, grade, institution, num] = key.split('__');
+  return { year, grade, institution, num };
+}
+function mockExamLabel(year: string, institution: string): string {
+  const short = institution.split('/')[0]?.trim() || institution;
+  return `${year}년 ${short}`;
+}
+function compareMockKeys(a: string, b: string): number {
+  const pa = parseMockKey(a), pb = parseMockKey(b);
+  if (pa.year !== pb.year) return parseInt(pa.year) - parseInt(pb.year);
+  if (pa.institution !== pb.institution) return pa.institution.localeCompare(pb.institution);
+  return parseInt(pa.num) - parseInt(pb.num);
+}
+
 function renderSingleBold(text: string) {
   return text.split(/(\*[^*]+\*)/g).map((part, i) =>
     part.startsWith('*') && part.endsWith('*') && part.length > 2
@@ -394,14 +419,17 @@ export default function PdfEditorPage() {
 
   useEffect(() => {
     if (!mockSelectedGrade) return;
-    setMockSelectedYear(''); setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    // 학년/년도/시험명을 바꿔 다른 시험을 둘러보는 것뿐이므로, 이미 선택해둔 문항(다른
+    // 시험 것 포함)은 그대로 유지한다 — 예전에는 여기서 선택이 초기화돼 "23년 9월 +
+    // 24년 9월"처럼 서로 다른 시험을 섞어 선택하는 게 불가능했다.
+    setMockSelectedYear(''); setMockSelectedInstitution('');
     supabase.from('mock_exam_passages').select('year').eq('grade', mockSelectedGrade).order('year', { ascending: false })
       .then(({ data }) => setMockYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]));
   }, [mockSelectedGrade]);
 
   useEffect(() => {
     if (!mockSelectedGrade || !mockSelectedYear) return;
-    setMockSelectedInstitution(''); setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
+    setMockSelectedInstitution('');
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade)
       .then(({ data }) => {
         const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
@@ -412,7 +440,6 @@ export default function PdfEditorPage() {
 
   useEffect(() => {
     if (!mockSelectedYear || !mockSelectedGrade || !mockSelectedInstitution) return;
-    setMockSelectedNumbers([]); setMockPassageMap({}); setMockLoadingNumbers(new Set());
     supabase.from('mock_exam_passages').select('question_number, question_group')
       .eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade).eq('institution', mockSelectedInstitution)
       .order('question_number')
@@ -648,18 +675,21 @@ export default function PdfEditorPage() {
 
   // ── Mock 탭 함수 ──
   const toggleMockNumber = async (num: string) => {
-    if (mockSelectedNumbers.includes(num)) {
-      setMockSelectedNumbers(prev => prev.filter(n => n !== num));
-      setMockPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    // 선택 항목은 "년도__학년__시험명__번호" 키로 저장해, 서로 다른 시험의 같은 번호를
+    // 서로 다른 항목으로 구분한다 (현재 화면에 보이는 시험 기준으로 토글).
+    const key = mockKey(mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, num);
+    if (mockSelectedNumbers.includes(key)) {
+      setMockSelectedNumbers(prev => prev.filter(k => k !== key));
+      setMockPassageMap(prev => { const next = { ...prev }; delete next[key]; return next; });
     } else {
-      setMockSelectedNumbers(prev => [...prev, num]);
-      setMockLoadingNumbers(prev => new Set([...prev, num]));
+      setMockSelectedNumbers(prev => [...prev, key]);
+      setMockLoadingNumbers(prev => new Set([...prev, key]));
       const { data } = await supabase.from('mock_exam_passages').select('passage_text')
         .eq('year', parseInt(mockSelectedYear)).eq('grade', mockSelectedGrade)
         .eq('institution', mockSelectedInstitution).eq('question_number', parseInt(num)).single();
       const text = (data?.passage_text ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-      setMockPassageMap(prev => ({ ...prev, [num]: text }));
-      setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+      setMockPassageMap(prev => ({ ...prev, [key]: text }));
+      setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(key); return next; });
     }
   };
 
@@ -683,12 +713,14 @@ export default function PdfEditorPage() {
         reader.readAsDataURL(blob);
       });
       const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(pdfBlob), toBase64(answerBlob)]);
+      // 결과 자신이 어느 시험(연도/학년/시험명) 소속인지 저장해둔 값을 사용한다 — 여러
+      // 시험을 섞어 선택한 경우 현재 화면에 보이는 드롭다운 값과 다를 수 있기 때문이다.
       const res = await fetch('/api/save-mock-workbook-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           pdfBase64, answerPdfBase64,
-          year: parseInt(mockSelectedYear), grade: mockSelectedGrade, institution: mockSelectedInstitution,
+          year: parseInt(r.year ?? mockSelectedYear), grade: r.grade ?? mockSelectedGrade, institution: r.institution ?? mockSelectedInstitution,
           questionNumber: parseInt(r.number), difficulty: mockDifficulty,
         }),
       });
@@ -698,30 +730,32 @@ export default function PdfEditorPage() {
   }, [session, mockResults, mockSavedSet, mockPdfTitle, mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, mockDifficulty, mockEditedResults]);
 
   const handleMockGenerate = async () => {
-    const sortedNums = [...mockSelectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
-    if (sortedNums.length === 0 || mockLoading || !session) return;
+    const sortedKeys = [...mockSelectedNumbers].sort(compareMockKeys);
+    if (sortedKeys.length === 0 || mockLoading || !session) return;
     setMockLoading(true); setMockError(null); setMockResults([]); setActiveMockResultTab(0);
     setMockSaveStatusMap({}); setMockSavedSet(new Set()); setMockEditModeIdx(null); setMockEditedResults({});
-    const validNums = sortedNums.filter(n => mockPassageMap[n]);
-    type MockResult = { number: string; passageText: string; materials: GeneratedMaterials };
-    const resultSlots = new Array<MockResult | null>(validNums.length).fill(null);
+    const validKeys = sortedKeys.filter(k => mockPassageMap[k]);
+    const resultSlots = new Array<WorkbookResult | null>(validKeys.length).fill(null);
     let completedCount = 0;
-    setMockLoadingMsg(`0/${validNums.length}개 지문 생성 중...`);
+    setMockLoadingMsg(`0/${validKeys.length}개 지문 생성 중...`);
     try {
       const settled = await Promise.allSettled(
-        validNums.map(async (num, i) => {
-          const text = mockPassageMap[num];
+        validKeys.map(async (key, i) => {
+          const { year, grade, institution, num } = parseMockKey(key);
+          const text = mockPassageMap[key];
+          // mockMeta는 CON 차감 내역에 표시되는 안내문 용도이므로, 여러 시험을 섞어
+          // 선택했더라도 각 문항 자신의 시험 정보(연도/학년/시험명)를 그대로 전달한다.
           const res = await fetch('/api/process-pdf', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook', mockMeta: { year: mockSelectedYear, grade: mockSelectedGrade, institution: mockSelectedInstitution, numbers: mockSortedSelectedNumbers } }),
+            body: JSON.stringify({ text, difficulty: mockDifficulty, academy_id: session.user.id, feature_key: 'mock_workbook', mockMeta: { year, grade, institution, numbers: [num] } }),
           });
           const json = JSON.parse(await res.text()) as { data?: GeneratedMaterials; error?: string };
           if (!res.ok) throw new Error(json.error || `${num}번 생성 오류`);
-          resultSlots[i] = { number: num, passageText: text, materials: json.data as GeneratedMaterials };
+          resultSlots[i] = { number: num, year, grade, institution, passageText: text, materials: json.data as GeneratedMaterials };
           completedCount++;
-          setMockLoadingMsg(`${completedCount}/${validNums.length}개 지문 생성 완료...`);
-          setMockResults(resultSlots.filter((r): r is MockResult => r !== null));
+          setMockLoadingMsg(`${completedCount}/${validKeys.length}개 지문 생성 완료...`);
+          setMockResults(resultSlots.filter((r): r is WorkbookResult => r !== null));
         })
       );
       const firstFailed = settled.find(r => r.status === 'rejected');
@@ -790,7 +824,7 @@ export default function PdfEditorPage() {
     setMockCopiedSection(id); setTimeout(() => setMockCopiedSection(null), 2000);
   };
 
-  const mockSortedSelectedNumbers = [...mockSelectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+  const mockSortedSelectedNumbers = [...mockSelectedNumbers].sort(compareMockKeys);
   const mockAllPassagesReady = mockSelectedNumbers.length > 0 && mockSelectedNumbers.every(n => mockPassageMap[n]) && mockLoadingNumbers.size === 0;
   const canMockGenerate = mockAllPassagesReady && !mockLoading && !!session;
 
@@ -1604,8 +1638,9 @@ export default function PdfEditorPage() {
                   <div className="flex flex-wrap gap-2">
                     {mockQuestionEntries.map(entry => {
                       const num = String(entry.question_number);
-                      const isSelected = mockSelectedNumbers.includes(num);
-                      const isLoading = mockLoadingNumbers.has(num);
+                      const key = mockKey(mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, num);
+                      const isSelected = mockSelectedNumbers.includes(key);
+                      const isLoading = mockLoadingNumbers.has(key);
                       const label = (() => {
                         const g = entry.question_group;
                         if (!g) return `${entry.question_number}번`;
@@ -1630,23 +1665,34 @@ export default function PdfEditorPage() {
               )}
               {mockSortedSelectedNumbers.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  {mockSortedSelectedNumbers.map(num => mockPassageMap[num] && (
-                    <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                      <p className="text-xs font-black text-indigo-600 mb-1">{(() => {
-                        const entry = mockQuestionEntries.find(e => String(e.question_number) === num);
-                        if (!entry?.question_group) return `${num}번 지문`;
-                        const g = entry.question_group;
-                        if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문'; }
-                        if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문';
-                        return `${num}번 지문`;
-                      })()}</p>
-                      <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2 select-none"
-                        style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-                        onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
-                        {mockPassageMap[num]}
-                      </p>
-                    </div>
-                  ))}
+                  {mockSortedSelectedNumbers.map(key => mockPassageMap[key] && (() => {
+                    const { year, grade, institution, num } = parseMockKey(key);
+                    // 문제 그룹(예: 41-42번 묶음) 라벨은 현재 화면에 로드된 시험(mockQuestionEntries)에
+                    // 대해서만 조회 가능 — 다른 시험에서 선택한 항목은 우연히 같은 번호와
+                    // 혼동되지 않도록 현재 필터와 정확히 일치할 때만 사용한다.
+                    const isCurrentExam = year === mockSelectedYear && grade === mockSelectedGrade && institution === mockSelectedInstitution;
+                    const entry = isCurrentExam ? mockQuestionEntries.find(e => String(e.question_number) === num) : undefined;
+                    const numberLabel = (() => {
+                      if (!entry?.question_group) return `${num}번 지문`;
+                      const g = entry.question_group;
+                      if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문'; }
+                      if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문';
+                      return `${num}번 지문`;
+                    })();
+                    return (
+                      <div key={key} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-[10px] font-black text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">{mockExamLabel(year, institution)}</span>
+                          <p className="text-xs font-black text-indigo-600">{numberLabel}</p>
+                        </div>
+                        <p className="text-sm text-slate-600 font-medium leading-relaxed line-clamp-2 select-none"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
+                          {mockPassageMap[key]}
+                        </p>
+                      </div>
+                    );
+                  })())}
                 </div>
               )}
             </div>
@@ -1696,7 +1742,7 @@ export default function PdfEditorPage() {
                         className={`px-4 py-2 rounded-xl font-black text-sm transition-all border-2 ${
                           activeMockResultTab === i ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
                         }`}>
-                        {r.number}번
+                        {r.year && r.institution ? `${mockExamLabel(r.year, r.institution)} ${r.number}번` : `${r.number}번`}
                         {mockSaveStatusMap[i] === 'done' && <span className="ml-1 text-xs">✅</span>}
                         {mockSaveStatusMap[i] === 'saving' && <span className="ml-1 text-xs animate-pulse">💾</span>}
                       </button>

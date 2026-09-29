@@ -873,7 +873,9 @@ export async function POST(request: Request) {
       tab?: 'input' | 'mock';
       difficulty?: string;
       academy_id?: string;
-      mockMeta?: { year: string; grade: string; institution: string; numbers: string[] };
+      // items: 지문별 "연도+시험명 번호" 표시용 라벨 (예: "23년9월 18번") — 서로 다른
+      // 회차를 섞어 선택해도 각 지문이 어느 시험 것인지 CON 차감 내역에 정확히 남도록 함.
+      mockMeta?: { items: string[] } | { year: string; grade: string; institution: string; numbers: string[] };
     };
     const featureKey = `${(tab ?? 'input') === 'input' ? 'wb_direct' : 'wb_mock'}_${type}`;
 
@@ -900,7 +902,7 @@ export async function POST(request: Request) {
           p_amount: totalCost,
           p_feature_key: featureKey,
           p_description: tab === 'mock' && mockMeta
-            ? `워크북 (모의) ${type} · ${mockMeta.year}년 ${mockMeta.grade} ${mockMeta.institution.split('/')[0]} ${mockMeta.numbers.join('·')}번`
+            ? `워크북 (모의) ${type} · ${'items' in mockMeta ? mockMeta.items.join(', ') : `${mockMeta.year}년 ${mockMeta.grade} ${mockMeta.institution.split('/')[0]} ${mockMeta.numbers.join('·')}번`}`
             : `워크북 (직접) ${WB_TYPE_LABELS[type] ?? type} × ${validPassages.length}지문`,
         });
         if (deductError) {

@@ -136,6 +136,26 @@ function effectiveText(card: PassageCard): string {
   return card.mode === 'text' ? card.text : card.ocrText;
 }
 
+// 모의고사 문항 선택 키: 년도/학년/시험명을 문항 번호와 함께 묶어야 서로 다른 시험의
+// 같은 번호(예: 23년 9월 18번, 24년 9월 18번)를 서로 다른 항목으로 구분해서 선택할 수 있다.
+function mockKey(year: string, grade: string, institution: string, num: string): string {
+  return `${year}__${grade}__${institution}__${num}`;
+}
+function parseMockKey(key: string): { year: string; grade: string; institution: string; num: string } {
+  const [year, grade, institution, num] = key.split('__');
+  return { year, grade, institution, num };
+}
+function mockExamLabel(year: string, institution: string): string {
+  const short = institution.split('/')[0]?.trim() || institution;
+  return `${year}년 ${short}`;
+}
+function compareMockKeys(a: string, b: string): number {
+  const pa = parseMockKey(a), pb = parseMockKey(b);
+  if (pa.year !== pb.year) return parseInt(pa.year) - parseInt(pb.year);
+  if (pa.institution !== pb.institution) return pa.institution.localeCompare(pb.institution);
+  return parseInt(pa.num) - parseInt(pb.num);
+}
+
 interface VocabChunk {
   type: 'text' | 'choice';
   text?: string;
@@ -2672,13 +2692,15 @@ export default function WorkbookPage() {
   }, []);
   useEffect(() => {
     if (!selectedGrade) return;
-    setSelectedYear(''); setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
+    // 학년/년도/시험명을 바꿔 다른 시험을 둘러보는 것뿐이므로, 이미 선택해둔 문항(다른
+    // 시험 것 포함)은 그대로 유지한다 — 여러 시험을 섞어 선택할 수 있게 하기 위함.
+    setSelectedYear(''); setSelectedInstitution('');
     supabase.from('mock_exam_passages').select('year').eq('grade', selectedGrade).order('year', { ascending: false })
       .then(({ data }) => { setYears([...new Set((data ?? []).map((r: { year: number }) => r.year))]); });
   }, [selectedGrade]);
   useEffect(() => {
     if (!selectedGrade || !selectedYear) return;
-    setSelectedInstitution(''); setSelectedNumbers([]); setPassageMap({});
+    setSelectedInstitution('');
     supabase.from('mock_exam_passages').select('institution').eq('year', parseInt(selectedYear)).eq('grade', selectedGrade)
       .then(({ data }) => {
         const unique = [...new Set((data ?? []).map((r: { institution: string }) => r.institution))];
@@ -2688,7 +2710,6 @@ export default function WorkbookPage() {
   }, [selectedGrade, selectedYear]);
   useEffect(() => {
     if (!selectedYear || !selectedGrade || !selectedInstitution) return;
-    setSelectedNumbers([]); setPassageMap({});
     supabase.from('mock_exam_passages').select('question_number, question_group')
       .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
       .order('question_number')
@@ -2701,17 +2722,20 @@ export default function WorkbookPage() {
   }, [selectedYear, selectedGrade, selectedInstitution]);
 
   const toggleNumber = async (num: string) => {
-    if (selectedNumbers.includes(num)) {
-      setSelectedNumbers(prev => prev.filter(n => n !== num));
-      setPassageMap(prev => { const next = { ...prev }; delete next[num]; return next; });
+    // 선택 항목은 "년도__학년__시험명__번호" 키로 저장해, 서로 다른 시험의 같은 번호를
+    // 서로 다른 항목으로 구분한다 (현재 화면에 보이는 시험 기준으로 토글).
+    const key = mockKey(selectedYear, selectedGrade, selectedInstitution, num);
+    if (selectedNumbers.includes(key)) {
+      setSelectedNumbers(prev => prev.filter(k => k !== key));
+      setPassageMap(prev => { const next = { ...prev }; delete next[key]; return next; });
     } else {
-      setSelectedNumbers(prev => [...prev, num]);
-      setLoadingNumbers(prev => new Set([...prev, num]));
+      setSelectedNumbers(prev => [...prev, key]);
+      setLoadingNumbers(prev => new Set([...prev, key]));
       const { data } = await supabase.from('mock_exam_passages').select('passage_text')
         .eq('year', parseInt(selectedYear)).eq('grade', selectedGrade).eq('institution', selectedInstitution)
         .eq('question_number', parseInt(num)).single();
-      setPassageMap(prev => ({ ...prev, [num]: data?.passage_text ?? '' }));
-      setLoadingNumbers(prev => { const next = new Set(prev); next.delete(num); return next; });
+      setPassageMap(prev => ({ ...prev, [key]: data?.passage_text ?? '' }));
+      setLoadingNumbers(prev => { const next = new Set(prev); next.delete(key); return next; });
     }
   };
 
@@ -2766,7 +2790,7 @@ export default function WorkbookPage() {
       passageTexts = passages.map(p => effectiveText(p).trim()).filter(t => t.length >= 50);
       if (passageTexts.length === 0) { setGenerateError('지문을 입력해주세요. (최소 50자)'); return; }
     } else {
-      const sortedNums = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+      const sortedNums = [...selectedNumbers].sort(compareMockKeys);
       if (sortedNums.length === 0) { setGenerateError('문제번호를 선택해주세요.'); return; }
       passageTexts = sortedNums.map(n => passageMap[n]).filter(Boolean);
       if (passageTexts.length === 0) { setGenerateError('지문을 불러오는 중입니다.'); return; }
@@ -2788,7 +2812,9 @@ export default function WorkbookPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               passages: passageTexts, type, tab: activeTab, difficulty, academy_id: session.user.id,
-              ...(activeTab === 'mock' ? { mockMeta: { year: selectedYear, grade: selectedGrade, institution: selectedInstitution, numbers: sortedSelectedNumbers } } : {}),
+              // items: 지문별 "연도+시험명 번호" 라벨 — 여러 시험을 섞어 선택해도 CON
+              // 차감 내역에 각 지문이 어느 시험 것인지 정확히 남도록 함.
+              ...(activeTab === 'mock' ? { mockMeta: { items: sortedSelectedNumbers.map(k => { const p = parseMockKey(k); return `${mockExamLabel(p.year, p.institution)} ${p.num}번`; }) } } : {}),
             }),
           });
           const json = await res.json() as { success?: boolean; results?: WorkbookResult[]; error?: string; required?: number; balance?: number };
@@ -2856,10 +2882,10 @@ export default function WorkbookPage() {
             passageExcerpt: passageFull.slice(0, 100),
             passageFull,
             sourceType: activeTab === 'input' ? 'input' : 'mock',
-            year: activeTab === 'mock' && selectedYear ? parseInt(selectedYear) : null,
-            grade: activeTab === 'mock' ? selectedGrade || null : null,
-            institution: activeTab === 'mock' ? selectedInstitution || null : null,
-            questionNumber: activeTab === 'mock' ? parseInt(selectedNumbers[pi] || '0') || null : null,
+            year: activeTab === 'mock' && sortedSelectedNumbers[pi] ? parseInt(parseMockKey(sortedSelectedNumbers[pi]).year) || null : null,
+            grade: activeTab === 'mock' ? parseMockKey(sortedSelectedNumbers[pi] || '').grade || null : null,
+            institution: activeTab === 'mock' ? parseMockKey(sortedSelectedNumbers[pi] || '').institution || null : null,
+            questionNumber: activeTab === 'mock' ? parseInt(parseMockKey(sortedSelectedNumbers[pi] || '').num || '0') || null : null,
             difficulty,
           }),
         });
@@ -3183,7 +3209,7 @@ export default function WorkbookPage() {
   const toggleSelectAll = () => setSelectedIds(prev => prev.size === historyList.length ? new Set() : new Set(historyList.map(h => h.id)));
 
   // Derived
-  const sortedSelectedNumbers = [...selectedNumbers].sort((a, b) => parseInt(a) - parseInt(b));
+  const sortedSelectedNumbers = [...selectedNumbers].sort(compareMockKeys);
   const validInputPassages = passages.filter(p => effectiveText(p).trim().length >= 50);
   const validMockPassages = sortedSelectedNumbers.filter(n => passageMap[n]);
   const passageCount = activeTab === 'input' ? validInputPassages.length : validMockPassages.length;
@@ -3388,8 +3414,9 @@ export default function WorkbookPage() {
                   <div className="flex flex-wrap gap-2">
                     {questionEntries.map(entry => {
                       const num = String(entry.question_number);
-                      const isSelected = selectedNumbers.includes(num);
-                      const isLoading = loadingNumbers.has(num);
+                      const key = mockKey(selectedYear, selectedGrade, selectedInstitution, num);
+                      const isSelected = selectedNumbers.includes(key);
+                      const isLoading = loadingNumbers.has(key);
                       const label = (() => {
                         const g = entry.question_group;
                         if (!g) return `${entry.question_number}번`;
@@ -3414,31 +3441,37 @@ export default function WorkbookPage() {
               )}
               {sortedSelectedNumbers.length > 0 && (
                 <div className="space-y-2">
-                  {sortedSelectedNumbers.map(num => (
-                    passageMap[num] && (
-                      <div key={num} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  {sortedSelectedNumbers.map(key => passageMap[key] && (() => {
+                    const { year, grade, institution, num } = parseMockKey(key);
+                    // 문제 그룹(예: 41-42번 묶음) 라벨은 현재 화면에 로드된 시험(questionEntries)에
+                    // 대해서만 조회 가능 — 다른 시험에서 선택한 항목은 우연히 같은 번호와
+                    // 혼동되지 않도록 현재 필터와 정확히 일치할 때만 사용한다.
+                    const isCurrentExam = year === selectedYear && grade === selectedGrade && institution === selectedInstitution;
+                    const entry = isCurrentExam ? questionEntries.find(e => String(e.question_number) === num) : undefined;
+                    const numberLabel = (() => {
+                      if (!entry?.question_group) return `${num}번 지문`;
+                      const g = entry.question_group;
+                      if (g.includes('-')) { const [s, e2] = g.split('-').map(Number); return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문'; }
+                      if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문';
+                      return `${num}번 지문`;
+                    })();
+                    return (
+                      <div key={key} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-black text-slate-900">{(() => {
-                            const entry = questionEntries.find(e => String(e.question_number) === num);
-                            if (!entry?.question_group) return `${num}번 지문`;
-                            const g = entry.question_group;
-                            if (g.includes('-')) {
-                              const [s, e2] = g.split('-').map(Number);
-                              return Array.from({ length: e2 - s + 1 }, (_, i) => s + i).join('·') + '번 지문';
-                            }
-                            if (g.includes(',')) return g.split(',').map((x: string) => x.trim()).join('·') + '번 지문';
-                            return `${num}번 지문`;
-                          })()}</p>
-                          <p className="text-xs text-slate-400 font-bold">{passageMap[num].trim().length}자</p>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded">{mockExamLabel(year, institution)}</span>
+                            <p className="text-xs font-black text-slate-900">{numberLabel}</p>
+                          </div>
+                          <p className="text-xs text-slate-400 font-bold">{passageMap[key].trim().length}자</p>
                         </div>
                         <p className="text-sm text-slate-600 font-medium leading-relaxed select-none"
                           style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}
                           onContextMenu={e => e.preventDefault()} onDragStart={e => e.preventDefault()}>
-                          {passageMap[num]}
+                          {passageMap[key]}
                         </p>
                       </div>
-                    )
-                  ))}
+                    );
+                  })())}
                 </div>
               )}
             </div>
