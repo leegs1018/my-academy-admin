@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-export const maxDuration = 300;
+export const maxDuration = 600;
 
 export interface ExamChoice {
   number: number;
@@ -1538,20 +1538,19 @@ export async function POST(request: Request) {
 
     const CIRCLES = ['①','②','③','④','⑤'];
 
-    // gpt-6-sol high로 테스트해봤으나 품질이 gpt-5.6-luna와 비슷해 원래 구성으로 되돌림.
+    // vocab_paraphrase/vocab_blank는 gpt-6-sol high로 테스트해봤으나 품질이 gpt-5.1과
+    // 비슷해 원래대로 되돌림. grammar만 gpt-6-luna high로 전환.
     const TYPE_MODEL_MAP: Record<string, string> = {
-      grammar: 'gpt-5.6-luna',
+      grammar: 'gpt-6-luna',
     };
     const DEFAULT_MODEL = 'gpt-5.1';
 
     // gpt-6 계열(reasoning 모델)은 Chat Completions가 아닌 Responses API로만 reasoning.effort를
     // 받는다 — Chat Completions에 reasoning을 보내면 400 Unknown parameter 오류가 난다.
-    // (실측 테스트로 확인) 이 세 유형은 난이도가 높아 reasoning effort를 high로 준다.
+    // (실측 테스트로 확인) 어법은 난이도가 높아 reasoning effort를 high로 준다.
     const REASONING_MODELS = new Set(['gpt-6-sol', 'gpt-6-luna']);
     const REASONING_EFFORT_MAP: Record<string, 'low' | 'medium' | 'high'> = {
       grammar: 'high',
-      vocab_paraphrase: 'high',
-      vocab_blank: 'high',
     };
     // reasoning 모델은 내부 사고(reasoning) 토큰이 max_output_tokens 예산을 먼저 소비하고,
     // 그 예산을 다 쓰면 눈에 보이는 답변 없이 응답이 그대로 잘린다(status: incomplete, 텍스트
