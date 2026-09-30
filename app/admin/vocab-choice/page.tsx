@@ -230,13 +230,26 @@ function serializeChoiceChunks(chunks: EditChoiceChunk[]): { passage: string; an
   return { passage, answerKey: keyParts.join('  ') };
 }
 
-async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean, rowSelector: string = '[data-pdf-row="true"]'): Promise<boolean> {
+interface RenderedPdfElement {
+  img: HTMLImageElement;
+  url: string;
+  contentH: number;
+  pixelRatio: number;
+  rowBoundaries: { top: number; bottom: number }[];
+}
+
+// DOM 요소 → 래스터 이미지 변환(toJpeg)까지만 수행하는 비동기 단계를 분리해둔다.
+// 여러 요소를 합쳐 PDF를 만들 때(captureAllToPdf) 이 단계를 Promise.all로 병렬 실행하면,
+// html-to-image 내부의 비동기 대기(이미지/폰트 로딩 등)가 겹쳐 돌면서 전체 병합 시간이
+// 줄어든다. PDF에 실제로 페이지를 추가하는 동기 작업(addRenderedToPdf)은 페이지 순서를
+// 지켜야 하므로 렌더링이 모두 끝난 뒤 순서대로 처리한다.
+async function renderElementForPdf(elementId: string, rowSelector: string = '[data-pdf-row="true"]', fontEmbedCSS?: string): Promise<RenderedPdfElement | null> {
   const el = document.getElementById(elementId);
-  if (!el) return false;
+  if (!el) return null;
   const cs = window.getComputedStyle(el);
-  if (cs.display === 'none' || cs.visibility === 'hidden' || el.offsetHeight === 0) return false;
+  if (cs.display === 'none' || cs.visibility === 'hidden' || el.offsetHeight === 0) return null;
   const { toJpeg } = await import('html-to-image');
-  const W = 210, M = 10, cW = W - 2 * M, maxH = 277;
+  const W = 210, M = 10, cW = W - 2 * M;
   // 문항 수가 많아 요소가 매우 길어지면 pixelRatio 2로 캡처 시 캔버스/문자열 크기가
   // 브라우저 한계(RangeError: Invalid string length)를 넘어설 수 있다.
   // 요소 높이에 비례해 해상도를 낮춰 캡처 결과 크기를 안전한 범위로 유지한다.
@@ -255,10 +268,16 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
       })
     : [];
 
-  const url = await toJpeg(el, { pixelRatio, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
+  const url = await toJpeg(el, { pixelRatio, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, ...(fontEmbedCSS !== undefined ? { fontEmbedCSS } : {}) });
   const img = document.createElement('img') as HTMLImageElement;
   await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => reject(new Error('img load')); img.src = url; });
   const contentH = cW * (img.naturalHeight / img.naturalWidth);
+  return { img, url, contentH, pixelRatio, rowBoundaries };
+}
+
+function addRenderedToPdf(pdf: import('jspdf').jsPDF, rendered: RenderedPdfElement, isFirst: boolean): void {
+  const W = 210, M = 10, cW = W - 2 * M, maxH = 277;
+  const { img, url, contentH, pixelRatio, rowBoundaries } = rendered;
   if (!isFirst) pdf.addPage();
   if (contentH <= maxH) {
     pdf.addImage(url, 'JPEG', M, M, cW, contentH);
@@ -294,6 +313,12 @@ async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, is
       sliceY += sliceH; firstSlice = false;
     }
   }
+}
+
+async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean, rowSelector: string = '[data-pdf-row="true"]'): Promise<boolean> {
+  const rendered = await renderElementForPdf(elementId, rowSelector);
+  if (!rendered) return false;
+  addRenderedToPdf(pdf, rendered, isFirst);
   return true;
 }
 
@@ -314,11 +339,26 @@ async function capturePdfFromElement(elementId: string): Promise<Blob> {
 
 async function captureAllToPdf(elementIds: string[]): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
+  const { getFontEmbedCSS } = await import('html-to-image');
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+  // 여러 요소를 Promise.all로 동시에 캡처하면, html-to-image가 원격 폰트(전역 CSS의 구글
+  // 폰트 @import)를 각 캡처마다 따로 fetch하려고 경합하면서 "Error loading remote css:
+  // Failed to fetch"가 나는 경우가 있었다 — html-to-image 내부 캐시는 첫 fetch가 끝난
+  // *이후*에만 재사용되므로, 동시에 시작되는 여러 캡처는 캐시를 못 타고 전부 따로 요청한다.
+  // 캡처 시작 전에 한 번만 fetch해서(getFontEmbedCSS) 모든 캡처가 같은 결과를 재사용하게
+  // 하면 경합 자체가 사라진다. 실패해도(네트워크 문제 등) 캡처는 시스템 폰트로 계속 진행한다.
+  let fontEmbedCSS: string | undefined;
+  try {
+    fontEmbedCSS = await getFontEmbedCSS(document.body);
+  } catch { /* 폰트 임베드 실패해도 캡처 자체는 진행 */ }
+  // 렌더링(toJpeg) 단계를 병렬로 먼저 끝내고, PDF에 순서대로 끼워 넣는 건 그 뒤에 한다 —
+  // pdf.addPage()/addImage()는 순서가 중요하지만 렌더링 자체는 서로 독립적이다.
+  const rendered = await Promise.all(elementIds.map(id => renderElementForPdf(id, undefined, fontEmbedCSS)));
   let isFirst = true;
-  for (const id of elementIds) {
-    const added = await addElementToPdf(pdf, id, isFirst);
-    if (added) isFirst = false;
+  for (const r of rendered) {
+    if (!r) continue;
+    addRenderedToPdf(pdf, r, isFirst);
+    isFirst = false;
   }
   return pdf.output('blob');
 }

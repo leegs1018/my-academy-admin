@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 
 interface PricingItem {
   id: string;
@@ -18,7 +18,7 @@ interface SectionConfig {
   subsections?: SubSection[]; keys?: string[];
   noToggle?: boolean; note?: string; model?: string;
 }
-type ModelKey = 'gpt-5.1' | 'gpt-5.5' | 'gpt-5.6-luna';
+type ModelKey = 'gpt-5.1' | 'gpt-5.5' | 'gpt-5.6-luna' | 'gpt-6-sol' | 'gpt-6-luna';
 interface ModelPricing { inputPricePerM: number; outputPricePerM: number }
 interface FeatureTokens { in: number; out: number; model: ModelKey; steps?: number }
 
@@ -74,36 +74,42 @@ const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type
 
 const T = (i: number, o: number, m: ModelKey = 'gpt-5.1', steps = 1): FeatureTokens => ({ in: i, out: o, model: m, steps });
 
+// 워크북은 gpt-6-luna(reasoning: medium)로 전환 — reasoning 토큰이 output에 포함되어
+// 과금되므로 기존 gpt-5.1 기준 출력 추정치보다 실제 비용이 더 나올 수 있다. 아래 out 값은
+// gpt-5.1 시절 추정치를 그대로 두었으니(재측정 전까지 참고용), 실제 운영 데이터가 쌓이면
+// 재보정 필요. (실측 샘플: vocab_choice 900→3090, passage_translation 1500→3645,
+// sentence_insertion 500→668, combo_grammar_order 1200→1329 — 유형별 편차가 큼)
+const WB_MODEL: ModelKey = 'gpt-6-luna';
 // 워크북 base (wb_direct_* 접두사 없는 순수 타입명)
 const WB_TOKENS: Record<string, FeatureTokens> = {
   // 출력 큰 것: passage_translation은 문장 전체 + vocab_table 15~25개 (동의어/반의어 포함)
-  passage_translation:   T(700,  1500),  // 지문 해석지: sentences JSON + vocab_table(15~25개) → 출력 큼
-  passage_analysis:      T(700,  2000),  // 구문분석: 전체 문장 chunk JSON → 가장 큰 출력
-  translation:           T(600,   500),  // 문장 해석: 10~15문장 en/ko 쌍
-  word_order:            T(600,   600),  // 단어 배열: 문장별 scrambled 배열 + answer
-  english_writing:       T(600,   500),  // 영작: hint_start/hint_end + answer × 10~12문장
-  vocab_choice:          T(650,   900),  // 어휘고르기: 지문에 N[A/B] 삽입 + answer_key
-  vocab_fill:            T(650,   900),  // 어휘채우기: sentences JSON (en/ko + 빈칸) + answer_key
-  grammar_choice:        T(650,   900),  // 어법고르기: 지문에 N[A/B] 삽입 + answer_key
-  grammar_correct:       T(650,   700),  // 어법고치기: 지문에 N[word] 삽입 + answer_key
-  grammar_correct_adv:   T(650,   700),  // 어법고치기(심화): sentences JSON + answer_key
-  combo_grammar_order:   T(800,  1200),  // 문단배열+어법수정: paragraphs × 5 + grammar_errors × 3
-  combo_vocab_fill:      T(800,  1200),  // 어휘+문장완성: passage + q1_choices + q2_items
-  summary_sentence:      T(600,   400),  // 요약문 서술형: 짧은 요약문 + 빈칸 + answer_key
-  paragraph_order:       T(600,   700),  // 문단 배열: fixed + shuffled × 3~4 + answer
-  sentence_insertion:    T(600,   500),  // 문장 삽입: insert_sentence + passage(①~⑤) + answer
-  suneung_vocab_right:   T(650,   700),  // 수능 어휘(맞는): passage + choices × 5 + answer
-  suneung_vocab_wrong:   T(650,   600),  // 수능 어휘(틀린): passage + answer_key
-  suneung_grammar_right: T(650,   700),  // 수능 어법(맞는): passage + choices × 5 + answer
-  suneung_grammar_wrong: T(650,   600),  // 수능 어법(틀린): passage + answer_key
-  combo_vocab_grammar:   T(800,  1000),  // 어휘+어법: passage(A~E + ①~⑤) + q1/q2 choices
-  combo_grammar_insert:  T(800,  1000),  // 어법+문장삽입: passage((A)~(E) + ①~⑤) + grammar + insert
+  passage_translation:   T(700,  1500, WB_MODEL),  // 지문 해석지: sentences JSON + vocab_table(15~25개) → 출력 큼
+  passage_analysis:      T(700,  2000, WB_MODEL),  // 구문분석: 전체 문장 chunk JSON → 가장 큰 출력
+  translation:           T(600,   500, WB_MODEL),  // 문장 해석: 10~15문장 en/ko 쌍
+  word_order:            T(600,   600, WB_MODEL),  // 단어 배열: 문장별 scrambled 배열 + answer
+  english_writing:       T(600,   500, WB_MODEL),  // 영작: hint_start/hint_end + answer × 10~12문장
+  vocab_choice:          T(650,   900, WB_MODEL),  // 어휘고르기: 지문에 N[A/B] 삽입 + answer_key
+  vocab_fill:            T(650,   900, WB_MODEL),  // 어휘채우기: sentences JSON (en/ko + 빈칸) + answer_key
+  grammar_choice:        T(650,   900, WB_MODEL),  // 어법고르기: 지문에 N[A/B] 삽입 + answer_key
+  grammar_correct:       T(650,   700, WB_MODEL),  // 어법고치기: 지문에 N[word] 삽입 + answer_key
+  grammar_correct_adv:   T(650,   700, WB_MODEL),  // 어법고치기(심화): sentences JSON + answer_key
+  combo_grammar_order:   T(800,  1200, WB_MODEL),  // 문단배열+어법수정: paragraphs × 5 + grammar_errors × 3
+  combo_vocab_fill:      T(800,  1200, WB_MODEL),  // 어휘+문장완성: passage + q1_choices + q2_items
+  summary_sentence:      T(600,   400, WB_MODEL),  // 요약문 서술형: 짧은 요약문 + 빈칸 + answer_key
+  paragraph_order:       T(600,   700, WB_MODEL),  // 문단 배열: fixed + shuffled × 3~4 + answer
+  sentence_insertion:    T(600,   500, WB_MODEL),  // 문장 삽입: insert_sentence + passage(①~⑤) + answer
+  suneung_vocab_right:   T(650,   700, WB_MODEL),  // 수능 어휘(맞는): passage + choices × 5 + answer
+  suneung_vocab_wrong:   T(650,   600, WB_MODEL),  // 수능 어휘(틀린): passage + answer_key
+  suneung_grammar_right: T(650,   700, WB_MODEL),  // 수능 어법(맞는): passage + choices × 5 + answer
+  suneung_grammar_wrong: T(650,   600, WB_MODEL),  // 수능 어법(틀린): passage + answer_key
+  combo_vocab_grammar:   T(800,  1000, WB_MODEL),  // 어휘+어법: passage(A~E + ①~⑤) + q1/q2 choices
+  combo_grammar_insert:  T(800,  1000, WB_MODEL),  // 어법+문장삽입: passage((A)~(E) + ①~⑤) + grammar + insert
 };
 
 const FEATURE_TOKENS: Record<string, FeatureTokens> = {
-  // 지문분석: 시스템 프롬프트+지문 / 변형지문+T/F 10개+요약+어휘표 6가지
-  pdf_analysis_direct: T(1500, 2200),
-  pdf_analysis_mock:   T(1600, 2200), // 모의고사 지문이 약간 더 긺
+  // 지문분석: 시스템 프롬프트+지문 / 변형지문+T/F 10개+요약+어휘표 6가지 — gpt-6-luna medium 전환
+  pdf_analysis_direct: T(1500, 2200, 'gpt-6-luna'),
+  pdf_analysis_mock:   T(1600, 2200, 'gpt-6-luna'), // 모의고사 지문이 약간 더 긺
 
   // 워크북 직접 입력 (지문 길이 평균)
   ...Object.fromEntries(Object.entries(WB_TOKENS).map(([k, v]) => [`wb_direct_${k}`, v])),
@@ -154,7 +160,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'pdf', label: '지문분석', color: 'text-teal-400',
-    model: 'gpt-5.1',
+    model: 'gpt-6-luna (reasoning: medium)',
     subsections: [
       { label: '직접 입력', keys: ['pdf_analysis_direct'] },
       { label: '모의고사',  keys: ['pdf_analysis_mock'] },
@@ -162,7 +168,7 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'workbook', label: '워크북', color: 'text-rose-400',
-    model: 'gpt-5.1',
+    model: 'gpt-6-luna (reasoning: medium)',
     subsections: [
       { label: '직접 입력', keys: WB_DIRECT_KEYS },
       { label: '모의고사',  keys: WB_MOCK_KEYS },
@@ -186,8 +192,12 @@ const DEFAULT_MODEL_PRICING: Record<ModelKey, ModelPricing> = {
   'gpt-5.1':      { inputPricePerM: 1.25, outputPricePerM: 10.0 },
   'gpt-5.5':      { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
   'gpt-5.6-luna': { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
+  // gpt-6-sol/gpt-6-luna: 공식 단가 미확인 — gpt-5.6-luna 값을 임시로 넣어둠.
+  // 아래 "모델 단가" 섹션에서 실제 단가로 직접 수정해야 정확한 원가가 계산됨.
+  'gpt-6-sol':    { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
+  'gpt-6-luna':   { inputPricePerM: 5.0,  outputPricePerM: 30.0 },
 };
-const MODEL_KEYS: ModelKey[] = ['gpt-5.1', 'gpt-5.5', 'gpt-5.6-luna'];
+const MODEL_KEYS: ModelKey[] = ['gpt-5.1', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-6-sol', 'gpt-6-luna'];
 
 // ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
 
@@ -463,14 +473,14 @@ export default function ConPricingPage() {
             <tbody>
               {section.subsections ? (
                 section.subsections.map((sub, si) => (
-                  <>
-                    <tr key={`sub-${si}`} className="bg-slate-800/40 border-t border-slate-700">
+                  <Fragment key={`sub-${si}`}>
+                    <tr className="bg-slate-800/40 border-t border-slate-700">
                       <td colSpan={colCount} className="px-4 py-2">
                         <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">└ {sub.label}</span>
                       </td>
                     </tr>
                     {renderTable(sub.keys, showToggle)}
-                  </>
+                  </Fragment>
                 ))
               ) : renderTable(section.keys ?? [], showToggle)}
               {!hasItems && (

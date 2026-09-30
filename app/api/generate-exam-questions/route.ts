@@ -1538,10 +1538,48 @@ export async function POST(request: Request) {
 
     const CIRCLES = ['①','②','③','④','⑤'];
 
+    // gpt-6-sol high로 테스트해봤으나 품질이 gpt-5.6-luna와 비슷해 원래 구성으로 되돌림.
     const TYPE_MODEL_MAP: Record<string, string> = {
       grammar: 'gpt-5.6-luna',
     };
     const DEFAULT_MODEL = 'gpt-5.1';
+
+    // gpt-6 계열(reasoning 모델)은 Chat Completions가 아닌 Responses API로만 reasoning.effort를
+    // 받는다 — Chat Completions에 reasoning을 보내면 400 Unknown parameter 오류가 난다.
+    // (실측 테스트로 확인) 이 세 유형은 난이도가 높아 reasoning effort를 high로 준다.
+    const REASONING_MODELS = new Set(['gpt-6-sol', 'gpt-6-luna']);
+    const REASONING_EFFORT_MAP: Record<string, 'low' | 'medium' | 'high'> = {
+      grammar: 'high',
+      vocab_paraphrase: 'high',
+      vocab_blank: 'high',
+    };
+    // reasoning 모델은 내부 사고(reasoning) 토큰이 max_output_tokens 예산을 먼저 소비하고,
+    // 그 예산을 다 쓰면 눈에 보이는 답변 없이 응답이 그대로 잘린다(status: incomplete, 텍스트
+    // 0자) — 실측 결과 어법 1단계 분석만으로도 reasoning 토큰을 2000~4700개 넘게 쓰는 경우가
+    // 있어 gpt-5 계열 기준으로 잡아둔 기존 예산(1500~4000)으로는 거의 항상 잘렸다.
+    // (실측: budget=1500 → reasoning_tokens=1500 전부 소진, 텍스트 0자, status=incomplete)
+    // 단계 구분 없이 넉넉한 고정 예산을 쓴다 — 모델이 다 쓰지 않으면 알아서 일찍 끝내므로
+    // 여유를 크게 잡아도 비용이 그만큼 느는 건 아니고, 잘림만 방지된다.
+    const REASONING_TOKEN_BUDGET = 12000;
+    type ChatMsg = { role: 'user' | 'assistant'; content: string };
+    const callModel = async (model: string, questionType: string, msgs: ChatMsg[], maxTokens: number): Promise<string> => {
+      if (REASONING_MODELS.has(model)) {
+        const effort = REASONING_EFFORT_MAP[questionType] ?? 'medium';
+        const res = await client.responses.create({
+          model,
+          reasoning: { effort },
+          max_output_tokens: REASONING_TOKEN_BUDGET,
+          input: msgs,
+        });
+        return res.output_text ?? '';
+      }
+      const res = await client.chat.completions.create({
+        model,
+        max_completion_tokens: maxTokens,
+        messages: msgs,
+      });
+      return res.choices[0]?.message?.content ?? '';
+    };
 
     const TYPE_TOKENS_MAP: Record<string, number> = {
       grammar: 4000,
@@ -1551,7 +1589,10 @@ export async function POST(request: Request) {
 
     // 유형별 개별 생성 + 검증 (난이도 파라미터 추가)
     const generateForType = async (questionType: string, difficulty: 'a2' | 'b1' | 'b2' | 'c1' | 'c2'): Promise<ExamQuestion | null> => {
-      const MAX_RETRIES = (questionType === 'grammar' || questionType === 'vocab_paraphrase' || questionType === 'sentence_order' || questionType === 'phrase_meaning') ? 4 : 4;
+      const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
+      // reasoning 모델(gpt-6-sol high)은 시도 1회당 step1+step2 합쳐 1~3분 가까이 걸릴 수 있어
+      // 기존 4회 재시도를 그대로 쓰면 함수 실행시간 제한을 넘길 위험이 크다 — 낮춰서 적용.
+      const MAX_RETRIES = REASONING_MODELS.has(model) ? 2 : 4;
       // grammar는 오류 위치를 AI가 결정하므로 targetAnswer 강제 불가
       // sentence_order는 셔플 전 항상 answer=1 고정 → AI가 (A)→(B)→(C) 순서를 정답으로 작성하도록 강제
       // sentence_insertion은 임의 번호를 강제하면 AI가 그 번호에 억지로 답을 맞추면서
@@ -1560,7 +1601,6 @@ export async function POST(request: Request) {
       const targetAnswer = (questionType === 'grammar' || questionType === 'sentence_insertion')
         ? undefined
         : (questionType === 'sentence_order' ? 1 : Math.floor(Math.random() * 5) + 1);
-      const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       const isMultiStep = MULTI_STEP_TYPES.has(questionType);
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         let q: ExamQuestion | undefined;
@@ -1572,12 +1612,7 @@ export async function POST(request: Request) {
             const analysisPrompt = buildAnalysisPrompt(text, questionType, targetAnswer);
             let analysis = '';
             try {
-              const step1 = await client.chat.completions.create({
-                model,
-                max_completion_tokens: 1500,
-                messages: [{ role: 'user' as const, content: analysisPrompt }],
-              });
-              analysis = step1.choices[0]?.message?.content ?? '';
+              analysis = await callModel(model, questionType, [{ role: 'user' as const, content: analysisPrompt }], 1500);
               console.log(`[${questionType}] Step1 분석 완료 (${analysis.length}자)`);
             } catch (step1Err) {
               // Step1 실패 시 single-step으로 fallback
@@ -1600,12 +1635,7 @@ export async function POST(request: Request) {
             messages = [{ role: 'user', content: buildExamPrompt(text, [questionType], difficulty, targetAnswer) }];
           }
 
-          const response = await client.chat.completions.create({
-            model,
-            max_completion_tokens: TYPE_TOKENS_MAP[questionType] ?? DEFAULT_TOKENS,
-            messages,
-          });
-          const rawText = response.choices[0]?.message?.content ?? '';
+          const rawText = await callModel(model, questionType, messages, TYPE_TOKENS_MAP[questionType] ?? DEFAULT_TOKENS);
           const parsed = JSON.parse(extractJson(rawText)) as { questions: ExamQuestion[] };
           q = parsed.questions[0];
         } catch (err) {

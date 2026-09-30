@@ -15,7 +15,7 @@ const WB_TYPE_LABELS: Record<string, string> = {
   combo_vocab_grammar: '어휘+어법', combo_grammar_insert: '어법+문장삽입',
 };
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export type WorkbookType =
   | 'vocab_choice'
@@ -865,6 +865,173 @@ function redistributeVocabAnswers(passage: string, answerKey: string): string {
   return newPassage;
 }
 
+// 유형별 구조 검증: AI 출력이 각 유형의 필수 마커/개수 조건을 지켰는지 확인한다.
+// 실전변형(generate-exam-questions)과 달리 워크북은 지금까지 검증 없이 프롬프트만
+// 신뢰했는데, 그러다 보니 구조적으로 깨진 응답(마커 누락 등)이 그대로 나가는 경우가
+// 있었다. 여기서 실패하면 호출부에서 같은 지문으로 재생성을 시도한다.
+const CIRCLE_5 = ['①', '②', '③', '④', '⑤'];
+function missingCircles(text: string, count = 5): string[] {
+  return CIRCLE_5.slice(0, count).filter(c => !text.includes(c));
+}
+function missingParenLabels(text: string, labels: string[]): string[] {
+  return labels.filter(l => !text.includes(`(${l})`));
+}
+
+function validateWorkbookResult(type: WorkbookType, parsed: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const str = (v: unknown): string => typeof v === 'string' ? v : '';
+  const arr = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
+  const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object') ? v as Record<string, unknown> : {};
+
+  switch (type) {
+    case 'vocab_choice':
+    case 'grammar_choice': {
+      const passage = str(parsed.passage);
+      if (!passage || !/\d+\[[^\]]+\/[^\]]+\]/.test(passage)) errors.push('passage에 번호[선택지/선택지] 마커 없음');
+      if (!str(parsed.answer_key)) errors.push('answer_key 없음');
+      break;
+    }
+    case 'grammar_correct': {
+      const passage = str(parsed.passage);
+      if (!passage) { errors.push('passage 없음'); break; }
+      const markers = [...passage.matchAll(/\d+\[([^\]]+)\]/g)];
+      if (markers.length === 0) errors.push('passage에 번호[단어] 마커 없음');
+      else if (markers.some(m => /\s/.test(m[1].trim()))) errors.push('마커 안에 단어가 아닌 구/여러 단어 포함');
+      break;
+    }
+    case 'grammar_correct_adv': {
+      if (arr(parsed.sentences).length === 0) errors.push('sentences 비어있음');
+      if (!str(parsed.answer_key)) errors.push('answer_key 없음');
+      break;
+    }
+    case 'translation':
+    case 'passage_analysis': {
+      const sentences = arr(parsed.sentences);
+      if (sentences.length === 0) { errors.push('sentences 비어있음'); break; }
+      if (sentences.some(s => !str(obj(s).en) || !str(obj(s).ko))) errors.push('en/ko 누락된 문장 있음');
+      if (type === 'passage_analysis' && sentences.some(s => arr(obj(s).chunks).length === 0)) errors.push('chunks 비어있는 문장 있음');
+      break;
+    }
+    case 'word_order': {
+      const sentences = arr(parsed.sentences);
+      if (sentences.length === 0) errors.push('sentences 비어있음');
+      else if (sentences.some(s => !str(obj(s).answer))) errors.push('answer 누락된 문장 있음');
+      break;
+    }
+    case 'english_writing': {
+      const sentences = arr(parsed.sentences);
+      if (sentences.length === 0) { errors.push('sentences 비어있음'); break; }
+      if (sentences.some(s => { const r = obj(s); return !str(r.answer) || !str(r.hint_start) || !str(r.hint_end); })) {
+        errors.push('answer/hint 누락된 문장 있음');
+      }
+      break;
+    }
+    case 'vocab_fill': {
+      const sentences = arr(parsed.sentences);
+      if (sentences.length === 0) { errors.push('sentences 비어있음'); break; }
+      const markerRe = /_\(\d+:[^)]+\)_/;
+      if (!sentences.some(s => markerRe.test(str(obj(s).en)))) errors.push('en 필드에 빈칸 마커 없음');
+      if (sentences.some(s => markerRe.test(str(obj(s).ko)))) errors.push('ko 필드에 빈칸 마커가 남아있음');
+      if (!str(parsed.answer_key)) errors.push('answer_key 없음');
+      break;
+    }
+    case 'passage_translation': {
+      const sentences = arr(parsed.sentences);
+      const vocabTable = arr(parsed.vocab_table);
+      if (sentences.length === 0) errors.push('sentences 비어있음');
+      if (vocabTable.length < 8) errors.push(`vocab_table 개수 부족 (${vocabTable.length}개)`);
+      if (!str(parsed.title_en) || !str(parsed.title_ko)) errors.push('title_en/title_ko 없음');
+      break;
+    }
+    case 'paragraph_order': {
+      const shuffled = arr(parsed.shuffled_paragraphs);
+      if (!str(parsed.fixed_paragraph)) errors.push('fixed_paragraph 없음');
+      if (shuffled.length < 2) errors.push(`shuffled_paragraphs 개수 부족 (${shuffled.length}개)`);
+      break;
+    }
+    case 'sentence_insertion': {
+      const passage = str(parsed.passage);
+      if (!str(parsed.insert_sentence)) errors.push('insert_sentence 없음');
+      const missing = missingCircles(passage);
+      if (missing.length > 0) errors.push(`passage에 번호 누락 (${missing.join('')})`);
+      break;
+    }
+    case 'suneung_vocab_wrong':
+    case 'suneung_grammar_wrong': {
+      const passage = str(parsed.passage);
+      const missing = missingCircles(passage);
+      if (missing.length > 0) errors.push(`passage에 번호 누락 (${missing.join('')})`);
+      if (!str(parsed.answer_key)) errors.push('answer_key 없음');
+      break;
+    }
+    case 'suneung_vocab_right':
+    case 'suneung_grammar_right': {
+      const choices = arr(parsed.choices);
+      if (choices.length !== 5) errors.push(`choices 5개 아님 (${choices.length}개)`);
+      else if (choices.some(c => { const r = obj(c); return !str(r.A) || !str(r.B) || !str(r.C); })) {
+        errors.push('choices에 A/B/C 누락된 항목 있음');
+      }
+      break;
+    }
+    case 'combo_vocab_grammar': {
+      const passage = str(parsed.passage);
+      const missingCirc = missingCircles(passage);
+      if (missingCirc.length > 0) errors.push(`어법 번호 누락 (${missingCirc.join('')})`);
+      const missingBlanks = missingParenLabels(passage, ['A', 'B', 'C', 'D', 'E']);
+      if (missingBlanks.length > 0) errors.push(`빈칸 누락 (${missingBlanks.join(',')})`);
+      if (arr(parsed.q1_choices).length !== 5) errors.push('q1_choices 5개 아님');
+      if (arr(parsed.q2_choices).length !== 5) errors.push('q2_choices 5개 아님');
+      break;
+    }
+    case 'combo_vocab_fill': {
+      const passage = str(parsed.passage);
+      const missingShort = missingParenLabels(passage, ['A', 'B', 'C', 'D']);
+      if (missingShort.length > 0) errors.push(`짧은 빈칸 누락 (${missingShort.join(',')})`);
+      if (!passage.includes('(가)') || !passage.includes('(나)')) errors.push('긴 빈칸 (가)/(나) 누락');
+      if (arr(parsed.q1_choices).length !== 5) errors.push('q1_choices 5개 아님');
+      if (arr(parsed.q2_items).length !== 2) errors.push('q2_items 2개 아님');
+      break;
+    }
+    case 'combo_grammar_order': {
+      const paragraphs = arr(parsed.paragraphs);
+      if (paragraphs.length !== 5) errors.push(`paragraphs 5개 아님 (${paragraphs.length}개)`);
+      if (!str(parsed.order_answer)) errors.push('order_answer 없음');
+      if (arr(parsed.grammar_errors).length !== 3) errors.push('grammar_errors 3개 아님');
+      break;
+    }
+    case 'combo_grammar_insert': {
+      const passage = str(parsed.passage);
+      const missingIns = missingParenLabels(passage, ['A', 'B', 'C', 'D', 'E']);
+      if (missingIns.length > 0) errors.push(`문장삽입 위치 누락 (${missingIns.join(',')})`);
+      const missingCirc = missingCircles(passage);
+      if (missingCirc.length > 0) errors.push(`어법 번호 누락 (${missingCirc.join('')})`);
+      if (arr(parsed.grammar_wrong).length !== 3) errors.push('grammar_wrong 3개 아님');
+      if (!str(parsed.insert_answer)) errors.push('insert_answer 없음');
+      break;
+    }
+    case 'tf_questions': {
+      const questions = arr(parsed.questions);
+      if (questions.length !== 10) errors.push(`questions 10개 아님 (${questions.length}개)`);
+      break;
+    }
+    case 'title_summary': {
+      if (arr(parsed.titles).length !== 3) errors.push('titles 3개 아님');
+      if (arr(parsed.summaries).length !== 3) errors.push('summaries 3개 아님');
+      if (!str(parsed.korean_summary)) errors.push('korean_summary 없음');
+      break;
+    }
+    case 'summary_sentence': {
+      const summary = str(parsed.summary);
+      if (!summary || !/\(\d+\)_+/.test(summary)) errors.push('summary에 (N)___ 빈칸 없음');
+      if (!str(parsed.answer_key)) errors.push('answer_key 없음');
+      break;
+    }
+    default:
+      break;
+  }
+  return errors;
+}
+
 export async function POST(request: Request) {
   try {
     const { passages, type, tab, difficulty, academy_id, mockMeta } = await request.json() as {
@@ -918,20 +1085,45 @@ export async function POST(request: Request) {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const diff = difficulty || 'b2';
 
-    // 지문별 순차 생성
+    // gpt-6-luna는 reasoning 모델이라 Chat Completions가 아닌 Responses API(reasoning.effort)를
+    // 써야 한다 — Chat Completions에 reasoning을 넘기면 400 Unknown parameter 오류가 난다.
+    // (실측 테스트로 확인: gpt-6-luna + reasoning:{effort:'medium'}는 responses.create에서만 동작.)
+    const WORKBOOK_MODEL = 'gpt-6-luna';
+    const MAX_WB_RETRIES = 2; // 출력이 16000토큰까지 큰 편이라 실전변형(4회)보다 낮게 설정
+
+    // 지문별 순차 생성 — 구조 검증 실패 시 같은 지문으로 재생성 시도
     const results: unknown[] = [];
     for (const text of validPassages) {
       const prompt = buildPrompt(text.trim(), type, diff);
-      const response = await client.chat.completions.create({
-        model: 'gpt-5.1',
-        max_completion_tokens: 16000,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      const rawText = response.choices[0]?.message?.content ?? '';
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(extractJson(rawText)) as Record<string, unknown>;
-      } catch {
+      let parsed: Record<string, unknown> | null = null;
+      let parseFailed = false;
+
+      for (let attempt = 0; attempt <= MAX_WB_RETRIES; attempt++) {
+        const response = await client.responses.create({
+          model: WORKBOOK_MODEL,
+          reasoning: { effort: 'medium' },
+          max_output_tokens: 16000,
+          input: prompt,
+        });
+        const rawText = response.output_text ?? '';
+        let attemptParsed: Record<string, unknown>;
+        try {
+          attemptParsed = JSON.parse(extractJson(rawText)) as Record<string, unknown>;
+        } catch {
+          console.warn(`[workbook:${type}] JSON 파싱 실패 — 재시도 ${attempt + 1}/${MAX_WB_RETRIES + 1}`);
+          if (attempt < MAX_WB_RETRIES) continue;
+          parseFailed = true;
+          break;
+        }
+        parsed = attemptParsed;
+        const errors = validateWorkbookResult(type, attemptParsed);
+        if (errors.length === 0) break;
+        console.warn(`[workbook:${type}] 구조 검증 실패 (${errors.join(' / ')}) — 재시도 ${attempt + 1}/${MAX_WB_RETRIES + 1}`);
+        if (attempt < MAX_WB_RETRIES) continue;
+        // 재시도 소진 — 완전 실패보다 부분 결과가 낫다고 판단해 마지막 결과를 그대로 사용
+      }
+
+      if (parseFailed || !parsed) {
         results.push({ error: 'AI 응답 파싱 실패. 다시 시도해주세요.' });
         continue;
       }
