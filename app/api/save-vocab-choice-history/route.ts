@@ -43,20 +43,22 @@ export async function POST(request: Request) {
     const fileName = `${user.id}/${ts}_vocab.pdf`;
     const answerFileName = answerPdfBase64 ? `${user.id}/${ts}_vocab_answer.pdf` : null;
 
+    // 문제/정답 PDF는 서로 의존성이 없는 별도 업로드라 순서대로 기다릴 이유가 없다 —
+    // 동시에 올려서 업로드 구간을 절반 가까이 줄인다.
     const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-    const { error: uploadErr } = await adminClient.storage
-      .from('pdf-history')
-      .upload(fileName, pdfBuffer, { contentType: 'application/pdf' });
+    const answerBuffer = answerPdfBase64 ? Buffer.from(answerPdfBase64, 'base64') : null;
+    const [{ error: uploadErr }, answerUploadResult] = await Promise.all([
+      adminClient.storage.from('pdf-history').upload(fileName, pdfBuffer, { contentType: 'application/pdf' }),
+      answerBuffer && answerFileName
+        ? adminClient.storage.from('pdf-history').upload(answerFileName, answerBuffer, { contentType: 'application/pdf' })
+        : Promise.resolve(null),
+    ]);
 
     if (uploadErr) {
       return NextResponse.json({ error: `스토리지 업로드 실패: ${uploadErr.message}` }, { status: 500 });
     }
-
-    if (answerPdfBase64 && answerFileName) {
-      const answerBuffer = Buffer.from(answerPdfBase64, 'base64');
-      await adminClient.storage
-        .from('pdf-history')
-        .upload(answerFileName, answerBuffer, { contentType: 'application/pdf' });
+    if (answerUploadResult?.error) {
+      return NextResponse.json({ error: `정답 PDF 업로드 실패: ${answerUploadResult.error.message}` }, { status: 500 });
     }
 
     const { error: insertErr } = await adminClient.from('vocab_choice_history').insert({

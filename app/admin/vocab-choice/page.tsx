@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import Image from 'next/image';
+import { useProgressSimulator } from '@/lib/useProgressSimulator';
+import ProgressBar from '@/components/ProgressBar';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -316,7 +318,8 @@ function addRenderedToPdf(pdf: import('jspdf').jsPDF, rendered: RenderedPdfEleme
 }
 
 async function addElementToPdf(pdf: import('jspdf').jsPDF, elementId: string, isFirst: boolean, rowSelector: string = '[data-pdf-row="true"]'): Promise<boolean> {
-  const rendered = await renderElementForPdf(elementId, rowSelector);
+  const fontEmbedCSS = await getSharedFontEmbedCSS();
+  const rendered = await renderElementForPdf(elementId, rowSelector, fontEmbedCSS);
   if (!rendered) return false;
   addRenderedToPdf(pdf, rendered, isFirst);
   return true;
@@ -337,20 +340,32 @@ async function capturePdfFromElement(elementId: string): Promise<Blob> {
   return pdf.output('blob');
 }
 
+// 여러 요소를 Promise.all로 동시에 캡처하면, html-to-image가 원격 폰트(전역 CSS의 구글
+// 폰트 @import)를 각 캡처마다 따로 fetch하려고 경합하면서 "Error loading remote css:
+// Failed to fetch"가 나는 경우가 있었다 — html-to-image 내부 캐시는 첫 fetch가 끝난
+// *이후*에만 재사용되므로, 동시에 시작되는 여러 캡처는 캐시를 못 타고 전부 따로 요청한다.
+// captureAllToPdf 한 번 안의 병렬 캡처뿐 아니라, autoSaveWorkbook처럼 captureAllToPdf를
+// 여러 번 동시에(Promise.all) 호출하는 경우까지 모두 커버하기 위해 Promise 자체를 모듈
+// 스코프에 캐싱한다 — 여러 호출이 겹쳐도 실제 fetch는 딱 한 번만 나간다.
+let _fontEmbedCSSPromise: Promise<string | undefined> | null = null;
+async function getSharedFontEmbedCSS(): Promise<string | undefined> {
+  if (!_fontEmbedCSSPromise) {
+    _fontEmbedCSSPromise = (async () => {
+      try {
+        const { getFontEmbedCSS } = await import('html-to-image');
+        return await getFontEmbedCSS(document.body);
+      } catch {
+        return undefined; // 실패해도(네트워크 문제 등) 캡처는 시스템 폰트로 계속 진행
+      }
+    })();
+  }
+  return _fontEmbedCSSPromise;
+}
+
 async function captureAllToPdf(elementIds: string[]): Promise<Blob> {
   const { jsPDF } = await import('jspdf');
-  const { getFontEmbedCSS } = await import('html-to-image');
   const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-  // 여러 요소를 Promise.all로 동시에 캡처하면, html-to-image가 원격 폰트(전역 CSS의 구글
-  // 폰트 @import)를 각 캡처마다 따로 fetch하려고 경합하면서 "Error loading remote css:
-  // Failed to fetch"가 나는 경우가 있었다 — html-to-image 내부 캐시는 첫 fetch가 끝난
-  // *이후*에만 재사용되므로, 동시에 시작되는 여러 캡처는 캐시를 못 타고 전부 따로 요청한다.
-  // 캡처 시작 전에 한 번만 fetch해서(getFontEmbedCSS) 모든 캡처가 같은 결과를 재사용하게
-  // 하면 경합 자체가 사라진다. 실패해도(네트워크 문제 등) 캡처는 시스템 폰트로 계속 진행한다.
-  let fontEmbedCSS: string | undefined;
-  try {
-    fontEmbedCSS = await getFontEmbedCSS(document.body);
-  } catch { /* 폰트 임베드 실패해도 캡처 자체는 진행 */ }
+  const fontEmbedCSS = await getSharedFontEmbedCSS();
   // 렌더링(toJpeg) 단계를 병렬로 먼저 끝내고, PDF에 순서대로 끼워 넣는 건 그 뒤에 한다 —
   // pdf.addPage()/addImage()는 순서가 중요하지만 렌더링 자체는 서로 독립적이다.
   const rendered = await Promise.all(elementIds.map(id => renderElementForPdf(id, undefined, fontEmbedCSS)));
@@ -425,22 +440,29 @@ function renderVocabFillKorean(ko: string): React.ReactNode {
   return parts.map((part, i) => (i % 2 === 0 ? part : <b key={i}>({part})</b>));
 }
 
-function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean }: {
-  sentences: Array<{en: string; ko: string}>; answerKey: string; showAnswer: boolean; showKorean: boolean;
+function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean, isEditing = false, onUpdate }: {
+  sentences: Array<{en: string; ko: string}>; answerKey: string; showAnswer: boolean; showKorean: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
   const answerMap = buildVocabFillAnswerMap(answerKey);
+  const ed = isEditing && !!onUpdate;
+  const updateSentence = (i: number, patch: Partial<{en:string;ko:string}>) => onUpdate?.(r => {
+    const arr = [...((r.sentences as Array<{en:string;ko:string}>) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, sentences: arr };
+  });
   return (
     <div className="space-y-2">
-      {(sentences || []).map((s, si) => {
-        const parts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
-        return (
-          <div key={si}>
+      {(sentences || []).map((s, si) => (
+        <div key={si}>
+          {ed ? (
+            <EText editing value={s.en} onChange={v => updateSentence(si, { en: v })} className="text-sm font-medium leading-relaxed text-slate-800" multiline placeholder="_(1:a)_ 형식 빈칸 마커 포함 영어 문장" />
+          ) : (
             <p className="text-sm font-medium leading-8 text-slate-800">
-              {parts.map((part, i) => {
+              {s.en.split(/_\((\d+):([a-zA-Z])\)_/).map((part, i) => {
                 if (i % 3 === 0) return <span key={i}>{part}</span>;
                 if (i % 3 === 2) return null;
                 const num = parseInt(part);
-                const letter = parts[i + 1] ?? '';
+                const letter = s.en.split(/_\((\d+):([a-zA-Z])\)_/)[i + 1] ?? '';
                 const ans = answerMap[num] ?? '';
                 return showAnswer ? (
                   <span key={i} className="inline-flex items-center gap-0.5 mx-0.5">
@@ -456,12 +478,16 @@ function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean
                 );
               })}
             </p>
-            {showKorean && s.ko && (
+          )}
+          {(showKorean || ed) && (s.ko || ed) && (
+            ed ? (
+              <EText editing value={s.ko} onChange={v => updateSentence(si, { ko: v })} className="text-xs font-medium text-slate-500 mt-0.5" placeholder="한국어 번역" />
+            ) : (
               <p className="text-xs font-medium text-slate-500 mt-0.5 pl-2 border-l-2 border-slate-200">{renderVocabFillKorean(s.ko)}</p>
-            )}
-          </div>
-        );
-      })}
+            )
+          )}
+        </div>
+      ))}
       {showAnswer && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-3">
           <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
@@ -472,8 +498,8 @@ function RenderVocabFillSentences({ sentences, answerKey, showAnswer, showKorean
   );
 }
 
-function RenderVocabFill({ result, showAnswer, showKorean }: {
-  result: WorkbookResult; showAnswer: boolean; showKorean: boolean;
+function RenderVocabFill({ result, showAnswer, showKorean, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; showKorean: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
   if (result.sentences) {
     return <RenderVocabFillSentences
@@ -481,6 +507,8 @@ function RenderVocabFill({ result, showAnswer, showKorean }: {
       answerKey={result.answer_key as string || ''}
       showAnswer={showAnswer}
       showKorean={showKorean}
+      isEditing={isEditing}
+      onUpdate={onUpdate}
     />;
   }
   // Legacy format fallback
@@ -531,30 +559,71 @@ function buildGrammarCorrectAnswerMap(answerKey: string): Record<number, string>
   return map;
 }
 
-function RenderGrammarCorrect({ passage, answerKey, showAnswer }: { passage: string; answerKey: string; showAnswer: boolean }) {
+function RenderGrammarCorrect({ passage, answerKey, showAnswer, isEditing = false, onUpdate }: {
+  passage: string; answerKey: string; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
+}) {
   const answerMap = buildGrammarCorrectAnswerMap(answerKey);
-  const regex = /(\d+)\[([^\]]+)\]/g;
+  const ed = isEditing && !!onUpdate;
+  type Marker = { num: number; word: string; start: number; len: number };
+  const markers: Marker[] = [];
+  let m: RegExpExecArray | null;
+  const scanRegex = /(\d+)\[([^\]]+)\]/g;
+  while ((m = scanRegex.exec(passage)) !== null) {
+    markers.push({ num: parseInt(m[1]), word: m[2], start: m.index, len: m[0].length });
+  }
+
+  // 마커(틀린 단어) 또는 정답(올바른 단어)을 고치면, 지문 속 N[단어] 마커와 answer_key 문자열을
+  // 항상 같은 소스(markers 배열)에서 다시 만들어서 둘이 어긋나지 않게 한다.
+  const rebuild = (newMarkers: Marker[], newAnswerMap: Record<number, string>) => {
+    let newPassage = '';
+    let cursor = 0;
+    for (const mk of newMarkers) {
+      newPassage += passage.slice(cursor, mk.start) + `${mk.num}[${mk.word}]`;
+      cursor = mk.start + mk.len;
+    }
+    newPassage += passage.slice(cursor);
+    const newAnswerKey = newMarkers.map(mk => `${mk.num}. ${mk.word} → ${newAnswerMap[mk.num] ?? ''}`).join('  ');
+    onUpdate?.(r => ({ ...r, passage: newPassage, answer_key: newAnswerKey }));
+  };
+  const updateWrongWord = (i: number, v: string) => {
+    const next = markers.map((mk, idx) => idx === i ? { ...mk, word: v } : mk);
+    rebuild(next, answerMap);
+  };
+  const updateCorrectWord = (num: number, v: string) => {
+    rebuild(markers, { ...answerMap, [num]: v });
+  };
+
   const parts: React.ReactNode[] = [];
-  let last = 0, m: RegExpExecArray | null;
-  while ((m = regex.exec(passage)) !== null) {
-    if (m.index > last) parts.push(<span key={last}>{passage.slice(last, m.index)}</span>);
-    const num = parseInt(m[1]);
-    const word = m[2];
-    const correct = answerMap[num] ?? '';
+  let last = 0;
+  markers.forEach((mk, i) => {
+    if (mk.start > last) parts.push(<span key={last}>{passage.slice(last, mk.start)}</span>);
+    const correct = answerMap[mk.num] ?? '';
     parts.push(
-      <span key={m.index} className={`inline-flex items-center gap-0.5 ${showAnswer ? 'bg-rose-100 rounded px-1' : ''}`}>
-        <span className="text-xs font-black text-slate-400">{num}</span>
-        <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'line-through text-rose-500' : 'bg-slate-100 text-slate-700'}`}>[{word}]</span>
-        {showAnswer && correct && <span className="text-xs font-black text-emerald-600">→{correct}</span>}
+      <span key={mk.start} className={`inline-flex items-center gap-0.5 ${showAnswer && !ed ? 'bg-rose-100 rounded px-1' : ''}`}>
+        <span className="text-xs font-black text-slate-400">{mk.num}</span>
+        {ed ? (
+          <>
+            <span className="text-slate-400">[</span>
+            <EText editing value={mk.word} onChange={v => updateWrongWord(i, v)} className="px-0.5 py-0.5 text-xs font-bold bg-slate-100 text-slate-700 w-20 inline-block" />
+            <span className="text-slate-400">]</span>
+            <span className="text-slate-300 mx-0.5">→</span>
+            <EText editing value={correct} onChange={v => updateCorrectWord(mk.num, v)} className="px-0.5 py-0.5 text-xs font-black text-emerald-600 w-20 inline-block" placeholder="바른 형태" />
+          </>
+        ) : (
+          <>
+            <span className={`px-1 py-0.5 rounded text-xs font-bold ${showAnswer ? 'line-through text-rose-500' : 'bg-slate-100 text-slate-700'}`}>[{mk.word}]</span>
+            {showAnswer && correct && <span className="text-xs font-black text-emerald-600">→{correct}</span>}
+          </>
+        )}
       </span>
     );
-    last = m.index + m[0].length;
-  }
+    last = mk.start + mk.len;
+  });
   if (last < passage.length) parts.push(<span key={last}>{passage.slice(last)}</span>);
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium leading-8 text-slate-800">{parts}</p>
-      {showAnswer && (
+      <p className={`text-sm font-medium text-slate-800 ${ed ? 'leading-9' : 'leading-8'}`}>{parts}</p>
+      {showAnswer && !ed && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
           <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
           <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{answerKey}</p>
@@ -564,9 +633,20 @@ function RenderGrammarCorrect({ passage, answerKey, showAnswer }: { passage: str
   );
 }
 
-function RenderGrammarCorrectAdv({ sentences, answerKey, showAnswer }: {
-  sentences: Array<{num: number; text: string}>; answerKey: string; showAnswer: boolean;
+function updateSentenceArr<T extends Record<string, unknown>>(onUpdate: ResultUpdater | undefined, i: number, patch: Partial<T>) {
+  onUpdate?.(r => {
+    const arr = [...((r.sentences as T[]) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, sentences: arr };
+  });
+}
+
+function RenderGrammarCorrectAdv({ result, showAnswer, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
+  const sentences = (result.sentences as Array<{num: number; text: string}>) ?? [];
+  const answerKey = (result.answer_key as string) ?? '';
+  const ed = isEditing && !!onUpdate;
   const answerMap: Record<number, string> = {};
   if (answerKey) {
     const entries = answerKey.split(/\s{2,}|\n/).filter(Boolean);
@@ -581,9 +661,9 @@ function RenderGrammarCorrectAdv({ sentences, answerKey, showAnswer }: {
         <div key={i} className="border border-slate-100 rounded-xl overflow-hidden">
           <div className="bg-slate-50 px-3 py-2.5 flex gap-2">
             <span className="text-xs font-black text-slate-400 shrink-0 w-5">{s.num}.</span>
-            <span className="text-sm font-medium text-slate-800 leading-6">{s.text}</span>
+            <EText editing={ed} value={s.text} onChange={v => updateSentenceArr(onUpdate, i, { text: v })} className="text-sm font-medium text-slate-800 leading-6 flex-1" />
           </div>
-          {showAnswer && answerMap[s.num] && (
+          {showAnswer && (answerMap[s.num] || ed) && (
             <div className="px-3 py-2 bg-rose-50 border-t border-rose-100 flex gap-2">
               <span className="text-xs font-black text-rose-400 shrink-0 w-5"></span>
               <span className="text-xs font-black text-rose-600">{answerMap[s.num]}</span>
@@ -599,69 +679,92 @@ function RenderGrammarCorrectAdv({ sentences, answerKey, showAnswer }: {
       {showAnswer && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-2">
           <p className="text-xs font-black text-yellow-700 mb-1">전체 정답</p>
-          <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{answerKey}</p>
+          <EText editing={ed} value={answerKey} onChange={v => onUpdate?.(r => ({ ...r, answer_key: v }))} className="text-sm font-bold text-slate-700 whitespace-pre-wrap" multiline />
         </div>
       )}
     </div>
   );
 }
 
-function RenderTranslation({ sentences, showAnswer }: {
-  sentences: Array<{num: number; en: string; ko: string}>; showAnswer: boolean;
+function RenderTranslation({ result, showAnswer, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
+  const sentences = (result.sentences as Array<{num: number; en: string; ko: string}>) ?? [];
+  const ed = isEditing && !!onUpdate;
   return (
     <div className="space-y-4">
       {(sentences || []).map((s, i) => (
         <div key={i} className="space-y-1">
-          <p className="text-sm font-semibold text-slate-800 leading-relaxed">{s.en}</p>
+          <EText editing={ed} value={s.en} onChange={v => updateSentenceArr(onUpdate, i, { en: v })} className="text-sm font-semibold text-slate-800 leading-relaxed" />
           <div className="border-b border-slate-300 pb-0.5 flex items-end gap-1">
             <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
-            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1">{s.ko}</span>}
+            {(showAnswer || ed) && <EText editing={ed} value={s.ko} onChange={v => updateSentenceArr(onUpdate, i, { ko: v })} className="text-sm font-bold text-amber-700 pb-0.5 flex-1" />}
           </div>
-          {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
+          {!showAnswer && !ed && <div className="border-b border-slate-200 h-5"></div>}
         </div>
       ))}
     </div>
   );
 }
 
-function RenderWordOrder({ sentences, showAnswer, showKorean }: {
-  sentences: Array<{num: number; ko: string; scrambled: string[]; answer: string}>; showAnswer: boolean; showKorean: boolean;
+// answer 문장이 바뀌면 scrambled(섞인 단어 목록)도 그 자리에서 다시 섞어, 단어배열 편집 시
+// 정답 문장과 단어 목록이 어긋나는 일(이번 세션에서 실제로 고쳤던 버그)이 재발하지 않게 한다.
+function reshuffleWords(answer: string): string[] {
+  const words = answer.trim().split(/\s+/).filter(Boolean);
+  const scrambled = [...words];
+  for (let attempt = 0; attempt < 10; attempt++) {
+    for (let i = scrambled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [scrambled[i], scrambled[j]] = [scrambled[j], scrambled[i]];
+    }
+    if (words.length < 2 || scrambled.join(' ') !== words.join(' ')) break;
+  }
+  return scrambled;
+}
+
+function RenderWordOrder({ result, showAnswer, showKorean, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; showKorean: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
+  const sentences = (result.sentences as Array<{num: number; ko: string; scrambled: string[]; answer: string}>) ?? [];
+  const ed = isEditing && !!onUpdate;
   return (
     <div className="space-y-5">
       {(sentences || []).map((s, i) => (
         <div key={i} className="space-y-1.5">
-          {showKorean && (
-            <p className="text-sm font-bold text-rose-600 leading-relaxed">{s.ko}</p>
+          {(showKorean || ed) && (
+            <EText editing={ed} value={s.ko} onChange={v => updateSentenceArr(onUpdate, i, { ko: v })} className="text-sm font-bold text-rose-600 leading-relaxed" placeholder="한국어 뜻" />
           )}
           <p className="text-xs font-bold text-slate-500">
             ({(s.scrambled || []).join(' / ')})
           </p>
           <div className="border-b border-slate-300 pb-0.5 flex flex-wrap items-end gap-1 min-h-[22px]">
             <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
-            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1 min-w-[200px]">{s.answer}</span>}
+            {(showAnswer || ed) && <EText editing={ed} value={s.answer}
+              onChange={v => updateSentenceArr(onUpdate, i, { answer: v, scrambled: reshuffleWords(v) })}
+              className="text-sm font-bold text-amber-700 pb-0.5 flex-1 min-w-[200px]" placeholder="원문 문장 그대로" />}
           </div>
-          {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
+          {!showAnswer && !ed && <div className="border-b border-slate-200 h-5"></div>}
         </div>
       ))}
     </div>
   );
 }
 
-function RenderEnglishWriting({ sentences, showAnswer }: {
-  sentences: Array<{num: number; ko: string; hint_start: string; hint_end: string; answer: string}>; showAnswer: boolean;
+function RenderEnglishWriting({ result, showAnswer, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
+  const sentences = (result.sentences as Array<{num: number; ko: string; hint_start: string; hint_end: string; answer: string}>) ?? [];
+  const ed = isEditing && !!onUpdate;
   return (
     <div className="space-y-5">
       {(sentences || []).map((s, i) => (
         <div key={i} className="space-y-1.5">
-          <p className="text-sm font-bold text-slate-800 leading-relaxed">{s.ko}</p>
+          <EText editing={ed} value={s.ko} onChange={v => updateSentenceArr(onUpdate, i, { ko: v })} className="text-sm font-bold text-slate-800 leading-relaxed" />
           <div className="border-b border-slate-300 pb-0.5 flex flex-wrap items-end gap-1 min-h-[22px]">
             <span className="text-xs font-black text-slate-400 shrink-0">({s.num})</span>
-            {showAnswer && <span className="text-sm font-bold text-amber-700 pb-0.5 flex-1 min-w-[200px]">{s.answer}</span>}
+            {(showAnswer || ed) && <EText editing={ed} value={s.answer} onChange={v => updateSentenceArr(onUpdate, i, { answer: v })} className="text-sm font-bold text-amber-700 pb-0.5 flex-1 min-w-[200px]" />}
           </div>
-          {!showAnswer && <div className="border-b border-slate-200 h-5"></div>}
+          {!showAnswer && !ed && <div className="border-b border-slate-200 h-5"></div>}
         </div>
       ))}
     </div>
@@ -670,6 +773,24 @@ function RenderEnglishWriting({ sentences, showAnswer }: {
 
 type VocabRow = { word: string; meaning: string; syn1: string; syn1_m: string; syn2: string; syn2_m: string; syn3: string; syn3_m: string; antonym: string; antonym_m: string };
 type PassageSentence = { en: string; ko: string; key_words?: string[] };
+
+// 결과 편집에 쓰이는 mutator 콜백 — 지문분석(pdf-editor)처럼 보이는 그대로의 위치에서
+// 바로 고칠 수 있게, 각 Render 컴포넌트에 isEditing + onUpdate를 내려보내고 텍스트가
+// 나오는 자리에 이 컴포넌트를 대신 꽂는다 (편집 모드만 되면 input/textarea로 바뀜).
+type ResultUpdater = (mutator: (r: WorkbookResult) => WorkbookResult) => void;
+
+function EText({ value, onChange, editing, className = '', multiline = false, as = 'p', placeholder }: {
+  value: string; onChange: (v: string) => void; editing: boolean; className?: string; multiline?: boolean; as?: 'p' | 'span'; placeholder?: string;
+}) {
+  if (!editing) {
+    const Tag = as;
+    return <Tag className={className}>{value}</Tag>;
+  }
+  const inputCls = `${className} w-full bg-white border border-indigo-300 rounded-lg px-2 py-1 focus:outline-none focus:border-indigo-500`;
+  return multiline
+    ? <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={2} className={`${inputCls} resize-y`} />
+    : <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={inputCls} />;
+}
 
 function highlightKeyWords(text: string, keyWords: string[]): React.ReactNode {
   if (!keyWords || keyWords.length === 0) return <span>{text}</span>;
@@ -695,35 +816,65 @@ function highlightKeyWords(text: string, keyWords: string[]): React.ReactNode {
   );
 }
 
-function RenderPassageTranslation({ result }: { result: WorkbookResult }) {
+function RenderPassageTranslation({ result, isEditing = false, onUpdate }: { result: WorkbookResult; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const sentences = result.sentences as PassageSentence[] || result.items as PassageSentence[] || [];
   const vocabTable = result.vocab_table as VocabRow[] || [];
   const titleEn = result.title_en as string || '';
   const titleKo = result.title_ko as string || '';
   const koreanSummary = result.korean_summary as string || '';
   const keywordBullets = result.keyword_bullets as string[] || [];
+  const ed = isEditing && !!onUpdate;
+  const updateSentence = (i: number, patch: Partial<PassageSentence>) => onUpdate?.(r => {
+    const key = Array.isArray(r.sentences) ? 'sentences' : 'items';
+    const arr = [...((r[key] as PassageSentence[]) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, [key]: arr };
+  });
+  const updateVocab = (i: number, patch: Partial<VocabRow>) => onUpdate?.(r => {
+    const arr = [...((r.vocab_table as VocabRow[]) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, vocab_table: arr };
+  });
+  const updateBullet = (i: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.keyword_bullets as string[]) ?? [])];
+    arr[i] = v;
+    return { ...r, keyword_bullets: arr };
+  });
   return (
     <div className="space-y-3">
       {/* 제목·요약 섹션 */}
-      {(titleEn || koreanSummary) && (
+      {(titleEn || koreanSummary || ed) && (
         <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 space-y-1">
-          {titleEn && <p className="text-sm font-black text-center text-slate-900">{titleEn}</p>}
-          {titleKo && <p className="text-xs text-center text-slate-500">({titleKo})</p>}
-          {koreanSummary && <p className="text-xs text-slate-700 mt-1 leading-relaxed">[요약] {koreanSummary}</p>}
+          {(titleEn || ed) && <EText editing={ed} value={titleEn} onChange={v => onUpdate?.(r => ({ ...r, title_en: v }))}
+            className="text-sm font-black text-center text-slate-900" placeholder="영어 제목" />}
+          {(titleKo || ed) && <EText editing={ed} value={titleKo} onChange={v => onUpdate?.(r => ({ ...r, title_ko: v }))}
+            className="text-xs text-center text-slate-500" placeholder="한국어 제목" />}
+          {(koreanSummary || ed) && (
+            <div className="text-xs text-slate-700 mt-1 leading-relaxed flex gap-1">
+              <span className="shrink-0">[요약]</span>
+              <EText editing={ed} value={koreanSummary} onChange={v => onUpdate?.(r => ({ ...r, korean_summary: v }))}
+                className="flex-1" multiline placeholder="한글 요약" />
+            </div>
+          )}
         </div>
       )}
       {/* 오른쪽 키워드 불렛 박스 */}
       {keywordBullets.length > 0 && (
         <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50">
           <p className="text-xs font-black text-indigo-700 mb-1">내용 압축 키워드</p>
-          {keywordBullets.map((b, i) => <p key={i} className="text-xs text-slate-700">→ {b}</p>)}
+          {keywordBullets.map((b, i) => (
+            <div key={i} className="flex gap-1 text-xs text-slate-700">
+              <span className="shrink-0">→</span>
+              <EText editing={ed} value={b} onChange={v => updateBullet(i, v)} className="flex-1" />
+            </div>
+          ))}
         </div>
       )}
       {/* 본문·해석 */}
       {sentences.map((s, i) => (
-        <div key={i} className="py-1 border-b border-slate-100 last:border-0">
-          <p className="text-sm text-slate-800 leading-relaxed">{s.en}</p>
-          <p className="text-sm font-bold text-slate-600 leading-relaxed mt-0.5">{s.ko}</p>
+        <div key={i} className="py-1 border-b border-slate-100 last:border-0 space-y-0.5">
+          <EText editing={ed} value={s.en} onChange={v => updateSentence(i, { en: v })} className="text-sm text-slate-800 leading-relaxed" />
+          <EText editing={ed} value={s.ko} onChange={v => updateSentence(i, { ko: v })} className="text-sm font-bold text-slate-600 leading-relaxed mt-0.5" />
         </div>
       ))}
       {/* 어휘표 — 2페이지 영역 */}
@@ -731,7 +882,7 @@ function RenderPassageTranslation({ result }: { result: WorkbookResult }) {
         <div className="mt-6 border-t-2 border-slate-300 pt-4">
           <p className="text-xs font-black text-slate-500 mb-2">지문의 주요 어휘와 뜻 (2페이지)</p>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-xs border-collapse">
+            <table className="w-full text-xs border-collapse table-fixed">
               <thead>
                 <tr className="bg-slate-800 text-white">
                   {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
@@ -742,23 +893,43 @@ function RenderPassageTranslation({ result }: { result: WorkbookResult }) {
               <tbody>
                 {vocabTable.map((row, i) => (
                   <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="px-2 py-1.5 border-r border-slate-100">
-                      <span className="font-black text-slate-800">{row.word}</span>
-                      {row.meaning && <span className="text-slate-500 ml-1">({row.meaning})</span>}
+                    <td className="px-2 py-1.5 border-r border-slate-100 align-top">
+                      {ed ? (
+                        <div className="flex flex-col gap-0.5">
+                          <EText editing value={row.word} onChange={v => updateVocab(i, { word: v })} className="font-black text-slate-800 text-xs" placeholder="단어" />
+                          <EText editing value={row.meaning} onChange={v => updateVocab(i, { meaning: v })} className="text-slate-500 text-xs" placeholder="뜻" />
+                        </div>
+                      ) : (
+                        <><span className="font-black text-slate-800">{row.word}</span>{row.meaning && <span className="text-slate-500 ml-1">({row.meaning})</span>}</>
+                      )}
                     </td>
-                    {[['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']].map(([k,m]) => (
-                      <td key={k} className="px-2 py-1.5 border-r border-slate-100">
-                        {(row as Record<string,string>)[k] && <>
-                          <span className="font-bold text-blue-700">{(row as Record<string,string>)[k]}</span>
-                          {(row as Record<string,string>)[m] && <span className="text-slate-500 ml-1">({(row as Record<string,string>)[m]})</span>}
-                        </>}
+                    {([['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']] as const).map(([k,m]) => (
+                      <td key={k} className="px-2 py-1.5 border-r border-slate-100 align-top">
+                        {ed ? (
+                          <div className="flex flex-col gap-0.5">
+                            <EText editing value={(row as Record<string,string>)[k]} onChange={v => updateVocab(i, { [k]: v } as Partial<VocabRow>)} className="font-bold text-blue-700 text-xs" placeholder="유의어" />
+                            <EText editing value={(row as Record<string,string>)[m]} onChange={v => updateVocab(i, { [m]: v } as Partial<VocabRow>)} className="text-slate-500 text-xs" placeholder="뜻" />
+                          </div>
+                        ) : (
+                          (row as Record<string,string>)[k] && <>
+                            <span className="font-bold text-blue-700">{(row as Record<string,string>)[k]}</span>
+                            {(row as Record<string,string>)[m] && <span className="text-slate-500 ml-1">({(row as Record<string,string>)[m]})</span>}
+                          </>
+                        )}
                       </td>
                     ))}
-                    <td className="px-2 py-1.5">
-                      {row.antonym && <>
-                        <span className="font-bold text-rose-600">{row.antonym}</span>
-                        {row.antonym_m && <span className="text-slate-500 ml-1">({row.antonym_m})</span>}
-                      </>}
+                    <td className="px-2 py-1.5 align-top">
+                      {ed ? (
+                        <div className="flex flex-col gap-0.5">
+                          <EText editing value={row.antonym} onChange={v => updateVocab(i, { antonym: v })} className="font-bold text-rose-600 text-xs" placeholder="반의어" />
+                          <EText editing value={row.antonym_m} onChange={v => updateVocab(i, { antonym_m: v })} className="text-slate-500 text-xs" placeholder="뜻" />
+                        </div>
+                      ) : (
+                        row.antonym && <>
+                          <span className="font-bold text-rose-600">{row.antonym}</span>
+                          {row.antonym_m && <span className="text-slate-500 ml-1">({row.antonym_m})</span>}
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -771,47 +942,58 @@ function RenderPassageTranslation({ result }: { result: WorkbookResult }) {
   );
 }
 
-function RenderParagraphOrder({ data, showAnswer }: {
-  data: { fixed_paragraph: string; shuffled_paragraphs: Array<{label: string; text: string}>; answer_key: string };
-  showAnswer: boolean;
+function RenderParagraphOrder({ result, showAnswer, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
+  const fixedParagraph = (result.fixed_paragraph as string) ?? '';
+  const shuffled = (result.shuffled_paragraphs as Array<{label: string; text: string}>) ?? [];
+  const answerKey = (result.answer_key as string) ?? '';
+  const ed = isEditing && !!onUpdate;
+  const updateShuffled = (i: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.shuffled_paragraphs as Array<{label:string;text:string}>) ?? [])];
+    arr[i] = { ...arr[i], text: v };
+    return { ...r, shuffled_paragraphs: arr };
+  });
   return (
     <div className="space-y-3">
       <div className="border-2 border-slate-900 rounded-xl p-3 bg-white">
         <p className="text-xs font-black text-slate-900 mb-1">제시 단락 (고정)</p>
-        <p className="text-sm font-medium text-slate-800">{data.fixed_paragraph}</p>
+        <EText editing={ed} value={fixedParagraph} onChange={v => onUpdate?.(r => ({ ...r, fixed_paragraph: v }))} className="text-sm font-medium text-slate-800" multiline />
       </div>
-      {(data.shuffled_paragraphs || []).map((p, i) => (
+      {shuffled.map((p, i) => (
         <div key={i} className="border border-slate-200 rounded-xl p-3">
           <p className="text-xs font-black text-slate-500 mb-1">({p.label})</p>
-          <p className="text-sm font-medium text-slate-800">{p.text}</p>
+          <EText editing={ed} value={p.text} onChange={v => updateShuffled(i, v)} className="text-sm font-medium text-slate-800" multiline />
         </div>
       ))}
       {showAnswer && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
           <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
-          <p className="text-sm font-bold text-slate-700">{data.answer_key}</p>
+          <EText editing={ed} value={answerKey} onChange={v => onUpdate?.(r => ({ ...r, answer_key: v }))} className="text-sm font-bold text-slate-700" />
         </div>
       )}
     </div>
   );
 }
 
-function RenderSentenceInsertion({ data, showAnswer }: {
-  data: { insert_sentence: string; passage: string; answer_key: string };
-  showAnswer: boolean;
+function RenderSentenceInsertion({ result, showAnswer, isEditing = false, onUpdate }: {
+  result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
 }) {
+  const insertSentence = (result.insert_sentence as string) ?? '';
+  const passage = (result.passage as string) ?? '';
+  const answerKey = (result.answer_key as string) ?? '';
+  const ed = isEditing && !!onUpdate;
   return (
     <div className="space-y-3">
       <div className="border-2 border-slate-900 rounded-xl p-3 bg-white">
         <p className="text-xs font-black text-slate-900 mb-1">삽입할 문장</p>
-        <p className="text-sm font-bold text-slate-800 italic">{data.insert_sentence}</p>
+        <EText editing={ed} value={insertSentence} onChange={v => onUpdate?.(r => ({ ...r, insert_sentence: v }))} className="text-sm font-bold text-slate-800 italic" />
       </div>
-      <p className="text-sm font-medium leading-8 text-slate-800">{data.passage}</p>
+      <EText editing={ed} value={passage} onChange={v => onUpdate?.(r => ({ ...r, passage: v }))} className="text-sm font-medium leading-relaxed text-slate-800" multiline />
       {showAnswer && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
           <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
-          <p className="text-sm font-bold text-slate-700">{data.answer_key}</p>
+          <EText editing={ed} value={answerKey} onChange={v => onUpdate?.(r => ({ ...r, answer_key: v }))} className="text-sm font-bold text-slate-700" />
         </div>
       )}
     </div>
@@ -832,53 +1014,87 @@ function RenderSuneungPassage({ passage, answerKey, showAnswer }: { passage: str
   );
 }
 
-function RenderSuneungVocabWrong({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderSuneungVocabWrong({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const passage = result.passage as string ?? '';
   const answerKey = result.answer_key as string ?? '';
-  const parts = passage.split(/([①②③④⑤][a-zA-Z''\-]+)/g);
+  const ed = isEditing && !!onUpdate;
+  const markerRegex = /([①②③④⑤])([a-zA-Z''\-]+)/g;
+  type Marker = { circle: string; word: string; start: number; len: number };
+  const markers: Marker[] = [];
+  let mm: RegExpExecArray | null;
+  while ((mm = markerRegex.exec(passage)) !== null) {
+    markers.push({ circle: mm[1], word: mm[2], start: mm.index, len: mm[0].length });
+  }
+  const updateWord = (i: number, v: string) => onUpdate?.(r => {
+    let newPassage = '';
+    let cursor = 0;
+    markers.forEach((mk, idx) => {
+      const word = idx === i ? v : mk.word;
+      newPassage += passage.slice(cursor, mk.start) + `${mk.circle}${word}`;
+      cursor = mk.start + mk.len;
+    });
+    newPassage += passage.slice(cursor);
+    return { ...r, passage: newPassage };
+  });
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  markers.forEach((mk, i) => {
+    if (mk.start > last) parts.push(<span key={last}>{passage.slice(last, mk.start)}</span>);
+    parts.push(
+      <span key={mk.start} className="inline-flex items-baseline">
+        <span className="font-black text-slate-700">{mk.circle}</span>
+        {ed ? (
+          <EText editing value={mk.word} onChange={v => updateWord(i, v)} className="underline font-semibold w-20 inline-block" />
+        ) : (
+          <span className="underline font-semibold">{mk.word}</span>
+        )}
+      </span>
+    );
+    last = mk.start + mk.len;
+  });
+  if (last < passage.length) parts.push(<span key={last}>{passage.slice(last)}</span>);
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium leading-8 text-slate-800">
-        {parts.map((part, i) => {
-          const m = part.match(/^([①②③④⑤])(.+)$/);
-          if (m) return (
-            <span key={i}>
-              <span className="font-black text-slate-700">{m[1]}</span>
-              <span className="underline font-semibold">{m[2]}</span>
-            </span>
-          );
-          return <span key={i}>{part}</span>;
-        })}
-      </p>
-      {showAnswer && (
+      <p className={`text-sm font-medium text-slate-800 ${ed ? 'leading-9' : 'leading-8'}`}>{parts}</p>
+      {(showAnswer || ed) && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
           <p className="text-xs font-black text-yellow-700 mb-1">정답</p>
-          <p className="text-sm font-bold text-slate-700">{answerKey}</p>
+          <EText editing={ed} value={answerKey} onChange={v => onUpdate?.(r => ({ ...r, answer_key: v }))} className="text-sm font-bold text-slate-700" placeholder="③ (scared → pleased)" />
         </div>
       )}
     </div>
   );
 }
 
-function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderSuneungVocabABC({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const passage = result.passage as string ?? '';
   const choices = (result.choices as Array<{label: string; A: string; B: string; C: string}>) || [];
   const answerKey = result.answer_key as string ?? '';
+  const ed = isEditing && !!onUpdate;
   const parts = passage.split(/(\([ABC]\)\[[^\]]+\])/g);
+  const updateChoice = (i: number, key: 'A'|'B'|'C', v: string) => onUpdate?.(r => {
+    const arr = [...((r.choices as Array<{label:string;A:string;B:string;C:string}>) ?? [])];
+    arr[i] = { ...arr[i], [key]: v };
+    return { ...r, choices: arr };
+  });
   return (
     <div className="space-y-4">
-      <p className="text-sm font-medium leading-8 text-slate-800">
-        {parts.map((part, i) => {
-          const m = part.match(/\(([ABC])\)\[([^\]]+)\]/);
-          if (m) return (
-            <span key={i} className="inline-flex items-baseline gap-0.5">
-              <span className="font-black text-violet-600">({m[1]})</span>
-              <span className="rounded px-1.5 font-bold text-sm">[{m[2]}]</span>
-            </span>
-          );
-          return <span key={i}>{part}</span>;
-        })}
-      </p>
+      {ed ? (
+        <EText editing value={passage} onChange={v => onUpdate?.(r => ({ ...r, passage: v }))} className="text-sm font-medium leading-relaxed text-slate-800" multiline placeholder="(A)[word1 / word2] 형식 마커 포함 지문" />
+      ) : (
+        <p className="text-sm font-medium leading-8 text-slate-800">
+          {parts.map((part, i) => {
+            const m = part.match(/\(([ABC])\)\[([^\]]+)\]/);
+            if (m) return (
+              <span key={i} className="inline-flex items-baseline gap-0.5">
+                <span className="font-black text-violet-600">({m[1]})</span>
+                <span className="rounded px-1.5 font-bold text-sm">[{m[2]}]</span>
+              </span>
+            );
+            return <span key={i}>{part}</span>;
+          })}
+        </p>
+      )}
       <div className="border border-slate-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -895,26 +1111,29 @@ function RenderSuneungVocabABC({ result, showAnswer }: { result: WorkbookResult;
               return (
                 <tr key={i} className={`border-t border-slate-100 ${correct ? 'bg-yellow-50' : ''}`}>
                   <td className="py-2 px-3 font-black text-slate-400">{c.label}</td>
-                  <td className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>{c.A}</td>
-                  <td className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>{c.B}</td>
-                  <td className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>{c.C}</td>
+                  {(['A','B','C'] as const).map(k => (
+                    <td key={k} className={`py-2 px-6 text-center font-semibold ${correct ? 'text-emerald-600 font-black' : 'text-slate-700'}`}>
+                      <EText editing={ed} value={c[k]} onChange={v => updateChoice(i, k, v)} className="text-center" />
+                    </td>
+                  ))}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      {showAnswer && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3"><p className="text-xs font-black text-yellow-700 mb-0.5">정답</p><p className="text-sm font-bold text-slate-700">{answerKey}</p></div>}
+      {(showAnswer || ed) && <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3"><p className="text-xs font-black text-yellow-700 mb-0.5">정답</p><EText editing={ed} value={answerKey} onChange={v => onUpdate?.(r => ({ ...r, answer_key: v }))} className="text-sm font-bold text-slate-700" /></div>}
     </div>
   );
 }
 
-function RenderComboGrammarInsert({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderComboGrammarInsert({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const passage = result.passage as string ?? '';
   const insertSentence = result.insert_sentence as string ?? '';
   const insertAnswer = result.insert_answer as string ?? '';
   const grammarWrong = (result.grammar_wrong as string[]) || [];
   const grammarAnswers = (result.grammar_answers as Array<{num:string;wrong:string;correct:string}>) || [];
+  const ed = isEditing && !!onUpdate;
   const parts = passage.split(/(\([A-E]\)|[①②③④⑤] ?[a-zA-Z][a-zA-Z0-9''‘’\-]*)/g);
   const renderPassage = () => parts.map((part, i) => {
     const ins = part.match(/^\(([A-E])\)$/);
@@ -935,9 +1154,20 @@ function RenderComboGrammarInsert({ result, showAnswer }: { result: WorkbookResu
   });
   const choiceNums = ['①','②','③','④','⑤'];
   const choiceLabels = ['A','B','C','D','E'];
+  const updateGrammarAnswer = (num: string, v: string) => onUpdate?.(r => {
+    const arr = [...((r.grammar_answers as Array<{num:string;wrong:string;correct:string}>) ?? [])];
+    const idx = arr.findIndex(a => a.num === num);
+    if (idx >= 0) arr[idx] = { ...arr[idx], correct: v };
+    else arr.push({ num, wrong: '', correct: v });
+    return { ...r, grammar_answers: arr };
+  });
   return (
     <div className="text-sm leading-loose">
-      <p className="mb-4">{renderPassage()}</p>
+      {ed ? (
+        <EText editing value={passage} onChange={v => onUpdate?.(r => ({ ...r, passage: v }))} className="mb-4" multiline placeholder="(A)~(E) 삽입 위치, ①~⑤ 어법 마커 포함 지문" />
+      ) : (
+        <p className="mb-4">{renderPassage()}</p>
+      )}
       <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-2">
           1. 위 글의 밑줄 친 {grammarWrong.join(', ')}를 어법에 맞게 바꾸어 쓰시오.
@@ -948,8 +1178,8 @@ function RenderComboGrammarInsert({ result, showAnswer }: { result: WorkbookResu
             return (
               <div key={i} className="flex items-center gap-2 text-sm">
                 <span className="font-black w-5 shrink-0">{num}</span>
-                {showAnswer && ans
-                  ? <span className="font-bold text-emerald-600">{ans.correct}</span>
+                {(showAnswer || ed)
+                  ? <EText editing={ed} value={ans?.correct ?? ''} onChange={v => updateGrammarAnswer(num, v)} className="font-bold text-emerald-600 flex-1" />
                   : <span className="border-b border-slate-400 inline-block min-w-[180px]">&nbsp;</span>}
               </div>
             );
@@ -960,14 +1190,21 @@ function RenderComboGrammarInsert({ result, showAnswer }: { result: WorkbookResu
         <p className="text-xs font-black text-slate-700 mb-2">
           2. 위 글의 흐름상 (A)~(E) 중 주어진 문장이 들어가기에 가장 적절한 곳은 어디인가?
         </p>
-        <div className="bg-white border border-slate-200 rounded p-2 mb-3 text-sm text-slate-700 italic">{insertSentence}</div>
+        <div className="bg-white border border-slate-200 rounded p-2 mb-3 text-sm text-slate-700 italic">
+          <EText editing={ed} value={insertSentence} onChange={v => onUpdate?.(r => ({ ...r, insert_sentence: v }))} />
+        </div>
         <div className="flex flex-wrap gap-5 text-sm">
           {choiceLabels.map((l, i) => {
             const hit = showAnswer && insertAnswer === `(${l})`;
             return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{choiceNums[i]} {l}</span>;
           })}
         </div>
-        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {insertAnswer}</p>}
+        {(showAnswer || ed) && (
+          <div className="mt-2 text-xs font-bold text-amber-700 flex items-center gap-1">
+            <span>정답:</span>
+            <EText editing={ed} value={insertAnswer} onChange={v => onUpdate?.(r => ({ ...r, insert_answer: v }))} placeholder="(C)" />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -991,24 +1228,42 @@ function renderWithErrorHighlight(text: string, errors: Array<{wrong: string}>) 
   );
 }
 
-function RenderComboGrammarOrder({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderComboGrammarOrder({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const paragraphs = (result.paragraphs as Array<{label:string;text:string}>) || [];
   const orderAnswer = result.order_answer as string ?? '';
   const grammarErrors = (result.grammar_errors as Array<{label:string;wrong:string;correct:string}>) || [];
+  const ed = isEditing && !!onUpdate;
+  const updateParagraph = (i: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.paragraphs as Array<{label:string;text:string}>) ?? [])];
+    arr[i] = { ...arr[i], text: v };
+    return { ...r, paragraphs: arr };
+  });
+  const updateError = (i: number, patch: Partial<{wrong:string;correct:string}>) => onUpdate?.(r => {
+    const arr = [...((r.grammar_errors as Array<{label:string;wrong:string;correct:string}>) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, grammar_errors: arr };
+  });
   return (
     <div className="text-sm leading-loose">
       <div className="space-y-3 mb-4">
         {paragraphs.map((p, i) => (
           <div key={i} className="flex gap-2 items-start">
             <span className="font-black text-amber-700 shrink-0 mt-0.5">{p.label}</span>
-            <p className="text-slate-800">{renderWithErrorHighlight(p.text, grammarErrors)}</p>
+            {ed
+              ? <EText editing value={p.text} onChange={v => updateParagraph(i, v)} className="text-slate-800 flex-1" multiline />
+              : <p className="text-slate-800">{renderWithErrorHighlight(p.text, grammarErrors)}</p>}
           </div>
         ))}
       </div>
       <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-2">1. 주어진 글 (A)에 이어질 내용을 순서에 맞게 배열하시오.</p>
         <p className="text-sm text-slate-500">정답: (A) - &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
-        {showAnswer && <p className="mt-1 text-xs font-bold text-amber-700">정답: {orderAnswer}</p>}
+        {(showAnswer || ed) && (
+          <div className="mt-1 text-xs font-bold text-amber-700 flex items-center gap-1">
+            <span>정답:</span>
+            <EText editing={ed} value={orderAnswer} onChange={v => onUpdate?.(r => ({ ...r, order_answer: v }))} placeholder="(A) - (D) - (B) - (C) - (E)" />
+          </div>
+        )}
       </div>
       <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-2">2. 위 글에서 어법상 어색한 부분을 각각 바르게 고치시오. (3개)</p>
@@ -1022,12 +1277,16 @@ function RenderComboGrammarOrder({ result, showAnswer }: { result: WorkbookResul
             </tr>
           </thead>
           <tbody>
-            {showAnswer ? grammarErrors.map((e, i) => (
+            {(showAnswer || ed) ? grammarErrors.map((e, i) => (
               <tr key={i}>
                 <td className="py-2 px-2 border border-slate-200 font-bold text-slate-500 text-center">{e.label}</td>
-                <td className="py-2 px-2 border border-slate-200 font-bold text-rose-600 text-center">{e.wrong}</td>
+                <td className="py-2 px-2 border border-slate-200 font-bold text-rose-600 text-center">
+                  <EText editing={ed} value={e.wrong} onChange={v => updateError(i, { wrong: v })} className="text-center" />
+                </td>
                 <td className="py-2 px-2 border border-slate-200 text-slate-400 text-center">→</td>
-                <td className="py-2 px-2 border border-slate-200 font-bold text-emerald-600 text-center">{e.correct}</td>
+                <td className="py-2 px-2 border border-slate-200 font-bold text-emerald-600 text-center">
+                  <EText editing={ed} value={e.correct} onChange={v => updateError(i, { correct: v })} className="text-center" />
+                </td>
               </tr>
             )) : [1,2,3].map((n, i) => (
               <tr key={i}>
@@ -1044,7 +1303,7 @@ function RenderComboGrammarOrder({ result, showAnswer }: { result: WorkbookResul
   );
 }
 
-function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderComboVocabFill({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const passage = result.passage as string ?? '';
   const q1Choices = (result.q1_choices as Array<{label:string;word:string}>) || [];
   const q1Answer = result.q1_answer as string ?? '';
@@ -1053,6 +1312,7 @@ function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; 
   const q2Instruction = hasKo
     ? '주어진 단어를 모두 사용하여 다음 우리말과 같은 뜻이 되도록 배열하시오.'
     : '보기의 단어를 활용하여 빈칸을 완성하시오.';
+  const ed = isEditing && !!onUpdate;
   const parts = passage.split(/(\([A-D가나]\)\[_+\])/g);
   const renderPassage = () => parts.map((part, i) => {
     const m = part.match(/^\(([A-D가나])\)(\[_+\])$/);
@@ -1065,18 +1325,40 @@ function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; 
       </span>
     );
   });
+  const updateQ1Choice = (i: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.q1_choices as Array<{label:string;word:string}>) ?? [])];
+    arr[i] = { ...arr[i], word: v };
+    return { ...r, q1_choices: arr };
+  });
+  const updateQ2Item = (i: number, patch: Partial<{words:string[];answer:string;ko:string}>) => onUpdate?.(r => {
+    const arr = [...((r.q2_items as Array<{blank:string;words:string[];answer:string;ko?:string}>) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, q2_items: arr };
+  });
   return (
     <div className="text-sm leading-loose">
-      <p className="mb-4">{renderPassage()}</p>
+      {ed ? (
+        <EText editing value={passage} onChange={v => onUpdate?.(r => ({ ...r, passage: v }))} className="mb-4" multiline placeholder="(A)[____], (가)[________] 형식 빈칸 포함 지문" />
+      ) : (
+        <p className="mb-4">{renderPassage()}</p>
+      )}
       <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-2">1. 문맥상 위 글의 빈칸 (A)~(D)에 들어갈 수 없는 단어 하나는?</p>
-        <div className="flex flex-wrap gap-5 text-sm">
+        <div className="flex flex-wrap gap-3 text-sm items-center">
           {q1Choices.map((c, i) => {
             const hit = showAnswer && c.label === q1Answer;
-            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{c.label} {c.word}</span>;
+            return (
+              <span key={i} className={`inline-flex items-center gap-1 ${hit ? 'font-black text-rose-600 underline' : ''}`}>
+                {c.label} <EText editing={ed} value={c.word} onChange={v => updateQ1Choice(i, v)} className="w-20" />
+              </span>
+            );
           })}
         </div>
-        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {q1Answer}</p>}
+        {(showAnswer || ed) && (
+          <div className="mt-2 text-xs font-bold text-amber-700 flex items-center gap-1">
+            <span>정답:</span><EText editing={ed} value={q1Answer} onChange={v => onUpdate?.(r => ({ ...r, q1_answer: v }))} placeholder="③" />
+          </div>
+        )}
       </div>
       <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-1">2. 위 글의 빈칸 (가),(나)에 들어갈 말을 &lt;조건&gt;에 맞게 쓰시오.</p>
@@ -1086,12 +1368,17 @@ function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; 
         </div>
         {q2Items.map((item, i) => (
           <div key={i} className="mb-3 last:mb-0">
-            {item.ko && (
-              <p className="text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1 border border-indigo-100 mb-1 italic">{item.ko}</p>
+            {(item.ko || ed) && (
+              <EText editing={ed} value={item.ko ?? ''} onChange={v => updateQ2Item(i, { ko: v })} className="text-xs text-slate-600 bg-indigo-50 rounded px-2 py-1 border border-indigo-100 mb-1 italic" placeholder="한국어 번역" />
             )}
             <p className="text-xs font-black text-violet-700 mb-1">{item.blank} &lt;보기&gt;</p>
-            <p className="text-xs text-slate-700 bg-white rounded p-2 border leading-relaxed">{item.words.join(' / ')}</p>
-            {showAnswer && <p className="mt-1 text-xs font-bold text-amber-700">정답: {item.answer}</p>}
+            <EText editing={ed} value={item.words.join(' / ')} onChange={v => updateQ2Item(i, { words: v.split('/').map(w => w.trim()).filter(Boolean) })}
+              className="text-xs text-slate-700 bg-white rounded p-2 border leading-relaxed" />
+            {(showAnswer || ed) && (
+              <div className="mt-1 text-xs font-bold text-amber-700 flex items-center gap-1">
+                <span>정답:</span><EText editing={ed} value={item.answer} onChange={v => updateQ2Item(i, { answer: v })} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -1099,12 +1386,13 @@ function RenderComboVocabFill({ result, showAnswer }: { result: WorkbookResult; 
   );
 }
 
-function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderComboVocabGrammar({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const passage = result.passage as string ?? '';
   const q1Choices = (result.q1_choices as Array<{label:string;blank:string;word:string}>) || [];
   const q1Answer = result.q1_answer as string ?? '';
   const q2Choices = (result.q2_choices as Array<{label:string;pair:string}>) || [];
   const q2Answer = result.q2_answer as string ?? '';
+  const ed = isEditing && !!onUpdate;
   const parts = passage.split(/(\([A-E]\)_{3,}|[①②③④⑤][a-zA-Z''\-]+)/g);
   const renderPassage = () => parts.map((part, i) => {
     const bm = part.match(/^\(([A-E])\)(_{3,})$/);
@@ -1123,28 +1411,58 @@ function RenderComboVocabGrammar({ result, showAnswer }: { result: WorkbookResul
     );
     return <span key={i}>{part}</span>;
   });
+  const updateQ1Choice = (i: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.q1_choices as Array<{label:string;blank:string;word:string}>) ?? [])];
+    arr[i] = { ...arr[i], word: v };
+    return { ...r, q1_choices: arr };
+  });
+  const updateQ2Choice = (i: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.q2_choices as Array<{label:string;pair:string}>) ?? [])];
+    arr[i] = { ...arr[i], pair: v };
+    return { ...r, q2_choices: arr };
+  });
   return (
     <div className="text-sm leading-loose">
-      <p className="mb-4">{renderPassage()}</p>
+      {ed ? (
+        <EText editing value={passage} onChange={v => onUpdate?.(r => ({ ...r, passage: v }))} className="mb-4" multiline placeholder="(A)___~(E)___ 빈칸, ①~⑤ 어법 마커 포함 지문" />
+      ) : (
+        <p className="mb-4">{renderPassage()}</p>
+      )}
       <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-2">1. 위 글의 빈칸 (A)~(E)에 들어갈 말로 적절하지 않은 것은?</p>
-        <div className="flex flex-wrap gap-5 text-sm">
+        <div className="flex flex-wrap gap-3 text-sm items-center">
           {q1Choices.map((c, i) => {
             const hit = showAnswer && c.label === q1Answer;
-            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{c.label} {c.blank} {c.word}</span>;
+            return (
+              <span key={i} className={`inline-flex items-center gap-1 ${hit ? 'font-black text-rose-600 underline' : ''}`}>
+                {c.label} {c.blank} <EText editing={ed} value={c.word} onChange={v => updateQ1Choice(i, v)} className="w-20" />
+              </span>
+            );
           })}
         </div>
-        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {q1Answer}</p>}
+        {(showAnswer || ed) && (
+          <div className="mt-2 text-xs font-bold text-amber-700 flex items-center gap-1">
+            <span>정답:</span><EText editing={ed} value={q1Answer} onChange={v => onUpdate?.(r => ({ ...r, q1_answer: v }))} />
+          </div>
+        )}
       </div>
       <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
         <p className="text-xs font-black text-slate-700 mb-2">2. 위 글의 ①~⑤ 중 어법상 어색한 것만 고른 것은?</p>
-        <div className="flex flex-wrap gap-5 text-sm">
+        <div className="flex flex-wrap gap-3 text-sm items-center">
           {q2Choices.map((c, i) => {
             const hit = showAnswer && c.label === q2Answer;
-            return <span key={i} className={hit ? 'font-black text-rose-600 underline' : ''}>{c.label} {c.pair}</span>;
+            return (
+              <span key={i} className={`inline-flex items-center gap-1 ${hit ? 'font-black text-rose-600 underline' : ''}`}>
+                {c.label} <EText editing={ed} value={c.pair} onChange={v => updateQ2Choice(i, v)} className="w-16" />
+              </span>
+            );
           })}
         </div>
-        {showAnswer && <p className="mt-2 text-xs font-bold text-amber-700">정답: {q2Answer}</p>}
+        {(showAnswer || ed) && (
+          <div className="mt-2 text-xs font-bold text-amber-700 flex items-center gap-1">
+            <span>정답:</span><EText editing={ed} value={q2Answer} onChange={v => onUpdate?.(r => ({ ...r, q2_answer: v }))} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1173,11 +1491,24 @@ function getAnalysisStyle(role: string) {
   return ANALYSIS_ROLES[role] ?? { text: 'text-gray-500', border: 'border-gray-300', bg: 'bg-gray-50', label: role };
 }
 
-function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
+function RenderPassageAnalysis({ result, isEditing = false, onUpdate }: { result: WorkbookResult; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   type Chunk = { text: string; role: string };
   type Sentence = { num: number; en: string; ko: string; chunks: Chunk[] };
   const sentences = (result.sentences as Sentence[]) ?? [];
   const isPhrase = (role: string) => PHRASE_ROLES.has(role);
+  const ed = isEditing && !!onUpdate;
+  const updateChunk = (si: number, ci: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.sentences as Sentence[]) ?? [])];
+    const chunks = [...arr[si].chunks];
+    chunks[ci] = { ...chunks[ci], text: v };
+    arr[si] = { ...arr[si], chunks };
+    return { ...r, sentences: arr };
+  });
+  const updateKo = (si: number, v: string) => onUpdate?.(r => {
+    const arr = [...((r.sentences as Sentence[]) ?? [])];
+    arr[si] = { ...arr[si], ko: v };
+    return { ...r, sentences: arr };
+  });
 
   return (
     <div className="space-y-3">
@@ -1203,7 +1534,7 @@ function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
       </div>
 
       {/* 문장별 2단 레이아웃 */}
-      {sentences.map(sent => (
+      {sentences.map((sent, si) => (
         <div key={sent.num} className="flex border border-slate-200 rounded-xl overflow-hidden">
           {/* 왼쪽 70%: 구문분석 영어 */}
           <div className="w-[70%] p-4 bg-white border-r border-slate-100">
@@ -1213,9 +1544,14 @@ function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
                 const phrase = isPhrase(chunk.role);
                 return (
                   <div key={ci} className="flex flex-col items-center">
-                    <span className={`text-sm font-bold px-1.5 py-0.5 border-b-2 ${s.text} ${s.border} ${phrase ? 'italic' : ''}`}>
-                      {phrase ? `(${chunk.text})` : chunk.text}
-                    </span>
+                    {ed ? (
+                      <EText editing value={chunk.text} onChange={v => updateChunk(si, ci, v)}
+                        className={`text-sm font-bold px-1 py-0.5 ${s.text} ${phrase ? 'italic' : ''}`} />
+                    ) : (
+                      <span className={`text-sm font-bold px-1.5 py-0.5 border-b-2 ${s.text} ${s.border} ${phrase ? 'italic' : ''}`}>
+                        {phrase ? `(${chunk.text})` : chunk.text}
+                      </span>
+                    )}
                     <span className={`text-[9px] font-black mt-0.5 ${s.text}`}>{s.label}</span>
                   </div>
                 );
@@ -1225,7 +1561,7 @@ function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
           {/* 오른쪽 30%: 한국어 번역 */}
           <div className="w-[30%] p-3 bg-slate-50 flex items-start gap-1.5">
             <span className="text-[10px] font-black text-slate-400 mt-0.5 shrink-0">{sent.num}.</span>
-            <span className="text-xs font-bold text-slate-600 leading-relaxed">{sent.ko}</span>
+            <EText editing={ed} value={sent.ko} onChange={v => updateKo(si, v)} className="text-xs font-bold text-slate-600 leading-relaxed flex-1" multiline />
           </div>
         </div>
       ))}
@@ -1233,11 +1569,12 @@ function RenderPassageAnalysis({ result }: { result: WorkbookResult }) {
   );
 }
 
-function RenderSummarySentence({ result, showAnswer }: { result: WorkbookResult; showAnswer: boolean }) {
+function RenderSummarySentence({ result, showAnswer, isEditing = false, onUpdate }: { result: WorkbookResult; showAnswer: boolean; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const summary = (result.summary as string) ?? '';
   const instruction = (result.instruction as string) ?? '다음 글의 내용을 한 문장으로 요약할 때, 빈칸에 들어갈 알맞은 단어를 본문에서 찾아 쓰시오.';
   const answerKey = (result.answer_key as string) ?? '';
   const originalText = (result._original_text as string) ?? '';
+  const ed = isEditing && !!onUpdate;
 
   const answers: Record<number, string> = {};
   for (const m of answerKey.matchAll(/\((\d+)\)\s+(\S+)/g)) {
@@ -1257,56 +1594,71 @@ function RenderSummarySentence({ result, showAnswer }: { result: WorkbookResult;
       )}
       {/* 요약문 문제 */}
       <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-        <p className="text-xs font-black text-slate-400 mb-3 italic">{instruction}</p>
-        <p className="text-sm leading-10 text-slate-800 font-medium">
-          {parts.map((part, i) => {
-            const m = part.match(/\((\d+)\)(_+)/);
-            if (m) {
-              const n = parseInt(m[1]);
-              return (
-                <span key={i} className="inline-flex items-end mx-0.5 align-bottom">
-                  {showAnswer
-                    ? <span className="border-b-2 border-indigo-500 px-2 text-indigo-700 font-black text-xs leading-snug">{answers[n] ?? '?'}</span>
-                    : <span className="border-b-2 border-slate-400 w-16 inline-block">&nbsp;</span>
-                  }
-                </span>
-              );
-            }
-            return <span key={i}>{part}</span>;
-          })}
-        </p>
+        {ed ? (
+          <EText editing value={instruction} onChange={v => onUpdate?.(r => ({ ...r, instruction: v }))} className="text-xs font-black text-slate-400 mb-3 italic" />
+        ) : (
+          <p className="text-xs font-black text-slate-400 mb-3 italic">{instruction}</p>
+        )}
+        {ed ? (
+          <EText editing value={summary} onChange={v => onUpdate?.(r => ({ ...r, summary: v }))} className="text-sm leading-relaxed text-slate-800 font-medium" multiline placeholder="(1)________ 형식 빈칸 포함 요약문" />
+        ) : (
+          <p className="text-sm leading-10 text-slate-800 font-medium">
+            {parts.map((part, i) => {
+              const m = part.match(/\((\d+)\)(_+)/);
+              if (m) {
+                const n = parseInt(m[1]);
+                return (
+                  <span key={i} className="inline-flex items-end mx-0.5 align-bottom">
+                    {showAnswer
+                      ? <span className="border-b-2 border-indigo-500 px-2 text-indigo-700 font-black text-xs leading-snug">{answers[n] ?? '?'}</span>
+                      : <span className="border-b-2 border-slate-400 w-16 inline-block">&nbsp;</span>
+                    }
+                  </span>
+                );
+              }
+              return <span key={i}>{part}</span>;
+            })}
+          </p>
+        )}
       </div>
-      {showAnswer && (
-        <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
-          <p className="text-xs font-black text-amber-700">정답: {answerKey}</p>
+      {(showAnswer || ed) && (
+        <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 flex items-center gap-1">
+          <span className="text-xs font-black text-amber-700 shrink-0">정답:</span>
+          <EText editing={ed} value={answerKey} onChange={v => onUpdate?.(r => ({ ...r, answer_key: v }))} className="text-xs font-black text-amber-700 flex-1" placeholder="(1) word  (2) word" />
         </div>
       )}
     </div>
   );
 }
 
-function RenderResultContent({ result, type, showAnswer, showKorean }: { result: WorkbookResult; type: WorkbookType; showAnswer: boolean; showKorean?: boolean }) {
+function RenderResultContent({ result, type, showAnswer, showKorean, isEditing = false, onUpdate }: {
+  result: WorkbookResult; type: WorkbookType; showAnswer: boolean; showKorean?: boolean; isEditing?: boolean; onUpdate?: ResultUpdater;
+}) {
   if (result.error) return <p className="text-rose-500 font-bold text-sm">{result.error as string}</p>;
+  const ed = isEditing && !!onUpdate;
 
-  if (type === 'combo_vocab_grammar') return <RenderComboVocabGrammar result={result} showAnswer={showAnswer} />;
-  if (type === 'combo_vocab_fill') return <RenderComboVocabFill result={result} showAnswer={showAnswer} />;
-  if (type === 'combo_grammar_order') return <RenderComboGrammarOrder result={result} showAnswer={showAnswer} />;
-  if (type === 'combo_grammar_insert') return <RenderComboGrammarInsert result={result} showAnswer={showAnswer} />;
+  if (type === 'combo_vocab_grammar') return <RenderComboVocabGrammar result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
+  if (type === 'combo_vocab_fill') return <RenderComboVocabFill result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
+  if (type === 'combo_grammar_order') return <RenderComboGrammarOrder result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
+  if (type === 'combo_grammar_insert') return <RenderComboGrammarInsert result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
 
   const isCombo = type.startsWith('combo_');
   if (isCombo) {
     const s1 = (result.section1 ?? {}) as WorkbookResult;
     const s2 = (result.section2 ?? {}) as WorkbookResult;
     const [t1, t2] = ['grammar_choice', 'sentence_insertion'];
+    const updateSection = (key: 'section1' | 'section2'): ResultUpdater => (mutator) => onUpdate?.(r => ({
+      ...r, [key]: mutator((r[key] ?? {}) as WorkbookResult),
+    }));
     return (
       <div className="space-y-6">
         <div>
           <p className="text-xs font-black text-slate-900 mb-2">Section 1 — {TYPE_LABELS[t1 as WorkbookType]}</p>
-          <RenderResultContent result={s1} type={t1 as WorkbookType} showAnswer={showAnswer} showKorean={showKorean} />
+          <RenderResultContent result={s1} type={t1 as WorkbookType} showAnswer={showAnswer} showKorean={showKorean} isEditing={ed} onUpdate={updateSection('section1')} />
         </div>
         <div className="border-t border-slate-200 pt-4">
           <p className="text-xs font-black text-violet-600 mb-2">Section 2 — {TYPE_LABELS[t2 as WorkbookType]}</p>
-          <RenderResultContent result={s2} type={t2 as WorkbookType} showAnswer={showAnswer} showKorean={showKorean} />
+          <RenderResultContent result={s2} type={t2 as WorkbookType} showAnswer={showAnswer} showKorean={showKorean} isEditing={ed} onUpdate={updateSection('section2')} />
         </div>
       </div>
     );
@@ -1317,40 +1669,45 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
     case 'grammar_choice':
       return <RenderVocabChoicePassage passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
     case 'vocab_fill':
-      return <RenderVocabFill result={result} showAnswer={showAnswer} showKorean={showKorean ?? false} />;
+      return <RenderVocabFill result={result} showAnswer={showAnswer} showKorean={showKorean ?? false} isEditing={ed} onUpdate={onUpdate} />;
     case 'grammar_correct':
-      return <RenderGrammarCorrect passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
+      return <RenderGrammarCorrect passage={result.passage as string} answerKey={result.answer_key as string} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'grammar_correct_adv':
-      return <RenderGrammarCorrectAdv sentences={result.sentences as Array<{num:number;text:string}>} answerKey={result.answer_key as string} showAnswer={showAnswer} />;
+      return <RenderGrammarCorrectAdv result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'translation':
-      return <RenderTranslation sentences={result.sentences as Array<{num:number;en:string;ko:string}>} showAnswer={showAnswer} />;
+      return <RenderTranslation result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'word_order':
-      return <RenderWordOrder sentences={result.sentences as Array<{num:number;ko:string;scrambled:string[];answer:string}>} showAnswer={showAnswer} showKorean={showKorean ?? false} />;
+      return <RenderWordOrder result={result} showAnswer={showAnswer} showKorean={showKorean ?? false} isEditing={ed} onUpdate={onUpdate} />;
     case 'english_writing':
-      return <RenderEnglishWriting sentences={result.sentences as Array<{num:number;ko:string;hint_start:string;hint_end:string;answer:string}>} showAnswer={showAnswer} />;
+      return <RenderEnglishWriting result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'passage_translation':
-      return <RenderPassageTranslation result={result} />;
+      return <RenderPassageTranslation result={result} isEditing={ed} onUpdate={onUpdate} />;
     case 'paragraph_order':
-      return <RenderParagraphOrder data={result as {fixed_paragraph:string;shuffled_paragraphs:Array<{label:string;text:string}>;answer_key:string}} showAnswer={showAnswer} />;
+      return <RenderParagraphOrder result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'sentence_insertion':
-      return <RenderSentenceInsertion data={result as {insert_sentence:string;passage:string;answer_key:string}} showAnswer={showAnswer} />;
+      return <RenderSentenceInsertion result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'summary_sentence':
-      return <RenderSummarySentence result={result} showAnswer={showAnswer} />;
+      return <RenderSummarySentence result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'passage_analysis':
-      return <RenderPassageAnalysis result={result} />;
+      return <RenderPassageAnalysis result={result} isEditing={ed} onUpdate={onUpdate} />;
     case 'tf_questions': {
       const questions = (result.questions as Array<{num:number;statement:string;answer:string;explanation?:string}>) ?? [];
+      const updateQ = (i: number, patch: Partial<{statement:string;explanation:string}>) => onUpdate?.(r => {
+        const arr = [...((r.questions as Array<Record<string, unknown>>) ?? [])];
+        arr[i] = { ...arr[i], ...patch };
+        return { ...r, questions: arr };
+      });
       return (
         <div className="space-y-3">
           {questions.map((q, i) => (
             <div key={i} className="flex gap-3 items-start pb-3 border-b border-slate-100 last:border-0">
               <span className="shrink-0 text-sm font-black text-slate-500 min-w-5">{q.num}.</span>
               <div className="flex-1">
-                <p className="text-sm leading-relaxed mb-2">{q.statement}</p>
+                <EText editing={ed} value={q.statement} onChange={v => updateQ(i, { statement: v })} className="text-sm leading-relaxed mb-2" />
                 {showAnswer ? (
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-black px-3 py-0.5 rounded ${q.answer === 'T' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{q.answer}</span>
-                    {q.explanation && <span className="text-xs text-slate-500">{q.explanation}</span>}
+                    {(q.explanation || ed) && <EText editing={ed} value={q.explanation ?? ''} onChange={v => updateQ(i, { explanation: v })} className="text-xs text-slate-500 flex-1" />}
                   </div>
                 ) : (
                   <div className="flex gap-2">
@@ -1368,31 +1725,51 @@ function RenderResultContent({ result, type, showAnswer, showKorean }: { result:
       const titles = (result.titles as string[]) ?? [];
       const summaries = (result.summaries as string[]) ?? [];
       const koreanSummary = (result.korean_summary as string) ?? '';
+      const updateTitle = (i: number, v: string) => onUpdate?.(r => {
+        const arr = [...((r.titles as string[]) ?? [])];
+        arr[i] = v;
+        return { ...r, titles: arr };
+      });
+      const updateSummary = (i: number, v: string) => onUpdate?.(r => {
+        const arr = [...((r.summaries as string[]) ?? [])];
+        arr[i] = v;
+        return { ...r, summaries: arr };
+      });
       return (
         <div className="space-y-4">
           <div>
             <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">영어 제목 (3가지)</p>
-            {titles.map((t, i) => <p key={i} className="text-sm font-bold italic mb-1"><span className="text-slate-400 mr-2">{i+1}.</span>{t}</p>)}
+            {titles.map((t, i) => (
+              <div key={i} className="flex gap-2 mb-1">
+                <span className="text-slate-400 shrink-0">{i+1}.</span>
+                <EText editing={ed} value={t} onChange={v => updateTitle(i, v)} className="text-sm font-bold italic flex-1" />
+              </div>
+            ))}
           </div>
           <div>
             <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">1문장 영어 요약 (3가지)</p>
-            {summaries.map((s, i) => <p key={i} className="text-sm leading-relaxed mb-2"><span className="text-slate-400 mr-2">{i+1}.</span>{s}</p>)}
+            {summaries.map((s, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <span className="text-slate-400 shrink-0">{i+1}.</span>
+                <EText editing={ed} value={s} onChange={v => updateSummary(i, v)} className="text-sm leading-relaxed flex-1" />
+              </div>
+            ))}
           </div>
           <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
             <p className="text-xs font-black text-slate-500 mb-2">한글 요약</p>
-            <p className="text-sm leading-relaxed text-slate-700">{koreanSummary}</p>
+            <EText editing={ed} value={koreanSummary} onChange={v => onUpdate?.(r => ({ ...r, korean_summary: v }))} className="text-sm leading-relaxed text-slate-700" multiline />
           </div>
         </div>
       );
     }
     case 'suneung_vocab_right':
-      return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
+      return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'suneung_vocab_wrong':
-      return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} />;
+      return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'suneung_grammar_right':
-      return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} />;
+      return <RenderSuneungVocabABC result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'suneung_grammar_wrong':
-      return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} />;
+      return <RenderSuneungVocabWrong result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     default:
       return <pre className="text-xs text-slate-600 whitespace-pre-wrap">{JSON.stringify(result, null, 2)}</pre>;
   }
@@ -2668,6 +3045,7 @@ export default function WorkbookPage() {
   const [selectedTypes, setSelectedTypes] = useState<Set<WorkbookType>>(new Set(['passage_translation']));
   const [difficulty, setDifficulty] = useState<Difficulty>('b2');
   const [generating, setGenerating] = useState(false);
+  const genProgress = useProgressSimulator(25);
   const [generateError, setGenerateError] = useState('');
   const [allResults, setAllResults] = useState<TypeResult[]>([]);
   const [activeTypeTab, setActiveTypeTab] = useState(0);
@@ -2682,7 +3060,10 @@ export default function WorkbookPage() {
   const [wbPdfLayout, setWbPdfLayout] = useState<'passage' | 'type'>('type');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingAnswerPdf, setDownloadingAnswerPdf] = useState(false);
-  const [savingHistory, setSavingHistory] = useState(false);
+  // 'saving' 상태가 헤더 안의 작은 글씨로만 보여서 멈춘 것처럼 느껴진다는 피드백 —
+  // 눈에 잘 띄는 플로팅 배지로 옮기고, 완료/실패도 잠깐 보여준다(실패는 기존엔 콘솔에만
+  // 찍히고 화면에 전혀 안 보였음).
+  const [historySaveStatus, setHistorySaveStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
   const [academyName, setAcademyName] = useState('');
 
   // History tab
@@ -2695,7 +3076,6 @@ export default function WorkbookPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // 인라인 편집 (결과 화면에서 바로 수정)
-  type EditField = { key: string; label: string };
   const [isEditingResult, setIsEditingResult] = useState(false);
   const [editRawMode, setEditRawMode] = useState(false);
   useEffect(() => { setIsEditingResult(false); setEditRawMode(false); }, [activeTypeTab, activeResultTab]);
@@ -2843,6 +3223,7 @@ export default function WorkbookPage() {
     setActiveTypeTab(0);
     setActiveResultTab(0);
     setShowAnswer(false);
+    genProgress.start(typesArray.length);
 
     const resultSlots = new Array<TypeResult | null>(typesArray.length).fill(null);
     try {
@@ -2866,6 +3247,7 @@ export default function WorkbookPage() {
             throw new Error(json.error || '생성 실패');
           }
           resultSlots[ti] = { type, results: json.results ?? [] };
+          genProgress.complete();
           setAllResults(resultSlots.filter((r): r is TypeResult => r !== null));
         })
       );
@@ -2873,6 +3255,7 @@ export default function WorkbookPage() {
       if (firstFailed) {
         setGenerateError((firstFailed as PromiseRejectedResult).reason?.message || '일부 유형 생성에 실패했습니다.');
       }
+      genProgress.finish();
       // Auto-save: all types combined into one PDF per passage
       // Use the same array/indices that were passed to setAllResults to ensure DOM ID alignment
       const savedResults = resultSlots.filter((r): r is TypeResult => r !== null);
@@ -2882,6 +3265,7 @@ export default function WorkbookPage() {
       }
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      genProgress.stop();
     } finally {
       setGenerating(false);
     }
@@ -2889,7 +3273,18 @@ export default function WorkbookPage() {
 
   const autoSaveWorkbook = async (passageTexts: string[], title: string, savedResults: TypeResult[]) => {
     if (!session) return;
-    setSavingHistory(true);
+    setHistorySaveStatus('saving');
+    const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(b);
+    });
+    // 캡처(PDF 렌더링, CPU 작업)는 지문마다 순서대로 한다 — 동시에 여러 개 돌리면
+    // 메인 스레드를 서로 두고 경쟁해서 총 시간이 오히려 늘어난다. 대신 업로드(네트워크
+    // I/O)는 끝날 때까지 기다리지 않고 바로 다음 지문 캡처로 넘어간다 — 업로드가 진행되는
+    // 동안 다음 지문을 캡처해서 "캡처 ‖ 업로드"가 겹치는 파이프라인 구조로 전체 시간을 줄인다.
+    const uploadPromises: Promise<void>[] = [];
     try {
       const passageCount = passageTexts.length;
       for (let pi = 0; pi < passageCount; pi++) {
@@ -2906,39 +3301,42 @@ export default function WorkbookPage() {
           captureAllToPdf(problemIds),
           captureAllToPdf(answerIds),
         ]);
-        const toBase64 = (b: Blob) => new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(b);
-        });
         const [pdfBase64, answerPdfBase64] = await Promise.all([toBase64(problemBlob), toBase64(answerBlob)]);
         const passageFull = passageTexts[pi] || '';
-        const saveRes = await fetch('/api/save-vocab-choice-history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({
-            pdfBase64, answerPdfBase64,
-            title: title || null,
-            passageExcerpt: passageFull.slice(0, 100),
-            passageFull,
-            sourceType: activeTab === 'input' ? 'input' : 'mock',
-            year: activeTab === 'mock' && sortedSelectedNumbers[pi] ? parseInt(parseMockKey(sortedSelectedNumbers[pi]).year) || null : null,
-            grade: activeTab === 'mock' ? parseMockKey(sortedSelectedNumbers[pi] || '').grade || null : null,
-            institution: activeTab === 'mock' ? parseMockKey(sortedSelectedNumbers[pi] || '').institution || null : null,
-            questionNumber: activeTab === 'mock' ? parseInt(parseMockKey(sortedSelectedNumbers[pi] || '').num || '0') || null : null,
-            difficulty,
-          }),
-        });
-        if (!saveRes.ok) {
-          const errJson = await saveRes.json().catch(() => ({}));
-          throw new Error(errJson.error || `저장 실패 (${saveRes.status})`);
-        }
+        uploadPromises.push(
+          fetch('/api/save-vocab-choice-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              pdfBase64, answerPdfBase64,
+              title: title || null,
+              passageExcerpt: passageFull.slice(0, 100),
+              passageFull,
+              sourceType: activeTab === 'input' ? 'input' : 'mock',
+              year: activeTab === 'mock' && sortedSelectedNumbers[pi] ? parseInt(parseMockKey(sortedSelectedNumbers[pi]).year) || null : null,
+              grade: activeTab === 'mock' ? parseMockKey(sortedSelectedNumbers[pi] || '').grade || null : null,
+              institution: activeTab === 'mock' ? parseMockKey(sortedSelectedNumbers[pi] || '').institution || null : null,
+              questionNumber: activeTab === 'mock' ? parseInt(parseMockKey(sortedSelectedNumbers[pi] || '').num || '0') || null : null,
+              difficulty,
+            }),
+          }).then(async saveRes => {
+            if (!saveRes.ok) {
+              const errJson = await saveRes.json().catch(() => ({}));
+              throw new Error(errJson.error || `저장 실패 (${saveRes.status})`);
+            }
+          })
+        );
       }
+      // 캡처는 이미 전부 끝났고, 백그라운드에서 돌던 업로드들이 다 끝날 때까지만 기다린다.
+      const settled = await Promise.allSettled(uploadPromises);
+      const firstFailed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (firstFailed) throw firstFailed.reason;
+      setHistorySaveStatus('done');
+      setTimeout(() => setHistorySaveStatus(s => s === 'done' ? 'idle' : s), 3000);
     } catch (e) {
       console.error('[workbook] auto-save failed:', e);
-    } finally {
-      setSavingHistory(false);
+      setHistorySaveStatus('error');
+      setTimeout(() => setHistorySaveStatus(s => s === 'error' ? 'idle' : s), 5000);
     }
   };
 
@@ -2955,79 +3353,6 @@ export default function WorkbookPage() {
       next[activeTypeTab] = tr;
       return next;
     });
-  };
-
-  const getEditableFieldSpecs = (result: WorkbookResult, isChoiceType: boolean): EditField[] => {
-    const fields: EditField[] = [];
-    // 단일 passage 텍스트 (선택형 문항은 구조화 편집기를 사용하므로 제외)
-    if (typeof result.passage === 'string' && !isChoiceType)
-      fields.push({ key: 'passage', label: '지문' });
-    // 삽입 문장 (sentence_insertion)
-    if (typeof result.insert_sentence === 'string')
-      fields.push({ key: 'insert_sentence', label: '삽입 문장' });
-    // 고정 문단 (paragraph_order)
-    if (typeof result.fixed_paragraph === 'string')
-      fields.push({ key: 'fixed_paragraph', label: '고정 문단' });
-    // 셔플 문단 배열 (paragraph_order)
-    if (Array.isArray(result.shuffled_paragraphs))
-      (result.shuffled_paragraphs as Array<{label:string;text:string}>).forEach((p, i) =>
-        fields.push({ key: `shuffled_paragraphs.${i}.text`, label: `단락 (${p.label})` }));
-    // 문단 배열 (combo_grammar_order)
-    if (Array.isArray(result.paragraphs))
-      (result.paragraphs as Array<{label:string;text:string}>).forEach((p, i) =>
-        fields.push({ key: `paragraphs.${i}.text`, label: `문단 ${p.label}` }));
-    // 문장 배열 (translation / english_writing / vocab_fill / grammar_correct_adv / passage_translation / passage_analysis)
-    if (Array.isArray(result.sentences)) {
-      (result.sentences as Array<Record<string, unknown>>).forEach((s, i) => {
-        const num = (s.num ?? i + 1) as number;
-        if (typeof s.en === 'string')
-          fields.push({ key: `sentences.${i}.en`, label: `문장 ${num} (영어)` });
-        if (typeof s.ko === 'string')
-          fields.push({ key: `sentences.${i}.ko`, label: `문장 ${num} (한국어)` });
-        if (typeof s.text === 'string' && typeof s.en !== 'string')
-          fields.push({ key: `sentences.${i}.text`, label: `문장 ${num}` });
-        if (typeof s.answer === 'string')
-          fields.push({ key: `sentences.${i}.answer`, label: `문장 ${num} (정답)` });
-      });
-    }
-    // 한국어 요약 (passage_translation)
-    if (typeof result.korean_summary === 'string')
-      fields.push({ key: 'korean_summary', label: '한국어 요약' });
-    // 지문의 주요 어휘와 뜻 (passage_translation)
-    if (Array.isArray(result.vocab_table))
-      (result.vocab_table as Array<{ word: string; meaning: string }>).forEach((v, i) => {
-        fields.push({ key: `vocab_table.${i}.word`, label: `어휘 ${i + 1} (단어)` });
-        fields.push({ key: `vocab_table.${i}.meaning`, label: `어휘 ${i + 1} (뜻)` });
-      });
-    // 빈칸 포함 요약문 (summary_sentence)
-    if (typeof result.summary === 'string')
-      fields.push({ key: 'summary', label: '요약문 (빈칸 포함)' });
-    // 1번 선택지 (combo_vocab_fill, combo_vocab_grammar)
-    if (Array.isArray(result.q1_choices)) {
-      (result.q1_choices as Array<{label:string;word:string}>).forEach((c, i) =>
-        fields.push({ key: `q1_choices.${i}.word`, label: `1번 선택지 ${c.label}` }));
-    }
-    // 2번 문장완성 (combo_vocab_fill)
-    if (Array.isArray(result.q2_items)) {
-      (result.q2_items as Array<Record<string,unknown>>).forEach((item, i) => {
-        const blank = item.blank as string;
-        if (typeof item.ko === 'string')
-          fields.push({ key: `q2_items.${i}.ko`, label: `${blank} 한국어` });
-        if (Array.isArray(item.words))
-          fields.push({ key: `q2_items.${i}.words`, label: `${blank} 보기 단어` });
-        if (typeof item.answer === 'string')
-          fields.push({ key: `q2_items.${i}.answer`, label: `${blank} 정답` });
-      });
-    }
-    // 콤보 유형 섹션 지문
-    if (result.section1 && typeof (result.section1 as WorkbookResult).passage === 'string')
-      fields.push({ key: 'section1.passage', label: '1번 지문' });
-    if (result.section2 && typeof (result.section2 as WorkbookResult).passage === 'string')
-      fields.push({ key: 'section2.passage', label: '2번 지문' });
-    // 정답 (선택형은 원문 직접 수정 모드에서 별도로 편집하므로 제외)
-    if (typeof result.answer_key === 'string' && !isChoiceType)
-      fields.push({ key: 'answer_key', label: '정답' });
-    return fields;
   };
 
   const getFieldValue = (result: WorkbookResult, key: string): string => {
@@ -3612,6 +3937,9 @@ export default function WorkbookPage() {
                   ? '유형을 선택해주세요'
                   : `✨ ${typeCount}개 유형 생성하기 (${totalCost}C)`}
             </button>
+            {generating && (
+              <ProgressBar percent={genProgress.percent} colorClassName="bg-slate-900" />
+            )}
           </div>
         )}
 
@@ -3674,12 +4002,11 @@ export default function WorkbookPage() {
                       {TYPE_LABELS[currentType]}
                       {currentTypeResult.results.length > 1 ? ` — 지문 ${activeResultTab + 1}` : ''} 생성 완료
                     </span>
-                    {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
                   </div>
                 </div>
                 <div className="px-5 py-5">
                   {currentTypeResult.results[activeResultTab] && (
-                    isEditingResult ? (
+                    isEditingResult && isActiveChoiceType ? (
                       <div className="space-y-6">
                         {activeChoiceChunks && (
                           <>
@@ -3780,24 +4107,36 @@ export default function WorkbookPage() {
                           </div>
                         )}
 
-                        {getEditableFieldSpecs(currentTypeResult.results[activeResultTab], isActiveChoiceType).map(field => (
-                          <div key={field.key}>
-                            <label className="text-xs font-black text-gray-500 mb-1.5 block">{field.label}</label>
-                            <textarea
-                              value={getFieldValue(currentTypeResult.results[activeResultTab], field.key)}
-                              onChange={e => updateField(field.key, e.target.value)}
-                              rows={field.key.includes('section') || field.key === 'passage' || field.key.endsWith('text') && (field.key.startsWith('shuffled') || field.key.startsWith('paragraphs')) ? 4 : field.key.startsWith('sentences') ? 2 : 4}
-                              className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm font-medium focus:border-blue-400 focus:outline-none resize-y leading-relaxed"
-                            />
-                          </div>
-                        ))}
                       </div>
                     ) : (
-                      <RenderResultContent result={currentTypeResult.results[activeResultTab]} type={currentType} showAnswer={showAnswer} showKorean={showKorean} />
+                      <RenderResultContent result={currentTypeResult.results[activeResultTab]} type={currentType} showAnswer={showAnswer} showKorean={showKorean}
+                        isEditing={isEditingResult} onUpdate={updateActiveResult} />
                     )
                   )}
                 </div>
               </div>
+              {/* 이력 저장 상태 — 사이드 배지는 눈에 안 띈다는 피드백으로 화면 정중앙 팝업으로 변경.
+                  배경을 막지 않아(pointer-events-none) 저장 중에도 다른 조작은 그대로 가능하다. */}
+              {historySaveStatus !== 'idle' && (
+                <div className="no-print fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+                  {historySaveStatus === 'saving' && (
+                    <div className="flex items-center gap-3 bg-white shadow-2xl border border-slate-200 px-7 py-5 rounded-3xl text-base font-black text-slate-700">
+                      <div className="w-6 h-6 border-[3px] border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                      이력에 저장 중...
+                    </div>
+                  )}
+                  {historySaveStatus === 'done' && (
+                    <div className="flex items-center gap-3 bg-emerald-50 shadow-2xl border border-emerald-200 px-7 py-5 rounded-3xl text-base font-black text-emerald-600">
+                      ✅ 이력에 저장됨
+                    </div>
+                  )}
+                  {historySaveStatus === 'error' && (
+                    <div className="flex items-center gap-3 bg-rose-50 shadow-2xl border border-rose-200 px-7 py-5 rounded-3xl text-base font-black text-rose-600">
+                      ⚠️ 이력 저장 실패
+                    </div>
+                  )}
+                </div>
+              )}
               {/* 플로팅 액션 레일 — 지문분석(pdf-editor)처럼 화면 우측 하단에 고정 */}
               <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-2.5 z-50">
                 {currentType !== 'passage_translation' && (

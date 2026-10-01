@@ -3,7 +3,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateId } from '@/lib/uuid';
 import { supabase } from '@/lib/supabase';
+import { useProgressSimulator } from '@/lib/useProgressSimulator';
 import ConInsufficientModal from '@/components/ConInsufficientModal';
+import ProgressBar from '@/components/ProgressBar';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -358,8 +360,13 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string, originalPassage?: string): Promise<Blob | null> {
-  const { toJpeg } = await import('html-to-image');
+  const { toJpeg, getFontEmbedCSS } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
+  // 문항들을 Promise.all로 동시에 캡처하면, html-to-image가 원격 폰트(전역 CSS의 구글 폰트
+  // @import)를 캡처마다 따로 fetch하려다 경합하며 "Error loading remote css: Failed to
+  // fetch"가 나는 경우가 있다 — 캡처 시작 전에 한 번만 fetch해서 모든 캡처가 공유하게 한다.
+  let fontEmbedCSS: string | undefined;
+  try { fontEmbedCSS = await getFontEmbedCSS(document.body); } catch { /* 실패해도 캡처는 시스템 폰트로 계속 진행 */ }
 
   const W = 210, M = 8, GAP = 4;
   const colW = (W - 2 * M - GAP) / 2; // ~95mm per column
@@ -591,7 +598,7 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
       const rect = (r as HTMLElement).getBoundingClientRect();
       return { top: rect.top - containerTop, bottom: rect.bottom - containerTop };
     });
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, ...(fontEmbedCSS !== undefined ? { fontEmbedCSS } : {}) });
     document.body.removeChild(el);
     return { url, ratio, rowBoundariesCss };
   };
@@ -673,8 +680,13 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
 }
 
 async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Promise<Blob> {
-  const { toJpeg } = await import('html-to-image');
+  const { toJpeg, getFontEmbedCSS } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
+  // 문항들을 Promise.all로 동시에 캡처하면, html-to-image가 원격 폰트(전역 CSS의 구글 폰트
+  // @import)를 캡처마다 따로 fetch하려다 경합하며 "Error loading remote css: Failed to
+  // fetch"가 나는 경우가 있다 — 캡처 시작 전에 한 번만 fetch해서 모든 캡처가 공유하게 한다.
+  let fontEmbedCSS: string | undefined;
+  try { fontEmbedCSS = await getFontEmbedCSS(document.body); } catch { /* 실패해도 캡처는 시스템 폰트로 계속 진행 */ }
 
   const W = 210, M = 8, GAP = 4;
   const colW = (W - 2 * M - GAP) / 2;
@@ -734,7 +746,7 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
     const ratio = el.scrollHeight / el.offsetWidth;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true });
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.92, backgroundColor: '#ffffff', cacheBust: true, ...(fontEmbedCSS !== undefined ? { fontEmbedCSS } : {}) });
     document.body.removeChild(el);
     return { url, ratio };
   };
@@ -840,6 +852,7 @@ export default function AiQuestionsPage() {
 
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
+  const genProgress = useProgressSimulator(20);
   const [questions, setQuestions] = useState<ExamQuestion[] | null>(null);
   const [originalPassageText, setOriginalPassageText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -865,6 +878,7 @@ export default function AiQuestionsPage() {
   const [mockPdfTitle, setMockPdfTitle] = useState('');
   const [mockGenerating, setMockGenerating] = useState(false);
   const [mockProgress, setMockProgress] = useState('');
+  const mockGenProgress = useProgressSimulator(20);
   const [mockRevealedAnswers, setMockRevealedAnswers] = useState<Set<number>>(new Set());
   const [mockPdfLayout, setMockPdfLayout] = useState<'passage' | 'type' | 'random'>('passage');
   const [mockPdfSortedQuestions, setMockPdfSortedQuestions] = useState<ExamQuestion[]>([]);
@@ -1246,6 +1260,7 @@ export default function AiQuestionsPage() {
     const validKeys = mockSortedSelectedNumbers.filter(k => mockPassageMap[k]);
     let completedCount = 0;
     setMockProgress(`0/${validKeys.length}개 지문 생성 중...`);
+    mockGenProgress.start(validKeys.length);
     const questionSlots = new Array<ExamQuestion[]>(validKeys.length).fill([]);
     const settled = await Promise.allSettled(
       validKeys.map(async (key, i) => {
@@ -1262,6 +1277,7 @@ export default function AiQuestionsPage() {
         questionSlots[i] = (json.questions ?? []).map(q => ({ ...q, _passageText: text, _passageNumber: i + 1, _examLabel: `${mockExamLabel(year, institution)} ${num}번` }));
         completedCount++;
         setMockProgress(`${completedCount}/${validKeys.length}개 지문 생성 완료...`);
+        mockGenProgress.complete();
       })
     );
     const firstFailed = settled.find(r => r.status === 'rejected');
@@ -1269,11 +1285,13 @@ export default function AiQuestionsPage() {
       const msg = (firstFailed as PromiseRejectedResult).reason?.message;
       if (msg !== 'INSUFFICIENT_CON') setMockProgress(msg || '생성 오류');
       setMockGenerating(false);
+      mockGenProgress.stop();
       return;
     }
     const allQuestions = questionSlots.flat();
     setMockQuestions(allQuestions);
     setMockProgress(`${allQuestions.length}개 문제 생성 완료`);
+    mockGenProgress.finish();
     setMockGenerating(false);
     setTimeout(() => autoSaveMockExamHistory(allQuestions, mockSession), 1000);
   };
@@ -1547,6 +1565,7 @@ export default function AiQuestionsPage() {
     setLoadingMsg(msgs[0]);
     msgIntervalRef.current = setInterval(() => { msgIdx = (msgIdx + 1) % msgs.length; setLoadingMsg(msgs[msgIdx]); }, 8000);
 
+    genProgress.start(allPassageTexts.length);
     try {
       const questionSlots = new Array<ExamQuestion[]>(allPassageTexts.length).fill([]);
       let completedCount = 0;
@@ -1566,7 +1585,9 @@ export default function AiQuestionsPage() {
           if (json.error === 'INSUFFICIENT_CON') { setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 }); throw new Error('INSUFFICIENT_CON'); }
           if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
           questionSlots[pi] = (json.questions ?? []).map(q => ({ ...q, _passageText: passageText, _passageNumber: pi + 1 }));
-          if (allPassageTexts.length > 1) { completedCount++; setLoadingMsg(`${completedCount}/${allPassageTexts.length}개 지문 생성 완료...`); }
+          completedCount++;
+          genProgress.complete();
+          if (allPassageTexts.length > 1) setLoadingMsg(`${completedCount}/${allPassageTexts.length}개 지문 생성 완료...`);
         })
       );
       const firstFailed = settled.find(r => r.status === 'rejected');
@@ -1579,6 +1600,7 @@ export default function AiQuestionsPage() {
 
       setOriginalPassageText(allPassageTexts[0]);
       setQuestions(allQuestions);
+      genProgress.finish();
 
       const typesArr = validConfigs.map(c => c.type);
       const diffLabel = validConfigs.map(c => c.difficulty).join(',');
@@ -1586,6 +1608,7 @@ export default function AiQuestionsPage() {
       setTimeout(() => autoSaveExam(allQuestions, allPassageTexts[0], typesArr, titleSnapshot, allPassageTexts, diffLabel), 800);
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      genProgress.stop();
     } finally {
       if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);
       setLoading(false);
@@ -1980,6 +2003,9 @@ export default function AiQuestionsPage() {
           >
             {loading ? loadingMsg : 'AI 문제 생성하기'}
           </button>
+          {loading && (
+            <div className="mt-3"><ProgressBar percent={genProgress.percent} colorClassName="bg-indigo-500" /></div>
+          )}
 
           {/* 에러 */}
           {error && (
@@ -2683,8 +2709,11 @@ export default function AiQuestionsPage() {
             </button>
             {!mockAllPassagesReady && mockLoadingNumbers.size === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 1에서 지문 번호를 선택하세요</p>}
             {mockLoadingNumbers.size > 0 && <p className="text-xs font-bold text-indigo-400 mt-2 text-center animate-pulse">지문 불러오는 중...</p>}
+            {mockGenerating && (
+              <div className="mt-3"><ProgressBar percent={mockGenProgress.percent} colorClassName="bg-indigo-500" /></div>
+            )}
             {mockProgress && (
-              <p className={`text-sm font-bold mt-3 text-center ${mockGenerating ? 'text-indigo-500 animate-pulse' : 'text-gray-500'}`}>{mockProgress}</p>
+              <p className={`text-sm font-bold mt-2 text-center ${mockGenerating ? 'text-indigo-500 animate-pulse' : 'text-gray-500'}`}>{mockProgress}</p>
             )}
             {mockAutoSaveStatus === 'saving' && <p className="text-xs text-center text-indigo-400 mt-2 animate-pulse">이력 저장 중...</p>}
             {mockAutoSaveStatus === 'done' && <p className="text-xs text-center text-green-600 mt-2">✅ 이력 저장 완료</p>}

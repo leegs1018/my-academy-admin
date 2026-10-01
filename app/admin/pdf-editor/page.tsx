@@ -4,6 +4,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
+import { useProgressSimulator } from '@/lib/useProgressSimulator';
+import ProgressBar from '@/components/ProgressBar';
 
 function pdfErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : '';
@@ -97,7 +99,7 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
   answerAreaEls?.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
 
   try {
-    const { toJpeg } = await import('html-to-image');
+    const { toJpeg, getFontEmbedCSS } = await import('html-to-image');
     const { jsPDF } = await import('jspdf');
 
     const W = 210, M = 5, cW = W - 2 * M;
@@ -109,7 +111,12 @@ async function generatePdfBlob(hideAnswerArea = false): Promise<Blob | null> {
     const SAFE_CAPTURE_HEIGHT_PX = 3500;
     const tallestPx = Math.max(page1El.offsetHeight, page2El.offsetHeight);
     const pixelRatio = tallestPx > 0 ? Math.min(2, SAFE_CAPTURE_HEIGHT_PX / tallestPx) : 2;
-    const opts = { pixelRatio, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
+    // 두 페이지를 Promise.all로 동시에 캡처하면 원격 폰트(구글 폰트) CSS를 각자 따로
+    // fetch하려다 경합해 "Error loading remote css: Failed to fetch"가 날 수 있다 —
+    // 캡처 전에 한 번만 fetch해서 둘 다 재사용하게 한다.
+    let fontEmbedCSS: string | undefined;
+    try { fontEmbedCSS = await getFontEmbedCSS(page1El); } catch { /* 실패해도 캡처는 시스템 폰트로 계속 진행 */ }
+    const opts = { pixelRatio, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true, ...(fontEmbedCSS !== undefined ? { fontEmbedCSS } : {}) };
     const [url1, url2] = await Promise.all([
       toJpeg(page1El, opts),
       toJpeg(page2El, opts),
@@ -168,7 +175,7 @@ async function generateMockPdfBlob(hideAnswerArea = false, suffix = ''): Promise
   const answerAreaEls = hideAnswerArea ? document.querySelectorAll('.mw-answer-area') : null;
   answerAreaEls?.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
   try {
-    const { toJpeg } = await import('html-to-image');
+    const { toJpeg, getFontEmbedCSS } = await import('html-to-image');
     const { jsPDF } = await import('jspdf');
     const W = 210, M = 5, cW = W - 2 * M;
     const maxRatio = (297 - 2 * M) / cW;
@@ -176,7 +183,10 @@ async function generateMockPdfBlob(hideAnswerArea = false, suffix = ''): Promise
     const SAFE_CAPTURE_HEIGHT_PX = 3500;
     const tallestPx = Math.max(page1El.offsetHeight, page2El.offsetHeight);
     const pixelRatio = tallestPx > 0 ? Math.min(2, SAFE_CAPTURE_HEIGHT_PX / tallestPx) : 2;
-    const opts = { pixelRatio, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true };
+    // 두 페이지를 Promise.all로 동시에 캡처할 때 원격 폰트 fetch 경합을 막기 위해 미리 1회만 fetch
+    let fontEmbedCSS: string | undefined;
+    try { fontEmbedCSS = await getFontEmbedCSS(page1El); } catch { /* 실패해도 캡처는 시스템 폰트로 계속 진행 */ }
+    const opts = { pixelRatio, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true, ...(fontEmbedCSS !== undefined ? { fontEmbedCSS } : {}) };
     const [url1, url2] = await Promise.all([toJpeg(page1El, opts), toJpeg(page2El, opts)]);
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     const addPaged = async (url: string, newPage: boolean) => {
@@ -221,7 +231,7 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 async function buildAnswerPdfBlob(result: GeneratedMaterials, title: string): Promise<Blob> {
-  const { toJpeg } = await import('html-to-image');
+  const { toJpeg, getFontEmbedCSS } = await import('html-to-image');
   const { jsPDF } = await import('jspdf');
 
   const el = document.createElement('div');
@@ -249,7 +259,9 @@ async function buildAnswerPdfBlob(result: GeneratedMaterials, title: string): Pr
   try {
     const W = 210, M = 5, cW = W - 2 * M;
     const ratio = el.offsetHeight / el.offsetWidth;
-    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true });
+    let fontEmbedCSS: string | undefined;
+    try { fontEmbedCSS = await getFontEmbedCSS(el); } catch { /* 실패해도 캡처는 시스템 폰트로 계속 진행 */ }
+    const url = await toJpeg(el, { pixelRatio: 2, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true, ...(fontEmbedCSS !== undefined ? { fontEmbedCSS } : {}) });
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     pdf.addImage(url, 'JPEG', M, M, cW, cW * ratio);
     return pdf.output('blob');
@@ -328,6 +340,7 @@ export default function PdfEditorPage() {
   const [difficulty, setDifficulty] = useState<'a2' | 'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
+  const genProgress = useProgressSimulator(20);
   const [inputResults, setInputResults] = useState<WorkbookResult[]>([]);
   const [activeInputResultTab, setActiveInputResultTab] = useState(0);
   const [inputSaveStatusMap, setInputSaveStatusMap] = useState<Record<number, 'idle' | 'saving' | 'done' | 'error'>>({});
@@ -360,6 +373,7 @@ export default function PdfEditorPage() {
   const [mockDifficulty, setMockDifficulty] = useState<'a2' | 'b1' | 'b2' | 'c1' | 'c2'>('b2');
   const [mockLoading, setMockLoading] = useState(false);
   const [mockLoadingMsg, setMockLoadingMsg] = useState('');
+  const mockGenProgress = useProgressSimulator(20);
   const [mockError, setMockError] = useState<string | null>(null);
   const [mockResults, setMockResults] = useState<WorkbookResult[]>([]);
   const [activeMockResultTab, setActiveMockResultTab] = useState(0);
@@ -738,6 +752,7 @@ export default function PdfEditorPage() {
     const resultSlots = new Array<WorkbookResult | null>(validKeys.length).fill(null);
     let completedCount = 0;
     setMockLoadingMsg(`0/${validKeys.length}개 지문 생성 중...`);
+    mockGenProgress.start(validKeys.length);
     try {
       const settled = await Promise.allSettled(
         validKeys.map(async (key, i) => {
@@ -755,6 +770,7 @@ export default function PdfEditorPage() {
           resultSlots[i] = { number: num, year, grade, institution, passageText: text, materials: json.data as GeneratedMaterials };
           completedCount++;
           setMockLoadingMsg(`${completedCount}/${validKeys.length}개 지문 생성 완료...`);
+          mockGenProgress.complete();
           setMockResults(resultSlots.filter((r): r is WorkbookResult => r !== null));
         })
       );
@@ -762,7 +778,8 @@ export default function PdfEditorPage() {
       if (firstFailed) {
         setMockError((firstFailed as PromiseRejectedResult).reason?.message || '일부 지문 생성에 실패했습니다.');
       }
-    } catch (e) { setMockError(e instanceof Error ? e.message : '오류가 발생했습니다.'); }
+      mockGenProgress.finish();
+    } catch (e) { setMockError(e instanceof Error ? e.message : '오류가 발생했습니다.'); mockGenProgress.stop(); }
     finally { setMockLoading(false); }
   };
 
@@ -888,6 +905,7 @@ export default function PdfEditorPage() {
       setLoadingMsg(`0/${validPassages.length}개 지문 생성 중...`);
     }
 
+    genProgress.start(validPassages.length);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const resultSlots = new Array<WorkbookResult | null>(validPassages.length).fill(null);
@@ -907,15 +925,18 @@ export default function PdfEditorPage() {
           if (!res.ok) throw new Error(json.error || '오류가 발생했습니다.');
           resultSlots[i] = { number: String(i + 1), passageText: text, materials: json.data as GeneratedMaterials };
           completedCount++;
+          genProgress.complete();
           if (validPassages.length > 1) setLoadingMsg(`${completedCount}/${validPassages.length}개 지문 생성 완료...`);
           setInputResults(resultSlots.filter((r): r is WorkbookResult => r !== null));
         })
       );
       const firstFailed = settled.find(r => r.status === 'rejected');
       if (firstFailed) setError((firstFailed as PromiseRejectedResult).reason?.message || '일부 지문 생성에 실패했습니다.');
+      genProgress.finish();
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return;
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      genProgress.stop();
     } finally {
       if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);
       setLoading(false);
@@ -1030,12 +1051,17 @@ export default function PdfEditorPage() {
 
       {(loading || passages.some(p => p.ocrLoading)) && (
         <div className="no-print fixed inset-0 bg-indigo-900/60 backdrop-blur-md z-[200] flex items-center justify-center">
-          <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4">
+          <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4 w-full">
             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
             <p className="font-black text-indigo-600 text-xl animate-pulse">
               {passages.some(p => p.ocrLoading) ? '이미지에서 텍스트를 추출하고 있어요... 🔍' : loadingMsg}
             </p>
-            {loading && <p className="text-slate-400 font-bold text-sm mt-3">30~60초 정도 소요될 수 있어요</p>}
+            {loading && (
+              <>
+                <div className="mt-5"><ProgressBar percent={genProgress.percent} colorClassName="bg-indigo-500" /></div>
+                <p className="text-slate-400 font-bold text-sm mt-3">30~60초 정도 소요될 수 있어요</p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1600,9 +1626,10 @@ export default function PdfEditorPage() {
         <>
           {mockLoading && (
             <div className="no-print fixed inset-0 bg-indigo-900/60 backdrop-blur-md z-[200] flex items-center justify-center">
-              <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4">
+              <div className="bg-white rounded-[2.5rem] p-12 text-center shadow-2xl max-w-sm mx-4 w-full">
                 <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
                 <p className="font-black text-indigo-600 text-xl animate-pulse">{mockLoadingMsg}</p>
+                <div className="mt-5"><ProgressBar percent={mockGenProgress.percent} colorClassName="bg-indigo-500" /></div>
                 <p className="text-slate-400 font-bold text-sm mt-3">지문당 30~60초 소요됩니다</p>
               </div>
             </div>
