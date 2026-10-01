@@ -2520,9 +2520,16 @@ export default function AiQuestionsPage() {
       {/* ── 모의고사 지문 탭 ── */}
       {activeMainTab === 'mock' && (
         <div className="space-y-6">
-          {/* STEP 1 — 기출 지문 선택 */}
+          {/* STEP 1 — 문제 제목 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 기출 지문 선택</h2>
+            <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 문제 제목</h2>
+            <input type="text" value={mockPdfTitle} onChange={e => setMockPdfTitle(e.target.value)} placeholder="예: 2024 수능 18번 변형"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          </div>
+
+          {/* STEP 2 — 기출 지문 선택 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-base font-black text-gray-800 mb-4">STEP 2 — 기출 지문 선택</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               {[
                 { label: '학년', value: mockSelectedGrade, onChange: setMockSelectedGrade, disabled: false, options: mockGrades.map(g => ({ value: g, label: g })) },
@@ -2620,13 +2627,6 @@ export default function AiQuestionsPage() {
             )}
           </div>
 
-          {/* STEP 2 — 문제 제목 */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-base font-black text-gray-800 mb-4">STEP 2 — 문제 제목</h2>
-            <input type="text" value={mockPdfTitle} onChange={e => setMockPdfTitle(e.target.value)} placeholder="예: 2024 수능 18번 변형"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-          </div>
-
           {/* STEP 3 — 문제 유형 설정 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-3">
@@ -2707,7 +2707,7 @@ export default function AiQuestionsPage() {
               className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               {mockGenerating ? '⏳ 생성 중...' : 'AI 문제 생성하기'}
             </button>
-            {!mockAllPassagesReady && mockLoadingNumbers.size === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 1에서 지문 번호를 선택하세요</p>}
+            {!mockAllPassagesReady && mockLoadingNumbers.size === 0 && <p className="text-xs font-bold text-gray-400 mt-2 text-center">STEP 2에서 지문 번호를 선택하세요</p>}
             {mockLoadingNumbers.size > 0 && <p className="text-xs font-bold text-indigo-400 mt-2 text-center animate-pulse">지문 불러오는 중...</p>}
             {mockGenerating && (
               <div className="mt-3"><ProgressBar percent={mockGenProgress.percent} colorClassName="bg-indigo-500" /></div>
