@@ -2673,7 +2673,8 @@ export default function WorkbookPage() {
   const [activeTypeTab, setActiveTypeTab] = useState(0);
   const [activeResultTab, setActiveResultTab] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [showKorean, setShowKorean] = useState(false);
+  // 한글 번역은 토글 없이 항상 포함해서 보여준다.
+  const [showKorean] = useState(true);
   const [pricePerUse, setPricePerUse] = useState(0);
   const [wbDirectPricing, setWbDirectPricing] = useState<Record<string, number>>({});
   const [wbMockPricing, setWbMockPricing] = useState<Record<string, number>>({});
@@ -2992,6 +2993,15 @@ export default function WorkbookPage() {
     // 한국어 요약 (passage_translation)
     if (typeof result.korean_summary === 'string')
       fields.push({ key: 'korean_summary', label: '한국어 요약' });
+    // 지문의 주요 어휘와 뜻 (passage_translation)
+    if (Array.isArray(result.vocab_table))
+      (result.vocab_table as Array<{ word: string; meaning: string }>).forEach((v, i) => {
+        fields.push({ key: `vocab_table.${i}.word`, label: `어휘 ${i + 1} (단어)` });
+        fields.push({ key: `vocab_table.${i}.meaning`, label: `어휘 ${i + 1} (뜻)` });
+      });
+    // 빈칸 포함 요약문 (summary_sentence)
+    if (typeof result.summary === 'string')
+      fields.push({ key: 'summary', label: '요약문 (빈칸 포함)' });
     // 1번 선택지 (combo_vocab_fill, combo_vocab_grammar)
     if (Array.isArray(result.q1_choices)) {
       (result.q1_choices as Array<{label:string;word:string}>).forEach((c, i) =>
@@ -3014,6 +3024,9 @@ export default function WorkbookPage() {
       fields.push({ key: 'section1.passage', label: '1번 지문' });
     if (result.section2 && typeof (result.section2 as WorkbookResult).passage === 'string')
       fields.push({ key: 'section2.passage', label: '2번 지문' });
+    // 정답 (선택형은 원문 직접 수정 모드에서 별도로 편집하므로 제외)
+    if (typeof result.answer_key === 'string' && !isChoiceType)
+      fields.push({ key: 'answer_key', label: '정답' });
     return fields;
   };
 
@@ -3653,6 +3666,7 @@ export default function WorkbookPage() {
               </div>
             )}
             {currentTypeResult && (
+              <>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-3">
@@ -3661,50 +3675,6 @@ export default function WorkbookPage() {
                       {currentTypeResult.results.length > 1 ? ` — 지문 ${activeResultTab + 1}` : ''} 생성 완료
                     </span>
                     {savingHistory && <span className="text-xs font-bold text-slate-400 animate-pulse">저장 중...</span>}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {(currentType === 'vocab_fill' || currentType === 'word_order') && (
-                      <button onClick={() => setShowKorean(!showKorean)}
-                        className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showKorean ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                        {showKorean ? '🇰🇷 한글 포함 중' : '🇰🇷 한글 번역'}
-                      </button>
-                    )}
-                    {currentType !== 'passage_translation' && (
-                      <button onClick={() => setShowAnswer(!showAnswer)}
-                        className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                        {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
-                      </button>
-                    )}
-                    <button onClick={() => setIsEditingResult(v => !v)}
-                      className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${isEditingResult ? 'bg-blue-600 text-white' : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'}`}>
-                      {isEditingResult ? '✏️ 편집 종료' : '✏️ 편집'}
-                    </button>
-                    <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
-                      className="px-4 py-2 text-xs font-black bg-slate-700 hover:bg-slate-900 text-white rounded-xl transition-all disabled:opacity-50">
-                      {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
-                    </button>
-                    {currentType !== 'passage_translation' && (
-                      <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
-                        className="px-4 py-2 text-xs font-black bg-slate-500 hover:bg-slate-700 text-white rounded-xl transition-all disabled:opacity-50">
-                        {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
-                      </button>
-                    )}
-                    {allResults.length > 1 && (
-                      <button onClick={() => handleDownloadAllPdf(false)} disabled={downloadingAllPdf}
-                        className="px-4 py-2 text-xs font-black bg-slate-900 hover:bg-black text-white rounded-xl transition-all disabled:opacity-50">
-                        {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 문제 PDF'}
-                      </button>
-                    )}
-                    {allResults.length > 1 && currentType !== 'passage_translation' && (
-                      <button onClick={() => handleDownloadAllPdf(true)} disabled={downloadingAllPdf}
-                        className="px-4 py-2 text-xs font-black border-2 border-slate-900 text-slate-900 hover:bg-slate-900 hover:text-white rounded-xl transition-all disabled:opacity-50">
-                        {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 정답 PDF'}
-                      </button>
-                    )}
-                    <button onClick={handleDownloadSimplePdf} disabled={downloadingSimplePdf || !allResults.length}
-                      className="px-4 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all disabled:opacity-50">
-                      {downloadingSimplePdf ? '생성 중...' : '⬇️ 심플 답지 PDF'}
-                    </button>
                   </div>
                 </div>
                 <div className="px-5 py-5">
@@ -3828,6 +3798,50 @@ export default function WorkbookPage() {
                   )}
                 </div>
               </div>
+              {/* 플로팅 액션 레일 — 지문분석(pdf-editor)처럼 화면 우측 하단에 고정 */}
+              <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-2.5 z-50">
+                {currentType !== 'passage_translation' && (
+                  <button onClick={() => setShowAnswer(!showAnswer)}
+                    className={`px-4 py-2 text-xs font-black rounded-xl shadow-lg transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}>
+                    {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
+                  </button>
+                )}
+                <div className="flex gap-2">
+                  <button onClick={() => setIsEditingResult(v => !v)}
+                    className={`px-4 py-2.5 text-sm font-black rounded-xl shadow-lg transition-all ${isEditingResult ? 'bg-blue-600 text-white' : 'bg-white hover:bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                    {isEditingResult ? '✏️ 편집 종료' : '✏️ 편집'}
+                  </button>
+                  <button onClick={() => handleDownloadPdf(false)} disabled={downloadingPdf}
+                    className="px-4 py-2.5 text-sm font-black bg-slate-700 hover:bg-slate-900 text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
+                    {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
+                  </button>
+                  {currentType !== 'passage_translation' && (
+                    <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
+                      className="px-4 py-2.5 text-sm font-black bg-slate-500 hover:bg-slate-700 text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
+                      {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {allResults.length > 1 && (
+                    <button onClick={() => handleDownloadAllPdf(false)} disabled={downloadingAllPdf}
+                      className="px-4 py-2.5 text-sm font-black bg-slate-900 hover:bg-black text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
+                      {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 문제 PDF'}
+                    </button>
+                  )}
+                  {allResults.length > 1 && currentType !== 'passage_translation' && (
+                    <button onClick={() => handleDownloadAllPdf(true)} disabled={downloadingAllPdf}
+                      className="px-4 py-2.5 text-sm font-black border-2 border-slate-900 bg-white text-slate-900 hover:bg-slate-900 hover:text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
+                      {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 정답 PDF'}
+                    </button>
+                  )}
+                  <button onClick={handleDownloadSimplePdf} disabled={downloadingSimplePdf || !allResults.length}
+                    className="px-4 py-2.5 text-sm font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
+                    {downloadingSimplePdf ? '생성 중...' : '⬇️ 심플 답지 PDF'}
+                  </button>
+                </div>
+              </div>
+              </>
             )}
           </div>
         )}
