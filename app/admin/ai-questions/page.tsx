@@ -835,7 +835,9 @@ export default function AiQuestionsPage() {
       type: o.key,
       difficulty: 'b2' as const,
       count: 1,
-      enabled: true,
+      // 기본값으로 전체 유형이 다 체크되어 있으면 실수로 다 생성해버리기 쉬워서,
+      // 주제/제목 유형 하나만 기본 선택되게 한다 (나머지는 직접 켜야 함).
+      enabled: o.key === 'topic_title',
       isCustom: false,
     }))
   );
