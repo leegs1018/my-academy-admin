@@ -1437,6 +1437,27 @@ interface TypeConfigInput {
   count: number;
 }
 
+// 유형별 재시도 빈도를 쌓아서 콘단가 원가 계산에 반영하기 위한 로그.
+// 생성 자체를 막으면 안 되므로 실패해도 조용히 무시하고(fire-and-forget), 절대 await로
+// 사용자 응답 속도를 늦추지 않는다.
+function logGenerationAttempt(questionType: string, model: string, attempts: number, success: boolean, academyId?: string): void {
+  try {
+    const supabase = createAdminClient();
+    void supabase.from('generation_retry_log').insert({
+      feature: 'exam_question',
+      question_type: questionType,
+      model,
+      attempts,
+      success,
+      academy_id: academyId ?? null,
+    }).then(({ error }) => {
+      if (error) console.warn('[generation_retry_log] 기록 실패:', error.message);
+    });
+  } catch (e) {
+    console.warn('[generation_retry_log] 기록 실패:', e);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json() as {
@@ -1562,7 +1583,14 @@ export async function POST(request: Request) {
         : (questionType === 'sentence_order' ? 1 : Math.floor(Math.random() * 5) + 1);
       const model = TYPE_MODEL_MAP[questionType] ?? DEFAULT_MODEL;
       const isMultiStep = MULTI_STEP_TYPES.has(questionType);
+      // 이 유형이 몇 번째 시도에서 끝났는지(성공이든 포기든) 기록해서 재시도 빈도를 추적한다.
+      // for 루프 안의 수많은 return null 지점을 전부 건드리지 않아도, try/finally는 어느
+      // 경로로 빠져나가든 항상 실행되므로 finally에서 한 번만 기록하면 된다.
+      let attemptsUsed = 0;
+      let succeeded = false;
+      try {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        attemptsUsed = attempt + 1;
         let q: ExamQuestion | undefined;
         try {
           type Msg = { role: 'user' | 'assistant'; content: string };
@@ -1960,10 +1988,14 @@ export async function POST(request: Request) {
           }
         }
 
+        succeeded = true;
         return q;
       }
       console.error(`[${questionType}] 모든 시도 소진 — null 반환 (MAX_RETRIES=${MAX_RETRIES})`);
       return null;
+      } finally {
+        logGenerationAttempt(questionType, model, attemptsUsed, succeeded, academy_id);
+      }
     };
 
     // 유형 병렬 실행 + 유형 내 count도 병렬 실행 (순차 실행 시 타임아웃 방지)

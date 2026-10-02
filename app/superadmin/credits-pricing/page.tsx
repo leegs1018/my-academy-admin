@@ -70,6 +70,19 @@ const AI_DIRECT_KEYS = [
 ];
 const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type_'));
 
+const AI_QUESTION_TYPE_LABELS: Record<string, string> = {
+  topic_title: '주제/제목', grammar: '어법', vocab_paraphrase: '어휘 바꿔쓰기',
+  vocab_blank: '어휘 빈칸', fill_blank: '빈칸추론', summary: '요약문',
+  flow: '글의 흐름', phrase_meaning: '함축 의미', sentence_order: '글의 순서',
+  sentence_insertion: '문장 삽입',
+};
+const getQuestionTypeLabel = (k: string) => AI_QUESTION_TYPE_LABELS[k] ?? k;
+
+interface RetryStat {
+  question_type: string; model: string | null;
+  total: number; succeeded: number; avgAttempts: number; retryRate: number;
+}
+
 // ─── 유형별 평균 토큰 (프롬프트 분석 기반 추정) ──────────────────────────────
 
 const T = (i: number, o: number, m: ModelKey = 'gpt-5.1', steps = 1): FeatureTokens => ({ in: i, out: o, model: m, steps });
@@ -205,6 +218,22 @@ export default function ConPricingPage() {
   const [costSaveStatus, setCostSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
+
+  const [retryStats, setRetryStats] = useState<RetryStat[]>([]);
+  const [retryStatsLoading, setRetryStatsLoading] = useState(true);
+  const [retryStatsDays, setRetryStatsDays] = useState(7);
+  const [retryStatsTotal, setRetryStatsTotal] = useState(0);
+
+  useEffect(() => {
+    setRetryStatsLoading(true);
+    fetch(`/api/superadmin/generation-retry-stats?days=${retryStatsDays}`)
+      .then(r => r.json())
+      .then(data => {
+        setRetryStats(data.stats || []);
+        setRetryStatsTotal(data.totalLogged || 0);
+      })
+      .finally(() => setRetryStatsLoading(false));
+  }, [retryStatsDays]);
 
   useEffect(() => {
     Promise.all([
@@ -581,6 +610,66 @@ export default function ConPricingPage() {
         <p className="text-[10px] text-slate-600 font-bold">
           * 원가 = (평균입력토큰 / 1M × 입력단가 + 평균출력토큰 / 1M × 출력단가) × 환율 · 토큰 수는 실제 프롬프트 분석 기반 추정치
         </p>
+      </div>
+
+      {/* 재시도 통계 */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black text-white">🔁 실전변형 재시도 통계</h3>
+            <p className="text-xs text-slate-500 font-bold mt-1">
+              유형별 평균 시도 횟수·재시도율입니다. 재시도가 잦은 유형은 실제 원가가 위 계산보다 높습니다.
+            </p>
+          </div>
+          <select value={retryStatsDays} onChange={e => setRetryStatsDays(Number(e.target.value))}
+            className="shrink-0 text-xs font-black px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none">
+            <option value={1}>최근 1일</option>
+            <option value={7}>최근 7일</option>
+            <option value={30}>최근 30일</option>
+            <option value={90}>최근 90일</option>
+          </select>
+        </div>
+
+        {retryStatsLoading ? (
+          <div className="text-center py-8 text-slate-400 font-bold text-sm">불러오는 중...</div>
+        ) : retryStats.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 font-bold text-sm">
+            기록된 데이터가 없습니다.<br />
+            <code className="text-yellow-400 text-xs">supabase-generation-retry-log-migration.sql</code>을 아직 실행하지 않았다면 먼저 실행해주세요.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] font-black text-slate-500 border-b border-slate-800">
+                  <th className="py-2 pr-4">유형</th>
+                  <th className="py-2 pr-4">모델</th>
+                  <th className="py-2 pr-4 text-right">생성 횟수</th>
+                  <th className="py-2 pr-4 text-right">성공</th>
+                  <th className="py-2 pr-4 text-right">평균 시도</th>
+                  <th className="py-2 pr-4 text-right">재시도율</th>
+                </tr>
+              </thead>
+              <tbody>
+                {retryStats.map(s => (
+                  <tr key={s.question_type} className="border-b border-slate-800/60">
+                    <td className="py-2 pr-4 font-bold text-white">{getQuestionTypeLabel(s.question_type)}</td>
+                    <td className="py-2 pr-4 text-slate-400 font-bold">{s.model ?? '-'}</td>
+                    <td className="py-2 pr-4 text-right text-slate-300 font-bold">{s.total}</td>
+                    <td className="py-2 pr-4 text-right text-slate-300 font-bold">{s.succeeded}</td>
+                    <td className="py-2 pr-4 text-right text-slate-300 font-bold">{s.avgAttempts}</td>
+                    <td className={`py-2 pr-4 text-right font-black ${s.retryRate >= 30 ? 'text-red-400' : s.retryRate >= 10 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                      {s.retryRate}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-slate-600 font-bold mt-2">
+              * 총 {retryStatsTotal.toLocaleString()}건 기록 · 재시도율 = 2회 이상 시도한 생성의 비율
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
