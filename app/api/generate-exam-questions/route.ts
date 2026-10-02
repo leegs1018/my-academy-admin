@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 export interface ExamChoice {
   number: number;
@@ -1538,10 +1538,11 @@ export async function POST(request: Request) {
 
     const CIRCLES = ['①','②','③','④','⑤'];
 
-    // vocab_paraphrase/vocab_blank는 gpt-6-sol high로 테스트해봤으나 품질이 gpt-5.1과
-    // 비슷해 원래대로 되돌림. grammar만 gpt-6-luna high로 전환.
+    // gpt-6-luna high로 전환했었으나 실제 서비스에서 reasoning 토큰 예산을 넘겨 매번
+    // 빈 응답(<no output>)만 반환하면서 비용만 태우는 버그가 확인되어 원복.
+    // (OpenAI 사용 로그에서 10/1 이후 gpt-6-luna 요청이 전부 <no output>으로 찍힌 것 확인)
     const TYPE_MODEL_MAP: Record<string, string> = {
-      grammar: 'gpt-6-luna',
+      grammar: 'gpt-5.6-luna',
     };
     const DEFAULT_MODEL = 'gpt-5.1';
 

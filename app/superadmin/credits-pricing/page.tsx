@@ -120,7 +120,7 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
   // 2단계(MULTI_STEP): grammar/vocab_paraphrase/vocab_blank/fill_blank/summary/phrase_meaning/sentence_order
   // 1단계: topic_title/flow/sentence_insertion
   ai_type_topic_title:        T(1500, 1500),                       // 1단계
-  ai_type_grammar:            T(4500, 5500, 'gpt-6-luna', 2),      // 2단계 · gpt-6-luna high
+  ai_type_grammar:            T(4500, 5500, 'gpt-5.6-luna', 2),    // 2단계 · gpt-5.6-luna
   ai_type_vocab_paraphrase:   T(1500, 1500, 'gpt-5.1', 2),         // 2단계
   ai_type_vocab_blank:        T(1500, 1500, 'gpt-5.1', 2),         // 2단계
   ai_type_fill_blank:         T(1500, 1500, 'gpt-5.1', 2),         // 2단계
@@ -132,7 +132,7 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
 
   // 실전 변형 모의고사 (모의고사 지문 약간 더 긺)
   mock_ai_type_topic_title:        T(1600, 1500),
-  mock_ai_type_grammar:            T(4500, 5500, 'gpt-6-luna', 2),  // gpt-6-luna high
+  mock_ai_type_grammar:            T(4500, 5500, 'gpt-5.6-luna', 2),
   mock_ai_type_vocab_paraphrase:   T(1600, 1500, 'gpt-5.1', 2),
   mock_ai_type_vocab_blank:        T(1600, 1500, 'gpt-5.1', 2),
   mock_ai_type_fill_blank:         T(1600, 1500, 'gpt-5.1', 2),
@@ -176,12 +176,12 @@ const SECTIONS: SectionConfig[] = [
   },
   {
     key: 'exam_direct', label: '실전 변형 문제 (직접 입력)', color: 'text-blue-400',
-    model: 'gpt-5.1 × 2단계 (어법: gpt-6-luna high × 2단계) / topic_title·flow·insertion 1단계',
+    model: 'gpt-5.1 × 2단계 (어법: gpt-5.6-luna × 2단계) / topic_title·flow·insertion 1단계',
     keys: AI_DIRECT_KEYS,
   },
   {
     key: 'exam_mock', label: '실전 변형 문제 (모의고사)', color: 'text-indigo-400',
-    model: 'gpt-5.1 × 2단계 (어법: gpt-6-luna high × 2단계) / topic_title·flow·insertion 1단계',
+    model: 'gpt-5.1 × 2단계 (어법: gpt-5.6-luna × 2단계) / topic_title·flow·insertion 1단계',
     keys: AI_MOCK_KEYS,
   },
 ];
