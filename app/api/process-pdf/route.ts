@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-export const maxDuration = 180;
+export const maxDuration = 60;
 
 interface TFQuestion {
   number: number;
@@ -172,18 +172,18 @@ export async function POST(request: Request) {
     console.log('[debug] KEY_PREFIX:', process.env.OPENAI_API_KEY?.slice(0, 12), '| KEY_SUFFIX:', process.env.OPENAI_API_KEY?.slice(-6), '| LENGTH:', process.env.OPENAI_API_KEY?.length);
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-    // gpt-6-luna는 reasoning 모델이라 Chat Completions가 아닌 Responses API(reasoning.effort)를
-    // 써야 한다 — Chat Completions에 reasoning을 넘기면 400 Unknown parameter 오류가 난다.
-    const response = await client.responses.create({
-      model: 'gpt-6-luna',
-      reasoning: { effort: 'medium' },
-      // reasoning 토큰이 output 예산에 포함되어 과금되므로(워크북 전환 때 실측으로 확인),
-      // 기존 gpt-5.1 기준 예산(8192)보다 넉넉하게 잡아 잘림을 방지한다.
-      max_output_tokens: 16000,
-      input: buildPrompt(text, difficulty || '중'),
+    const response = await client.chat.completions.create({
+      model: 'gpt-5.1',
+      max_completion_tokens: 8192,
+      messages: [
+        {
+          role: 'user',
+          content: buildPrompt(text, difficulty || '중'),
+        },
+      ],
     });
 
-    const rawText = response.output_text ?? '';
+    const rawText = response.choices[0]?.message?.content ?? '';
 
     let data: GeneratedMaterials;
     try {
