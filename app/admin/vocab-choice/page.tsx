@@ -3602,6 +3602,9 @@ export default function WorkbookPage() {
   );
   const currentTypeResult = allResults[activeTypeTab];
   const currentType = currentTypeResult?.type;
+  // "전체 문제/정답 PDF" 버튼 표시 기준: 유형 개수가 아니라 지문 개수.
+  // 유형을 1개만 골라도 지문이 여러 개면 병합할 게 있으므로 지문 수 기준으로 판단한다.
+  const maxResultPassages = allResults.length ? Math.max(...allResults.map(r => r.results.length)) : 0;
 
   // 인라인 편집: 선택형 문항(어휘고르기/어법고르기)의 구조화 편집용 청크
   const activeResultForEdit = currentTypeResult?.results[activeResultTab];
@@ -4162,13 +4165,13 @@ export default function WorkbookPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {allResults.length > 1 && (
+                  {maxResultPassages > 1 && (
                     <button onClick={() => handleDownloadAllPdf(false)} disabled={downloadingAllPdf}
                       className="px-4 py-2.5 text-sm font-black bg-slate-900 hover:bg-black text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
                       {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 문제 PDF'}
                     </button>
                   )}
-                  {allResults.length > 1 && currentType !== 'passage_translation' && (
+                  {maxResultPassages > 1 && currentType !== 'passage_translation' && (
                     <button onClick={() => handleDownloadAllPdf(true)} disabled={downloadingAllPdf}
                       className="px-4 py-2.5 text-sm font-black border-2 border-slate-900 bg-white text-slate-900 hover:bg-slate-900 hover:text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
                       {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 정답 PDF'}
