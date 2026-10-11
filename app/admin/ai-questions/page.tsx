@@ -6,6 +6,7 @@ import { generateId } from '@/lib/uuid';
 import { supabase } from '@/lib/supabase';
 import { useProgressSimulator } from '@/lib/useProgressSimulator';
 import { trackEvent } from '@/lib/trackEvent';
+import { notifyConBalanceChanged } from '@/lib/conBalance';
 import ConInsufficientModal from '@/components/ConInsufficientModal';
 import ProgressBar from '@/components/ProgressBar';
 import {
@@ -1373,6 +1374,7 @@ function AiQuestionsContent() {
     mockGenProgress.finish();
     setMockGenerating(false);
     trackEvent('generation_completed', { page: 'ai-questions', mode: 'mock', count: allQuestions.length, durationMs: Date.now() - genStartedAt });
+    notifyConBalanceChanged();
     setTimeout(() => autoSaveMockExamHistory(allQuestions, mockSession), 1000);
   };
 
@@ -1623,6 +1625,7 @@ function AiQuestionsContent() {
     }
 
     setBulkLoading(false);
+    notifyConBalanceChanged();
   };
 
   // ── 문제 생성 ──
@@ -1685,6 +1688,7 @@ function AiQuestionsContent() {
       setQuestions(allQuestions);
       genProgress.finish();
       trackEvent('generation_completed', { page: 'ai-questions', mode: 'input', count: allQuestions.length, durationMs: Date.now() - genStartedAt });
+      notifyConBalanceChanged();
 
       const typesArr = validConfigs.map(c => c.type);
       const diffLabel = validConfigs.map(c => c.difficulty).join(',');

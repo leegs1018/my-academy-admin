@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { useProgressSimulator } from '@/lib/useProgressSimulator';
 import ProgressBar from '@/components/ProgressBar';
 import { trackEvent } from '@/lib/trackEvent';
+import { notifyConBalanceChanged } from '@/lib/conBalance';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -3276,6 +3277,7 @@ export default function WorkbookPage() {
       const savedResults = resultSlots.filter((r): r is TypeResult => r !== null);
       if (savedResults.some(r => r.results.length > 0)) {
         trackEvent('generation_completed', { page: 'vocab-choice', types: savedResults.length, durationMs: Date.now() - genStartedAt });
+        notifyConBalanceChanged();
         const title = activeTab === 'input' ? inputTitle : mockTitle;
         setTimeout(() => autoSaveWorkbook(passageTexts, title, savedResults), 3000);
       }

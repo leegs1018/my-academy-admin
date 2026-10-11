@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { CON_BALANCE_CHANGED_EVENT } from '@/lib/conBalance';
 
 type FlatMenuItem = { href: string; label: string; icon: string; children?: never };
 type GroupMenuItem = { label: string; icon: string; children: FlatMenuItem[]; href?: never };
@@ -123,6 +124,18 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     };
     getAcademyInfo();
   }, [pathname]);
+
+  // CON 차감/충전 직후, 페이지 이동 없이도 상단 잔액 표시를 즉시 갱신한다.
+  const refreshPoints = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const { data } = await supabase.from('academy_config').select('points').eq('user_id', session.user.id).single();
+    if (data?.points !== undefined) setPoints(data.points);
+  }, []);
+  useEffect(() => {
+    window.addEventListener(CON_BALANCE_CHANGED_EVENT, refreshPoints);
+    return () => window.removeEventListener(CON_BALANCE_CHANGED_EVENT, refreshPoints);
+  }, [refreshPoints]);
 
   useEffect(() => {
     const aiPaths = ['/admin/pdf-editor', '/admin/ai-questions', '/admin/vocab-choice'];

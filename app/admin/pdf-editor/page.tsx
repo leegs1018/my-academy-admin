@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useProgressSimulator } from '@/lib/useProgressSimulator';
 import ProgressBar from '@/components/ProgressBar';
 import { trackEvent } from '@/lib/trackEvent';
+import { notifyConBalanceChanged } from '@/lib/conBalance';
 
 function pdfErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : '';
@@ -950,6 +951,7 @@ export default function PdfEditorPage() {
         trackEvent('generation_failed', { page: 'pdf-editor', reason: msg ?? 'unknown' });
       } else {
         trackEvent('generation_completed', { page: 'pdf-editor', passages: validPassages.length, durationMs: Date.now() - genStartedAt });
+        notifyConBalanceChanged();
       }
       genProgress.finish();
     } catch (e: unknown) {
