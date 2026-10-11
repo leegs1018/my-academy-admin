@@ -2606,15 +2606,6 @@ function AiQuestionsContent() {
       {/* ── 모의고사 지문 탭 ── */}
       {activeMainTab === 'mock' && (
         <div className="space-y-6">
-          {showAutoSampleNotice && (
-            <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-2xl px-5 py-3.5">
-              <span className="text-xl">✨</span>
-              <p className="flex-1 text-sm font-bold text-violet-700">
-                체험하실 수 있도록 샘플 지문을 자동으로 불러오고 있어요. 아래에서 문제 유형을 고르고 <b>생성하기</b>를 눌러보세요!
-              </p>
-              <button onClick={() => setShowAutoSampleNotice(false)} className="text-violet-400 hover:text-violet-600 font-black px-1" aria-label="안내 닫기">✕</button>
-            </div>
-          )}
           {/* STEP 1 — 문제 제목 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 문제 제목</h2>
@@ -2626,10 +2617,12 @@ function AiQuestionsContent() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-black text-gray-800">STEP 2 — 기출 지문 선택</h2>
-              <button onClick={startQuickSample} disabled={quickSampleActive || mockGrades.length === 0}
-                className="px-3 py-1.5 rounded-lg text-xs font-black bg-violet-50 text-violet-600 border border-violet-200 hover:bg-violet-100 transition-all disabled:opacity-50">
-                {quickSampleActive ? '⏳ 샘플 불러오는 중...' : '🎲 샘플 지문으로 빠르게 체험하기'}
-              </button>
+              {autoSampleRequested && (
+                <button onClick={startQuickSample} disabled={quickSampleActive || mockGrades.length === 0}
+                  className="px-3 py-1.5 rounded-lg text-xs font-black bg-violet-50 text-violet-600 border border-violet-200 hover:bg-violet-100 transition-all disabled:opacity-50">
+                  {quickSampleActive ? '⏳ 샘플 불러오는 중...' : '🎲 샘플 지문으로 빠르게 체험하기'}
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               {[
@@ -3149,6 +3142,28 @@ function AiQuestionsContent() {
         required={conModal?.required ?? 0}
         balance={conModal?.balance ?? 0}
       />
+
+      {/* 샘플 지문 자동 체험 안내 팝업 — 온보딩 "무료 체험하기"로 들어온 경우에만 표시 */}
+      {showAutoSampleNotice && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAutoSampleNotice(false)} />
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="px-6 pt-7 pb-5 text-center">
+              <div className="text-4xl mb-3">✨</div>
+              <p className="text-sm font-bold text-gray-700 leading-relaxed">
+                체험하실 수 있도록 샘플 지문을 자동으로 불러오고 있어요.<br />
+                아래에서 문제 유형을 고르고 <b className="text-violet-600">생성하기</b>를 눌러보세요!
+              </p>
+            </div>
+            <div className="px-6 pb-6">
+              <button onClick={() => setShowAutoSampleNotice(false)}
+                className="w-full py-3 bg-violet-600 text-white font-black rounded-2xl hover:bg-violet-700 transition-all text-sm">
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 고정 다운로드 버튼 — 직접 입력 탭 */}
       {activeMainTab === 'input' && questions && questions.length > 0 && (
