@@ -1347,7 +1347,7 @@ function AiQuestionsContent() {
         const res = await fetch('/api/generate-exam-questions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${mockSession.access_token}` },
-          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })), feature_key: 'mock_exam_question_per_type', mockMeta: { year, grade, institution, numbers: [num] } }),
+          body: JSON.stringify({ text, typeConfigs: validConfigs.map(c => ({ type: c.type, difficulty: c.difficulty, count: c.count })), feature_key: 'mock_exam_question_per_type', mockMeta: { year, grade, institution, numbers: [num] }, academy_id: mockSession.user.id }),
         });
         const json = await res.json() as { questions?: ExamQuestion[]; error?: string; required?: number; balance?: number };
         if (json.error === 'INSUFFICIENT_CON') { setConModal({ required: json.required ?? 0, balance: json.balance ?? 0 }); throw new Error('INSUFFICIENT_CON'); }

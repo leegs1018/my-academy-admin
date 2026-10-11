@@ -117,19 +117,27 @@ export default function DashboardPage() {
     setShowOnboarding(false);
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      void supabase.from('academy_config').update({ onboarding_seen: true }).eq('user_id', session.user.id);
+      try {
+        const res = await fetch('/api/dismiss-onboarding', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!res.ok) console.error('[onboarding] 닫기 상태 저장 실패:', await res.text());
+      } catch (e) {
+        console.error('[onboarding] 닫기 상태 저장 실패:', e);
+      }
     }
   }, []);
 
-  const handleOnboardingSelectAi = useCallback(() => {
+  const handleOnboardingSelectAi = useCallback(async () => {
     trackEvent('onboarding_selected', { choice: 'ai' });
-    dismissOnboarding();
+    await dismissOnboarding();
     router.push('/admin/ai-questions?tab=mock&sample=1');
   }, [dismissOnboarding, router]);
 
-  const handleOnboardingSelectDashboard = useCallback(() => {
+  const handleOnboardingSelectDashboard = useCallback(async () => {
     trackEvent('onboarding_selected', { choice: 'dashboard' });
-    dismissOnboarding();
+    await dismissOnboarding();
   }, [dismissOnboarding]);
 
   const dismissAiTrialBanner = useCallback(() => {
