@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
         referral_code: config.referral_code || '',
         own_referral_code: config.own_referral_code || null,
         created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at ?? null,
         role: u.user_metadata?.role ?? 'ai_only',
         sms_enabled: config.sms_enabled ?? false,
         sms_marketing_agreed: config.sms_marketing_agreed ?? false,

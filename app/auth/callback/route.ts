@@ -71,7 +71,11 @@ export async function GET(request: NextRequest) {
         points: BASE_BONUS,
         kiosk_code: kioskCode,
         own_referral_code: ownReferralCode,
+        onboarding_seen: false,
       });
+
+      // 가입 퍼널 통계: 이벤트 기록 실패가 가입 자체를 막으면 안 되므로 결과를 기다리지 않는다.
+      void admin.from('events_log').insert({ user_id: userId, event_name: 'signup_completed', metadata: { provider: 'social' } });
 
       // user_metadata.role 을 'admin'으로 설정 — 기존 필드 보존 후 merge
       const { data: { user: newUser } } = await admin.auth.admin.getUserById(userId);

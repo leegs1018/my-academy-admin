@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { generateId } from '@/lib/uuid';
 import { supabase } from '@/lib/supabase';
 import { useProgressSimulator } from '@/lib/useProgressSimulator';
+import { trackEvent } from '@/lib/trackEvent';
 import ConInsufficientModal from '@/components/ConInsufficientModal';
 import ProgressBar from '@/components/ProgressBar';
 import {
@@ -809,10 +811,24 @@ async function buildAnswerPdfBlob(questions: ExamQuestion[], title: string): Pro
   return pdf.output('blob');
 }
 
-export default function AiQuestionsPage() {
-  const [activeMainTab, setActiveMainTab] = useState<'input' | 'mock' | 'history'>('input');
+function AiQuestionsContent() {
+  const searchParams = useSearchParams();
+  const [activeMainTab, setActiveMainTab] = useState<'input' | 'mock' | 'history'>(() =>
+    searchParams.get('tab') === 'mock' ? 'mock' : 'input'
+  );
   const [inputSubTab, setInputSubTab] = useState<'generate' | 'bulk'>('generate');
   const [inputMode, setInputMode] = useState<'text' | 'image'>('text');
+
+  // 페이지 진입 1회만 기록 (탭 전환 시 중복 기록 방지)
+  useEffect(() => { trackEvent('ai_page_viewed', { page: 'ai-questions' }); }, []);
+
+  // 지문 입력(직접 입력 타이핑 / 모의고사 지문 선택 / 샘플 체험)을 세션당 1회만 기록
+  const passageEnteredLoggedRef = useRef(false);
+  const logPassageEnteredOnce = useCallback((source: 'manual' | 'sample' | 'exam_selection') => {
+    if (passageEnteredLoggedRef.current) return;
+    passageEnteredLoggedRef.current = true;
+    trackEvent('passage_entered', { page: 'ai-questions', source });
+  }, []);
 
   const [manualText, setManualText] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -877,6 +893,9 @@ export default function AiQuestionsPage() {
   const [mockPassageMap, setMockPassageMap] = useState<Record<string, string>>({});
   const [mockLoadingNumbers, setMockLoadingNumbers] = useState<Set<string>>(new Set());
   const [mockQuestions, setMockQuestions] = useState<ExamQuestion[]>([]);
+  // 지문 준비 없이 바로 체험할 수 있도록, 학년→년도→시험명→문제번호를 자동으로 한 번에 골라주는 기능.
+  // 각 단계는 기존 cascade useEffect(학년→년도→시험명)가 순서대로 목록을 채워줄 때까지 기다렸다가 다음 단계로 진행한다.
+  const [quickSampleActive, setQuickSampleActive] = useState(false);
   const [mockPdfTitle, setMockPdfTitle] = useState('');
   const [mockGenerating, setMockGenerating] = useState(false);
   const [mockProgress, setMockProgress] = useState('');
@@ -1165,7 +1184,7 @@ export default function AiQuestionsPage() {
   }, [pdfLayout, typeConfigs]);
 
   // ── 모의고사 탭 함수 ──
-  const toggleMockNumber = async (num: string) => {
+  const toggleMockNumber = async (num: string, source: 'sample' | 'exam_selection' = 'exam_selection') => {
     // 선택 항목은 "년도__학년__시험명__번호" 키로 저장해, 서로 다른 시험의 같은 번호를
     // 서로 다른 항목으로 구분한다 (현재 화면에 보이는 시험 기준으로 토글).
     const key = mockKey(mockSelectedYear, mockSelectedGrade, mockSelectedInstitution, num);
@@ -1180,8 +1199,50 @@ export default function AiQuestionsPage() {
         .eq('question_number', parseInt(num)).single();
       setMockPassageMap(prev => ({ ...prev, [key]: data?.passage_text ?? '' }));
       setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(key); return next; });
+      if (data?.passage_text) logPassageEnteredOnce(source);
     }
   };
+
+  // 샘플 지문 체험: 먼저 "변형하기 적당한 길이"의 지문 중 하나를 무작위로 골라두고,
+  // 학년을 세팅해 기존 cascade useEffect가 년도/시험명 목록을 순서대로 채워줄 때마다
+  // 미리 골라둔 지문이 나올 때까지 이 체인이 자동으로 다음 단계를 선택한다.
+  const quickSampleTargetRef = useRef<{ grade: string; year: number; institution: string; questionNumber: number } | null>(null);
+  const startQuickSample = async () => {
+    setQuickSampleActive(true);
+    try {
+      const { data } = await supabase.from('mock_exam_passages')
+        .select('grade, year, institution, question_number, passage_text').limit(300);
+      const rows = data ?? [];
+      // 너무 짧거나(변형 소재 부족) 너무 긴(난이도 과도) 지문은 제외하고 그 안에서 무작위로 고른다.
+      const pool = rows.filter(r => { const len = (r.passage_text ?? '').length; return len >= 400 && len <= 1200; });
+      const candidates = pool.length > 0 ? pool : rows;
+      if (candidates.length === 0) { setQuickSampleActive(false); alert('등록된 모의고사 지문이 없습니다.'); return; }
+      const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+      quickSampleTargetRef.current = { grade: chosen.grade, year: chosen.year, institution: chosen.institution, questionNumber: chosen.question_number };
+      setMockSelectedNumbers([]); setMockPassageMap({});
+      setMockSelectedGrade(chosen.grade);
+    } catch {
+      setQuickSampleActive(false);
+    }
+  };
+  useEffect(() => {
+    const target = quickSampleTargetRef.current;
+    if (!quickSampleActive || !target || !mockSelectedGrade || mockSelectedYear || mockYears.length === 0) return;
+    setMockSelectedYear(String(target.year));
+  }, [quickSampleActive, mockSelectedGrade, mockSelectedYear, mockYears]);
+  useEffect(() => {
+    const target = quickSampleTargetRef.current;
+    if (!quickSampleActive || !target || !mockSelectedYear || mockSelectedInstitution || mockInstitutions.length === 0) return;
+    setMockSelectedInstitution(target.institution);
+  }, [quickSampleActive, mockSelectedYear, mockSelectedInstitution, mockInstitutions]);
+  useEffect(() => {
+    const target = quickSampleTargetRef.current;
+    if (!quickSampleActive || !target || !mockSelectedInstitution || mockQuestionEntries.length === 0 || mockSelectedNumbers.length > 0) return;
+    setQuickSampleActive(false);
+    toggleMockNumber(String(target.questionNumber), 'sample');
+    trackEvent('sample_passage_used', { page: 'ai-questions' });
+    quickSampleTargetRef.current = null;
+  }, [quickSampleActive, mockSelectedInstitution, mockQuestionEntries, mockSelectedNumbers]);
 
   // 요약 목록의 ✕ 버튼은 현재 화면의 필터(학년/년도/시험명)와 무관하게 특정 항목을
   // 직접 키로 지정해 제거해야 한다 — toggleMockNumber는 현재 필터 기준으로 키를
@@ -1258,6 +1319,8 @@ export default function AiQuestionsPage() {
 
   const handleMockGenerate = async () => {
     if (!mockAllPassagesReady || validConfigs.length === 0 || !mockSession) return;
+    const genStartedAt = Date.now();
+    trackEvent('generation_clicked', { page: 'ai-questions', mode: 'mock' });
     setMockGenerating(true); setMockQuestions([]); setMockRevealedAnswers(new Set()); setMockAutoSaveStatus('idle');
     const validKeys = mockSortedSelectedNumbers.filter(k => mockPassageMap[k]);
     let completedCount = 0;
@@ -1286,6 +1349,7 @@ export default function AiQuestionsPage() {
     if (firstFailed) {
       const msg = (firstFailed as PromiseRejectedResult).reason?.message;
       if (msg !== 'INSUFFICIENT_CON') setMockProgress(msg || '생성 오류');
+      trackEvent('generation_failed', { page: 'ai-questions', mode: 'mock', reason: msg ?? 'unknown' });
       setMockGenerating(false);
       mockGenProgress.stop();
       return;
@@ -1295,6 +1359,7 @@ export default function AiQuestionsPage() {
     setMockProgress(`${allQuestions.length}개 문제 생성 완료`);
     mockGenProgress.finish();
     setMockGenerating(false);
+    trackEvent('generation_completed', { page: 'ai-questions', mode: 'mock', count: allQuestions.length, durationMs: Date.now() - genStartedAt });
     setTimeout(() => autoSaveMockExamHistory(allQuestions, mockSession), 1000);
   };
 
@@ -1556,6 +1621,8 @@ export default function AiQuestionsPage() {
     ].filter(t => t.length >= 50);
 
     if (validConfigs.length === 0 || allPassageTexts.length === 0) return;
+    const genStartedAt = Date.now();
+    trackEvent('generation_clicked', { page: 'ai-questions', mode: 'input' });
     setLoading(true);
     setError(null);
     setQuestions(null);
@@ -1596,6 +1663,7 @@ export default function AiQuestionsPage() {
       if (firstFailed) {
         const msg = (firstFailed as PromiseRejectedResult).reason?.message;
         if (msg !== 'INSUFFICIENT_CON') throw new Error(msg || '오류가 발생했습니다.');
+        trackEvent('generation_failed', { page: 'ai-questions', mode: 'input', reason: msg });
         return;
       }
       const allQuestions = questionSlots.flat();
@@ -1603,13 +1671,16 @@ export default function AiQuestionsPage() {
       setOriginalPassageText(allPassageTexts[0]);
       setQuestions(allQuestions);
       genProgress.finish();
+      trackEvent('generation_completed', { page: 'ai-questions', mode: 'input', count: allQuestions.length, durationMs: Date.now() - genStartedAt });
 
       const typesArr = validConfigs.map(c => c.type);
       const diffLabel = validConfigs.map(c => c.difficulty).join(',');
       const titleSnapshot = pdfTitle;
       setTimeout(() => autoSaveExam(allQuestions, allPassageTexts[0], typesArr, titleSnapshot, allPassageTexts, diffLabel), 800);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      const msg = e instanceof Error ? e.message : '오류가 발생했습니다.';
+      setError(msg);
+      trackEvent('generation_failed', { page: 'ai-questions', mode: 'input', reason: msg });
       genProgress.stop();
     } finally {
       if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);
@@ -1787,7 +1858,7 @@ export default function AiQuestionsPage() {
                 </div>
               </div>
               {inputMode === 'text' ? (
-                <textarea value={manualText} onChange={e => setManualText(e.target.value)}
+                <textarea value={manualText} onChange={e => { setManualText(e.target.value); if (e.target.value.trim()) logPassageEnteredOnce('manual'); }}
                   placeholder="영어 지문을 여기에 입력하세요..." rows={8}
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none leading-relaxed" />
               ) : (
@@ -2531,7 +2602,13 @@ export default function AiQuestionsPage() {
 
           {/* STEP 2 — 기출 지문 선택 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-base font-black text-gray-800 mb-4">STEP 2 — 기출 지문 선택</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-black text-gray-800">STEP 2 — 기출 지문 선택</h2>
+              <button onClick={startQuickSample} disabled={quickSampleActive || mockGrades.length === 0}
+                className="px-3 py-1.5 rounded-lg text-xs font-black bg-violet-50 text-violet-600 border border-violet-200 hover:bg-violet-100 transition-all disabled:opacity-50">
+                {quickSampleActive ? '⏳ 샘플 불러오는 중...' : '🎲 샘플 지문으로 빠르게 체험하기'}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               {[
                 { label: '학년', value: mockSelectedGrade, onChange: setMockSelectedGrade, disabled: false, options: mockGrades.map(g => ({ value: g, label: g })) },
@@ -3079,5 +3156,13 @@ export default function AiQuestionsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AiQuestionsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-sm text-gray-400">로딩 중...</div>}>
+      <AiQuestionsContent />
+    </Suspense>
   );
 }

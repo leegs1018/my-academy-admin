@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { trackEvent } from '@/lib/trackEvent';
 
 export default function CompleteProfilePage() {
   const [form, setForm] = useState({
@@ -115,6 +116,7 @@ export default function CompleteProfilePage() {
         kiosk_code: kioskCode,
         own_referral_code: ownReferralCode,
         sms_marketing_agreed: form.smsMarketingAgreed,
+        onboarding_seen: false,
       });
       if (!error) { saved = true; break; }
       if (error.code === '23505') { kioskCode = Math.floor(100000 + Math.random() * 900000).toString(); continue; }
@@ -155,6 +157,7 @@ export default function CompleteProfilePage() {
 
     const bonusMsg = referrerFound ? `추천인 코드 적용! 총 ${points}C` : `가입 기념 ${points}C`;
     alert(`환영합니다! ${bonusMsg}가 지급되었습니다.`);
+    trackEvent('signup_completed', { provider: 'email' });
     router.replace('/admin');
   };
 

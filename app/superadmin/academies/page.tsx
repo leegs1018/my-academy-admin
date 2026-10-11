@@ -13,6 +13,7 @@ interface Academy {
   referral_code: string;
   own_referral_code: string | null;
   created_at: string;
+  last_sign_in_at: string | null;
   student_count: number;
   sms_count: number;
   sms_enabled: boolean;
@@ -246,6 +247,7 @@ export default function AcademiesPage() {
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">문자수신</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">VIP</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">가입일</th>
+                <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">마지막 접속</th>
                 <th className="py-2 px-2 text-center font-black text-slate-500 whitespace-nowrap">CON</th>
               </tr>
             </thead>
@@ -253,6 +255,13 @@ export default function AcademiesPage() {
               {filtered.map((a) => {
                 const date = new Date(a.created_at);
                 const dateStr = `${date.getFullYear().toString().slice(2)}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+                const lastSignInStr = a.last_sign_in_at ? (() => {
+                  const d = new Date(a.last_sign_in_at as string);
+                  return `${d.getFullYear().toString().slice(2)}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+                })() : null;
+                const daysSinceSignIn = a.last_sign_in_at
+                  ? Math.floor((Date.now() - new Date(a.last_sign_in_at).getTime()) / 86400000)
+                  : null;
                 const badge = PROVIDER_BADGE[a.provider] ?? PROVIDER_BADGE.email;
                 return (
                   <tr key={a.user_id} className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
@@ -317,6 +326,20 @@ export default function AcademiesPage() {
                     </td>
                     {/* 가입일 */}
                     <td className="py-2 px-2 text-center font-bold text-slate-500 whitespace-nowrap">{dateStr}</td>
+                    {/* 마지막 접속 */}
+                    <td className="py-2 px-2 text-center font-bold whitespace-nowrap">
+                      {lastSignInStr ? (
+                        <span className={
+                          daysSinceSignIn !== null && daysSinceSignIn >= 30 ? 'text-red-400'
+                          : daysSinceSignIn !== null && daysSinceSignIn >= 7 ? 'text-yellow-400'
+                          : 'text-emerald-400'
+                        }>
+                          {lastSignInStr}
+                        </span>
+                      ) : (
+                        <span className="text-slate-700">—</span>
+                      )}
+                    </td>
                     {/* CON 충전/차감 */}
                     <td className="py-2 px-2 text-center whitespace-nowrap">
                       <div className="flex gap-1 justify-center">

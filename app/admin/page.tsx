@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import OnboardingModal from '@/components/OnboardingModal';
+import { trackEvent } from '@/lib/trackEvent';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -13,6 +15,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [todayStr, setTodayStr] = useState('');
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showAiTrialBanner, setShowAiTrialBanner] = useState(false);
 
 
   const fetchDashboardData = useCallback(async (userId: string) => {
@@ -85,17 +89,58 @@ export default function DashboardPage() {
         // 프로필 완성 여부 확인
         const { data: cfg } = await supabase
           .from('academy_config')
-          .select('academy_name, academy_phone, mobile')
+          .select('academy_name, academy_phone, mobile, onboarding_seen')
           .eq('user_id', session.user.id)
           .single();
         if (cfg) {
           const complete = !!cfg.academy_name && (!!cfg.academy_phone || !!cfg.mobile);
           setProfileComplete(complete);
+          if (cfg.onboarding_seen === false) {
+            setShowOnboarding(true);
+            trackEvent('onboarding_viewed');
+          } else {
+            // 신규 가입 팝업을 이미 본 기존 회원 중, AI 문제를 한 번도 생성해본 적 없는
+            // 회원에게는 전체화면 팝업 대신 대시보드 상단에 작은 배너로 체험을 안내한다.
+            fetch('/api/ai-trial-status', {
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            }).then(r => r.ok ? r.json() : null)
+              .then(d => { if (d?.showBanner) setShowAiTrialBanner(true); })
+              .catch(() => {});
+          }
         }
       }
     };
     checkAuth();
   }, [router, fetchDashboardData]);
+
+  const dismissOnboarding = useCallback(async () => {
+    setShowOnboarding(false);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      void supabase.from('academy_config').update({ onboarding_seen: true }).eq('user_id', session.user.id);
+    }
+  }, []);
+
+  const handleOnboardingSelectAi = useCallback(() => {
+    trackEvent('onboarding_selected', { choice: 'ai' });
+    dismissOnboarding();
+    router.push('/admin/ai-questions?tab=mock');
+  }, [dismissOnboarding, router]);
+
+  const handleOnboardingSelectDashboard = useCallback(() => {
+    trackEvent('onboarding_selected', { choice: 'dashboard' });
+    dismissOnboarding();
+  }, [dismissOnboarding]);
+
+  const dismissAiTrialBanner = useCallback(() => {
+    setShowAiTrialBanner(false);
+    trackEvent('ai_banner_dismissed');
+  }, []);
+
+  const handleAiTrialBannerClick = useCallback(() => {
+    trackEvent('ai_banner_clicked');
+    router.push('/admin/ai-questions?tab=mock');
+  }, [router]);
 
   if (loading) {
     return (
@@ -110,6 +155,11 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-10 pb-20">
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onSelectAi={handleOnboardingSelectAi}
+        onSelectDashboard={handleOnboardingSelectDashboard}
+      />
       {/* 상단 헤더 */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
@@ -133,6 +183,21 @@ export default function DashboardPage() {
           </div>
           <span className="text-amber-400 font-black text-sm group-hover:translate-x-1 transition-transform">프로필 완성하기 ➜</span>
         </Link>
+      )}
+
+      {showAiTrialBanner && (
+        <div className="flex items-center gap-4 bg-violet-50 border border-violet-200 rounded-3xl px-6 py-4">
+          <span className="text-2xl">✨</span>
+          <div className="flex-1">
+            <p className="font-black text-violet-800 text-sm">아직 AI 문제 생성을 안 써보셨네요!</p>
+            <p className="text-xs font-bold text-violet-500 mt-0.5">무료 CON으로 지문 하나 없이도 바로 체험해볼 수 있어요</p>
+          </div>
+          <button onClick={handleAiTrialBannerClick}
+            className="text-violet-500 font-black text-sm hover:translate-x-1 transition-transform whitespace-nowrap">
+            무료로 체험하기 ➜
+          </button>
+          <button onClick={dismissAiTrialBanner} className="text-violet-300 hover:text-violet-500 font-black px-1" aria-label="배너 닫기">✕</button>
+        </div>
       )}
 
       {/* 핵심 요약 카드 */}

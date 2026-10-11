@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import { useProgressSimulator } from '@/lib/useProgressSimulator';
 import ProgressBar from '@/components/ProgressBar';
+import { trackEvent } from '@/lib/trackEvent';
 
 function pdfErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : '';
@@ -334,6 +335,14 @@ const DIFF_COLORS: Record<string, string> = {
 
 export default function PdfEditorPage() {
   const [activeMainTab, setActiveMainTab] = useState<'input' | 'mock' | 'history'>('input');
+
+  useEffect(() => { trackEvent('ai_page_viewed', { page: 'pdf-editor' }); }, []);
+  const passageEnteredLoggedRef = useRef(false);
+  const logPassageEnteredOnce = useCallback((source: 'manual' | 'exam_selection') => {
+    if (passageEnteredLoggedRef.current) return;
+    passageEnteredLoggedRef.current = true;
+    trackEvent('passage_entered', { page: 'pdf-editor', source });
+  }, []);
 
   // ── 직접 입력 탭 state ──
   const [passages, setPassages] = useState<PassageCard[]>([newPassageCard()]);
@@ -704,6 +713,7 @@ export default function PdfEditorPage() {
       const text = (data?.passage_text ?? '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
       setMockPassageMap(prev => ({ ...prev, [key]: text }));
       setMockLoadingNumbers(prev => { const next = new Set(prev); next.delete(key); return next; });
+      if (text) logPassageEnteredOnce('exam_selection');
     }
   };
 
@@ -847,6 +857,7 @@ export default function PdfEditorPage() {
 
   // ── 패시지 카드 helpers ──
   const updatePassage = (id: string, updates: Partial<PassageCard>) => {
+    if (typeof updates.text === 'string' && updates.text.trim()) logPassageEnteredOnce('manual');
     setPassages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
   const addPassage = () => { if (passages.length >= 10) return; setPassages(prev => [...prev, newPassageCard()]); };
@@ -887,6 +898,8 @@ export default function PdfEditorPage() {
   const handleGenerate = async () => {
     const validPassages = passages.filter(p => effectiveText(p).trim().length >= 50);
     if (validPassages.length === 0 || loading) return;
+    const genStartedAt = Date.now();
+    trackEvent('generation_clicked', { page: 'pdf-editor', passages: validPassages.length });
 
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -931,11 +944,19 @@ export default function PdfEditorPage() {
         })
       );
       const firstFailed = settled.find(r => r.status === 'rejected');
-      if (firstFailed) setError((firstFailed as PromiseRejectedResult).reason?.message || '일부 지문 생성에 실패했습니다.');
+      if (firstFailed) {
+        const msg = (firstFailed as PromiseRejectedResult).reason?.message;
+        setError(msg || '일부 지문 생성에 실패했습니다.');
+        trackEvent('generation_failed', { page: 'pdf-editor', reason: msg ?? 'unknown' });
+      } else {
+        trackEvent('generation_completed', { page: 'pdf-editor', passages: validPassages.length, durationMs: Date.now() - genStartedAt });
+      }
       genProgress.finish();
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return;
-      setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      const msg = e instanceof Error ? e.message : '오류가 발생했습니다.';
+      setError(msg);
+      trackEvent('generation_failed', { page: 'pdf-editor', reason: msg });
       genProgress.stop();
     } finally {
       if (msgIntervalRef.current) clearInterval(msgIntervalRef.current);

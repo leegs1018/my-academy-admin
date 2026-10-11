@@ -16,6 +16,7 @@ const menuItems = [
   { href: '/superadmin/inquiries',         label: '문의 관리',         icon: '💬' },
   { href: '/superadmin/samples',           label: '문제 예시 관리',    icon: '📂' },
   { href: '/superadmin/notices',           label: '공지사항 관리',     icon: '📢' },
+  { href: '/superadmin/page-stats',        label: '페이지 통계',       icon: '📉' },
   { href: '/superadmin/site-settings',     label: '사이트 설정',       icon: '⚙️' },
 ];
 

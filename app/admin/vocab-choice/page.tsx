@@ -6,6 +6,7 @@ import type { Session } from '@supabase/supabase-js';
 import Image from 'next/image';
 import { useProgressSimulator } from '@/lib/useProgressSimulator';
 import ProgressBar from '@/components/ProgressBar';
+import { trackEvent } from '@/lib/trackEvent';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -3024,6 +3025,14 @@ export default function WorkbookPage() {
   const [activeTab, setActiveTab] = useState<'input' | 'mock' | 'history'>('input');
   const [session, setSession] = useState<Session | null>(null);
 
+  useEffect(() => { trackEvent('ai_page_viewed', { page: 'vocab-choice' }); }, []);
+  const passageEnteredLoggedRef = React.useRef(false);
+  const logPassageEnteredOnce = useCallback((source: 'manual' | 'exam_selection') => {
+    if (passageEnteredLoggedRef.current) return;
+    passageEnteredLoggedRef.current = true;
+    trackEvent('passage_entered', { page: 'vocab-choice', source });
+  }, []);
+
   // Input tab: multi-passage
   const [passages, setPassages] = useState<PassageCard[]>([newPassageCard()]);
   const [inputTitle, setInputTitle] = useState('');
@@ -3157,11 +3166,13 @@ export default function WorkbookPage() {
         .eq('question_number', parseInt(num)).single();
       setPassageMap(prev => ({ ...prev, [key]: data?.passage_text ?? '' }));
       setLoadingNumbers(prev => { const next = new Set(prev); next.delete(key); return next; });
+      if (data?.passage_text) logPassageEnteredOnce('exam_selection');
     }
   };
 
   // Passage card handlers
   const updatePassage = (id: string, updates: Partial<PassageCard>) => {
+    if (typeof updates.text === 'string' && updates.text.trim()) logPassageEnteredOnce('manual');
     setPassages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
   const addPassage = () => {
@@ -3218,6 +3229,8 @@ export default function WorkbookPage() {
     }
 
     const typesArray = [...selectedTypes];
+    const genStartedAt = Date.now();
+    trackEvent('generation_clicked', { page: 'vocab-choice', types: typesArray.length, passages: passageTexts.length });
     setGenerating(true);
     setAllResults([]);
     setActiveTypeTab(0);
@@ -3253,18 +3266,23 @@ export default function WorkbookPage() {
       );
       const firstFailed = settled.find(r => r.status === 'rejected');
       if (firstFailed) {
-        setGenerateError((firstFailed as PromiseRejectedResult).reason?.message || '일부 유형 생성에 실패했습니다.');
+        const msg = (firstFailed as PromiseRejectedResult).reason?.message;
+        setGenerateError(msg || '일부 유형 생성에 실패했습니다.');
+        trackEvent('generation_failed', { page: 'vocab-choice', reason: msg ?? 'unknown' });
       }
       genProgress.finish();
       // Auto-save: all types combined into one PDF per passage
       // Use the same array/indices that were passed to setAllResults to ensure DOM ID alignment
       const savedResults = resultSlots.filter((r): r is TypeResult => r !== null);
       if (savedResults.some(r => r.results.length > 0)) {
+        trackEvent('generation_completed', { page: 'vocab-choice', types: savedResults.length, durationMs: Date.now() - genStartedAt });
         const title = activeTab === 'input' ? inputTitle : mockTitle;
         setTimeout(() => autoSaveWorkbook(passageTexts, title, savedResults), 3000);
       }
     } catch (e) {
-      setGenerateError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+      const msg = e instanceof Error ? e.message : '오류가 발생했습니다.';
+      setGenerateError(msg);
+      trackEvent('generation_failed', { page: 'vocab-choice', reason: msg });
       genProgress.stop();
     } finally {
       setGenerating(false);
