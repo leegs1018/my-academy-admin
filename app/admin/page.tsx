@@ -124,7 +124,7 @@ export default function DashboardPage() {
   const handleOnboardingSelectAi = useCallback(() => {
     trackEvent('onboarding_selected', { choice: 'ai' });
     dismissOnboarding();
-    router.push('/admin/ai-questions?tab=mock');
+    router.push('/admin/ai-questions?tab=mock&sample=1');
   }, [dismissOnboarding, router]);
 
   const handleOnboardingSelectDashboard = useCallback(() => {
@@ -139,7 +139,7 @@ export default function DashboardPage() {
 
   const handleAiTrialBannerClick = useCallback(() => {
     trackEvent('ai_banner_clicked');
-    router.push('/admin/ai-questions?tab=mock');
+    router.push('/admin/ai-questions?tab=mock&sample=1');
   }, [router]);
 
   if (loading) {

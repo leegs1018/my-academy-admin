@@ -896,6 +896,7 @@ function AiQuestionsContent() {
   // 지문 준비 없이 바로 체험할 수 있도록, 학년→년도→시험명→문제번호를 자동으로 한 번에 골라주는 기능.
   // 각 단계는 기존 cascade useEffect(학년→년도→시험명)가 순서대로 목록을 채워줄 때까지 기다렸다가 다음 단계로 진행한다.
   const [quickSampleActive, setQuickSampleActive] = useState(false);
+  const [showAutoSampleNotice, setShowAutoSampleNotice] = useState(false);
   const [mockPdfTitle, setMockPdfTitle] = useState('');
   const [mockGenerating, setMockGenerating] = useState(false);
   const [mockProgress, setMockProgress] = useState('');
@@ -1243,6 +1244,18 @@ function AiQuestionsContent() {
     trackEvent('sample_passage_used', { page: 'ai-questions' });
     quickSampleTargetRef.current = null;
   }, [quickSampleActive, mockSelectedInstitution, mockQuestionEntries, mockSelectedNumbers]);
+
+  // 온보딩의 "무료로 체험하기"를 눌러 들어온 경우, "샘플 지문으로 빠르게 체험하기" 버튼을
+  // 직접 찾아 눌러야 하는 불편을 없애기 위해 진입 즉시 자동으로 샘플을 불러온다.
+  const autoSampleRequested = searchParams.get('sample') === '1';
+  const autoSampleTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!autoSampleRequested || autoSampleTriggeredRef.current) return;
+    autoSampleTriggeredRef.current = true;
+    setShowAutoSampleNotice(true);
+    startQuickSample();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 요약 목록의 ✕ 버튼은 현재 화면의 필터(학년/년도/시험명)와 무관하게 특정 항목을
   // 직접 키로 지정해 제거해야 한다 — toggleMockNumber는 현재 필터 기준으로 키를
@@ -2593,6 +2606,15 @@ function AiQuestionsContent() {
       {/* ── 모의고사 지문 탭 ── */}
       {activeMainTab === 'mock' && (
         <div className="space-y-6">
+          {showAutoSampleNotice && (
+            <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-2xl px-5 py-3.5">
+              <span className="text-xl">✨</span>
+              <p className="flex-1 text-sm font-bold text-violet-700">
+                체험하실 수 있도록 샘플 지문을 자동으로 불러오고 있어요. 아래에서 문제 유형을 고르고 <b>생성하기</b>를 눌러보세요!
+              </p>
+              <button onClick={() => setShowAutoSampleNotice(false)} className="text-violet-400 hover:text-violet-600 font-black px-1" aria-label="안내 닫기">✕</button>
+            </div>
+          )}
           {/* STEP 1 — 문제 제목 */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-base font-black text-gray-800 mb-4">STEP 1 — 문제 제목</h2>
