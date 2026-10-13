@@ -74,8 +74,12 @@ export async function GET(request: NextRequest) {
         onboarding_seen: false,
       });
 
-      // 가입 퍼널 통계: 이벤트 기록 실패가 가입 자체를 막으면 안 되므로 결과를 기다리지 않는다.
-      void admin.from('events_log').insert({ user_id: userId, event_name: 'signup_completed', metadata: { provider: 'social' } });
+      // 가입 퍼널 통계: 서버리스 환경에서는 await 없이 던진 작업이 응답이 끝나기 전에
+      // 끊겨 기록되지 않을 수 있으므로 반드시 기다린다 — 다만 실패해도 가입 자체는
+      // 막지 않도록 에러는 무시한다.
+      try {
+        await admin.from('events_log').insert({ user_id: userId, event_name: 'signup_completed', metadata: { provider: 'social' } });
+      } catch { /* 통계 실패는 무시 */ }
 
       // user_metadata.role 을 'admin'으로 설정 — 기존 필드 보존 후 merge
       const { data: { user: newUser } } = await admin.auth.admin.getUserById(userId);
