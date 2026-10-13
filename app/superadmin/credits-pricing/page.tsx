@@ -25,7 +25,7 @@ interface FeatureTokens { in: number; out: number; model: ModelKey; steps?: numb
 // ─── 레이블 ──────────────────────────────────────────────────────────────────
 
 const WB_TYPE_LABELS: Record<string, string> = {
-  passage_analysis: '지문 구문분석', passage_translation: '지문 해석지',
+  passage_analysis: '지문 구문분석', passage_translation: '지문 해석지', vocab_syn_ant: '동반의어표',
   translation: '문장 해석', word_order: '단어 배열', english_writing: '영작 하기',
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
@@ -51,7 +51,7 @@ const getKeyLabel = (k: string) => {
 // ─── feature key 목록 ─────────────────────────────────────────────────────────
 
 const WB_DIRECT_KEYS = [
-  'wb_direct_passage_translation','wb_direct_passage_analysis',
+  'wb_direct_passage_translation','wb_direct_vocab_syn_ant','wb_direct_passage_analysis',
   'wb_direct_translation','wb_direct_word_order','wb_direct_english_writing',
   'wb_direct_vocab_choice','wb_direct_vocab_fill',
   'wb_direct_grammar_choice','wb_direct_grammar_correct','wb_direct_grammar_correct_adv',
@@ -89,8 +89,8 @@ const T = (i: number, o: number, m: ModelKey = 'gpt-5.1', steps = 1): FeatureTok
 
 // 워크북 base (wb_direct_* 접두사 없는 순수 타입명)
 const WB_TOKENS: Record<string, FeatureTokens> = {
-  // 출력 큰 것: passage_translation은 문장 전체 + vocab_table 15~25개 (동의어/반의어 포함)
-  passage_translation:   T(700,  1500),  // 지문 해석지: sentences JSON + vocab_table(15~25개) → 출력 큼
+  passage_translation:   T(700,   700),  // 지문 해석지: sentences JSON (title/summary/keyword_bullets 포함)
+  vocab_syn_ant:         T(700,   900),  // 동반의어표: vocab_table 15~25개 (동의어3+반의어1, 각 뜻 포함) → 출력 큼
   passage_analysis:      T(700,  2000),  // 구문분석: 전체 문장 chunk JSON → 가장 큰 출력
   translation:           T(600,   500),  // 문장 해석: 10~15문장 en/ko 쌍
   word_order:            T(600,   600),  // 단어 배열: 문장별 scrambled 배열 + answer

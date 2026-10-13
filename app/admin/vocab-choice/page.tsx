@@ -15,7 +15,7 @@ type WorkbookType =
   | 'vocab_choice' | 'vocab_fill'
   | 'grammar_choice' | 'grammar_correct' | 'grammar_correct_adv'
   | 'translation' | 'word_order' | 'english_writing'
-  | 'passage_translation' | 'tf_questions' | 'title_summary' // kept in type for route compatibility
+  | 'passage_translation' | 'vocab_syn_ant' | 'tf_questions' | 'title_summary' // kept in type for route compatibility
   | 'paragraph_order' | 'sentence_insertion' | 'summary_sentence' | 'passage_analysis'
   | 'suneung_vocab_right' | 'suneung_vocab_wrong'
   | 'suneung_grammar_right' | 'suneung_grammar_wrong'
@@ -68,6 +68,7 @@ interface HistoryItem {
 const CATEGORIES = [
   { key: 'drill',    label: '지문 드릴',   types: [
     { key: 'passage_translation' as WorkbookType, label: '지문 해석지' },
+    { key: 'vocab_syn_ant' as WorkbookType,       label: '동반의어표' },
     { key: 'passage_analysis' as WorkbookType,    label: '지문 구문분석' },
     { key: 'translation' as WorkbookType,         label: '문장 해석' },
     { key: 'word_order' as WorkbookType,          label: '단어 배열' },
@@ -101,13 +102,16 @@ const TYPE_LABELS: Record<WorkbookType, string> = {
   vocab_choice: '어휘 고르기', vocab_fill: '어휘 채우기',
   grammar_choice: '어법 고르기', grammar_correct: '어법 고치기', grammar_correct_adv: '어법 고치기(심화)',
   translation: '문장 해석', word_order: '단어 배열', english_writing: '영작 하기',
-  passage_translation: '지문 해석지', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
+  passage_translation: '지문 해석지', vocab_syn_ant: '동반의어표', paragraph_order: '문단 배열', sentence_insertion: '문장 삽입', summary_sentence: '요약문 서술형', passage_analysis: '지문 구문분석',
   tf_questions: 'T/F 문제', title_summary: '제목/요약문',
   suneung_vocab_right: '적절한 어휘', suneung_vocab_wrong: '부적절한 어휘',
   suneung_grammar_right: '맞는 어법', suneung_grammar_wrong: '틀린 어법',
   combo_vocab_grammar: '어휘+어법', combo_vocab_fill: '영작 서술형 + 어휘',
   combo_grammar_order: '어법 서술형 + 순서배열', combo_grammar_insert: '어법+문장삽입',
 };
+
+// 채점할 "정답"이 없는 유형 — 정답 보기/정답 PDF/전체 정답 PDF 버튼을 숨긴다.
+const NO_ANSWER_TYPES = new Set<WorkbookType>(['passage_translation', 'vocab_syn_ant']);
 
 const DIFF_CARDS = [
   { key: 'a2' as Difficulty, level: 'A2', label: '최하', icon: '🌰', active: 'border-lime-400 bg-lime-50 text-lime-700' },
@@ -820,7 +824,6 @@ function highlightKeyWords(text: string, keyWords: string[]): React.ReactNode {
 
 function RenderPassageTranslation({ result, isEditing = false, onUpdate }: { result: WorkbookResult; isEditing?: boolean; onUpdate?: ResultUpdater }) {
   const sentences = result.sentences as PassageSentence[] || result.items as PassageSentence[] || [];
-  const vocabTable = result.vocab_table as VocabRow[] || [];
   const titleEn = result.title_en as string || '';
   const titleKo = result.title_ko as string || '';
   const koreanSummary = result.korean_summary as string || '';
@@ -831,11 +834,6 @@ function RenderPassageTranslation({ result, isEditing = false, onUpdate }: { res
     const arr = [...((r[key] as PassageSentence[]) ?? [])];
     arr[i] = { ...arr[i], ...patch };
     return { ...r, [key]: arr };
-  });
-  const updateVocab = (i: number, patch: Partial<VocabRow>) => onUpdate?.(r => {
-    const arr = [...((r.vocab_table as VocabRow[]) ?? [])];
-    arr[i] = { ...arr[i], ...patch };
-    return { ...r, vocab_table: arr };
   });
   const updateBullet = (i: number, v: string) => onUpdate?.(r => {
     const arr = [...((r.keyword_bullets as string[]) ?? [])];
@@ -879,67 +877,73 @@ function RenderPassageTranslation({ result, isEditing = false, onUpdate }: { res
           <EText editing={ed} value={s.ko} onChange={v => updateSentence(i, { ko: v })} className="text-sm font-bold text-slate-600 leading-relaxed mt-0.5" />
         </div>
       ))}
-      {/* 어휘표 — 2페이지 영역 */}
-      {vocabTable.length > 0 && (
-        <div className="mt-6 border-t-2 border-slate-300 pt-4">
-          <p className="text-xs font-black text-slate-500 mb-2">지문의 주요 어휘와 뜻 (2페이지)</p>
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-xs border-collapse table-fixed">
-              <thead>
-                <tr className="bg-slate-800 text-white">
-                  {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
-                    <th key={i} className="px-2 py-1.5 text-left font-black">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {vocabTable.map((row, i) => (
-                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="px-2 py-1.5 border-r border-slate-100 align-top">
-                      {ed ? (
-                        <div className="flex flex-col gap-0.5">
-                          <EText editing value={row.word} onChange={v => updateVocab(i, { word: v })} className="font-black text-slate-800 text-xs" placeholder="단어" />
-                          <EText editing value={row.meaning} onChange={v => updateVocab(i, { meaning: v })} className="text-slate-500 text-xs" placeholder="뜻" />
-                        </div>
-                      ) : (
-                        <><span className="font-black text-slate-800">{row.word}</span>{row.meaning && <span className="text-slate-500 ml-1">({row.meaning})</span>}</>
-                      )}
-                    </td>
-                    {([['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']] as const).map(([k,m]) => (
-                      <td key={k} className="px-2 py-1.5 border-r border-slate-100 align-top">
-                        {ed ? (
-                          <div className="flex flex-col gap-0.5">
-                            <EText editing value={(row as Record<string,string>)[k]} onChange={v => updateVocab(i, { [k]: v } as Partial<VocabRow>)} className="font-bold text-blue-700 text-xs" placeholder="유의어" />
-                            <EText editing value={(row as Record<string,string>)[m]} onChange={v => updateVocab(i, { [m]: v } as Partial<VocabRow>)} className="text-slate-500 text-xs" placeholder="뜻" />
-                          </div>
-                        ) : (
-                          (row as Record<string,string>)[k] && <>
-                            <span className="font-bold text-blue-700">{(row as Record<string,string>)[k]}</span>
-                            {(row as Record<string,string>)[m] && <span className="text-slate-500 ml-1">({(row as Record<string,string>)[m]})</span>}
-                          </>
-                        )}
-                      </td>
-                    ))}
-                    <td className="px-2 py-1.5 align-top">
-                      {ed ? (
-                        <div className="flex flex-col gap-0.5">
-                          <EText editing value={row.antonym} onChange={v => updateVocab(i, { antonym: v })} className="font-bold text-rose-600 text-xs" placeholder="반의어" />
-                          <EText editing value={row.antonym_m} onChange={v => updateVocab(i, { antonym_m: v })} className="text-slate-500 text-xs" placeholder="뜻" />
-                        </div>
-                      ) : (
-                        row.antonym && <>
-                          <span className="font-bold text-rose-600">{row.antonym}</span>
-                          {row.antonym_m && <span className="text-slate-500 ml-1">({row.antonym_m})</span>}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+    </div>
+  );
+}
+
+function RenderVocabSynAnt({ result, isEditing = false, onUpdate }: { result: WorkbookResult; isEditing?: boolean; onUpdate?: ResultUpdater }) {
+  const vocabTable = result.vocab_table as VocabRow[] || [];
+  const ed = isEditing && !!onUpdate;
+  const updateVocab = (i: number, patch: Partial<VocabRow>) => onUpdate?.(r => {
+    const arr = [...((r.vocab_table as VocabRow[]) ?? [])];
+    arr[i] = { ...arr[i], ...patch };
+    return { ...r, vocab_table: arr };
+  });
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="w-full text-xs border-collapse table-fixed">
+        <thead>
+          <tr className="bg-slate-800 text-white">
+            {['표제어 (뜻)', '유의어 1 (뜻)', '유의어 2 (뜻)', '유의어 3 (뜻)', '반의어 (뜻)'].map((h, i) => (
+              <th key={i} className="px-2 py-1.5 text-left font-black">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {vocabTable.map((row, i) => (
+            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+              <td className="px-2 py-1.5 border-r border-slate-100 align-top">
+                {ed ? (
+                  <div className="flex flex-col gap-0.5">
+                    <EText editing value={row.word} onChange={v => updateVocab(i, { word: v })} className="font-black text-slate-800 text-xs" placeholder="단어" />
+                    <EText editing value={row.meaning} onChange={v => updateVocab(i, { meaning: v })} className="text-slate-500 text-xs" placeholder="뜻" />
+                  </div>
+                ) : (
+                  <><span className="font-black text-slate-800">{row.word}</span>{row.meaning && <span className="text-slate-500 ml-1">({row.meaning})</span>}</>
+                )}
+              </td>
+              {([['syn1','syn1_m'],['syn2','syn2_m'],['syn3','syn3_m']] as const).map(([k,m]) => (
+                <td key={k} className="px-2 py-1.5 border-r border-slate-100 align-top">
+                  {ed ? (
+                    <div className="flex flex-col gap-0.5">
+                      <EText editing value={(row as Record<string,string>)[k]} onChange={v => updateVocab(i, { [k]: v } as Partial<VocabRow>)} className="font-bold text-blue-700 text-xs" placeholder="유의어" />
+                      <EText editing value={(row as Record<string,string>)[m]} onChange={v => updateVocab(i, { [m]: v } as Partial<VocabRow>)} className="text-slate-500 text-xs" placeholder="뜻" />
+                    </div>
+                  ) : (
+                    (row as Record<string,string>)[k] && <>
+                      <span className="font-bold text-blue-700">{(row as Record<string,string>)[k]}</span>
+                      {(row as Record<string,string>)[m] && <span className="text-slate-500 ml-1">({(row as Record<string,string>)[m]})</span>}
+                    </>
+                  )}
+                </td>
+              ))}
+              <td className="px-2 py-1.5 align-top">
+                {ed ? (
+                  <div className="flex flex-col gap-0.5">
+                    <EText editing value={row.antonym} onChange={v => updateVocab(i, { antonym: v })} className="font-bold text-rose-600 text-xs" placeholder="반의어" />
+                    <EText editing value={row.antonym_m} onChange={v => updateVocab(i, { antonym_m: v })} className="text-slate-500 text-xs" placeholder="뜻" />
+                  </div>
+                ) : (
+                  row.antonym && <>
+                    <span className="font-bold text-rose-600">{row.antonym}</span>
+                    {row.antonym_m && <span className="text-slate-500 ml-1">({row.antonym_m})</span>}
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1684,6 +1688,8 @@ function RenderResultContent({ result, type, showAnswer, showKorean, isEditing =
       return <RenderEnglishWriting result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'passage_translation':
       return <RenderPassageTranslation result={result} isEditing={ed} onUpdate={onUpdate} />;
+    case 'vocab_syn_ant':
+      return <RenderVocabSynAnt result={result} isEditing={ed} onUpdate={onUpdate} />;
     case 'paragraph_order':
       return <RenderParagraphOrder result={result} showAnswer={showAnswer} isEditing={ed} onUpdate={onUpdate} />;
     case 'sentence_insertion':
@@ -2185,12 +2191,12 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
 }
 
 // ── 지문 해석지 페이지2: 주요 어휘와 뜻 ──────────────────────────────────────
-function PdfPassageTranslationP2({ result, id, title }: { result: WorkbookResult; id: string; title?: string }) {
+function PdfVocabSynAnt({ result, id, title }: { result: WorkbookResult; id: string; title?: string }) {
   const vocabTable = result.vocab_table as VocabRow[] || [];
   if (!vocabTable.length) return null;
   return (
     <div id={id} style={PDF_BASE}>
-      <PdfPageHeader>{title || '지문 해석지'} — 주요 어휘와 뜻</PdfPageHeader>
+      <PdfPageHeader>{title || '동반의어표'} — 주요 어휘와 뜻</PdfPageHeader>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
         <thead>
           <tr style={{ background: '#1E293B', color: '#fff' }}>
@@ -2944,6 +2950,8 @@ function getSimpleAnswerSections(result: WorkbookResult, type: WorkbookType): { 
       return flat([((result.model_answer || result.answer_key || '—') as string).trim()]);
     case 'passage_translation':
       return flat(['(지문 해석지 참조)']);
+    case 'vocab_syn_ant':
+      return flat(['(동반의어표 참조)']);
     case 'passage_analysis':
       return flat(['(구문분석 참조)']);
     case 'tf_questions': {
@@ -3457,13 +3465,7 @@ export default function WorkbookPage() {
     if (withAnswer) setDownloadingAnswerPdf(true);
     else setDownloadingPdf(true);
     try {
-      // passage_translation: 문제 PDF = P1(본문해석) + P2(어휘표) 합본
-      const blob = typeResult.type === 'passage_translation' && !withAnswer
-        ? await captureAllToPdf([
-            `wb-pdf-problem-${activeTypeTab}-${activeResultTab}`,
-            `wb-pdf-answer-${activeTypeTab}-${activeResultTab}`,
-          ])
-        : await capturePdfFromElement(id);
+      const blob = await capturePdfFromElement(id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -3514,20 +3516,17 @@ export default function WorkbookPage() {
       let ids: string[] = [];
       if (wbPdfLayout === 'passage') {
         for (let pi = 0; pi < maxPassages; pi++) {
-          allResults.forEach(({ type, results }, ti) => {
+          allResults.forEach(({ results }, ti) => {
             if (pi < results.length && !results[pi].error) {
               ids.push(`wb-pdf-${suffix}-${ti}-${pi}`);
-              // passage_translation 문제 PDF는 P2(어휘표)도 함께 포함
-              if (type === 'passage_translation' && !withAnswer) ids.push(`wb-pdf-answer-${ti}-${pi}`);
             }
           });
         }
       } else if (wbPdfLayout === 'type') {
-        allResults.forEach(({ type, results }, ti) => {
+        allResults.forEach(({ results }, ti) => {
           results.forEach((r, pi) => {
             if (!r.error) {
               ids.push(`wb-pdf-${suffix}-${ti}-${pi}`);
-              if (type === 'passage_translation' && !withAnswer) ids.push(`wb-pdf-answer-${ti}-${pi}`);
             }
           });
         });
@@ -4162,7 +4161,7 @@ export default function WorkbookPage() {
               )}
               {/* 플로팅 액션 레일 — 지문분석(pdf-editor)처럼 화면 우측 하단에 고정 */}
               <div className="no-print fixed bottom-8 right-8 flex flex-col items-end gap-2.5 z-50">
-                {currentType !== 'passage_translation' && (
+                {currentType && !NO_ANSWER_TYPES.has(currentType) && (
                   <button onClick={() => setShowAnswer(!showAnswer)}
                     className={`px-4 py-2 text-xs font-black rounded-xl shadow-lg transition-all ${showAnswer ? 'bg-yellow-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}>
                     {showAnswer ? '✅ 정답 표시 중' : '정답 보기'}
@@ -4177,7 +4176,7 @@ export default function WorkbookPage() {
                     className="px-4 py-2.5 text-sm font-black bg-slate-700 hover:bg-slate-900 text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
                     {downloadingPdf ? '생성 중...' : '⬇️ 문제 PDF'}
                   </button>
-                  {currentType !== 'passage_translation' && (
+                  {currentType && !NO_ANSWER_TYPES.has(currentType) && (
                     <button onClick={() => handleDownloadPdf(true)} disabled={downloadingAnswerPdf}
                       className="px-4 py-2.5 text-sm font-black bg-slate-500 hover:bg-slate-700 text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
                       {downloadingAnswerPdf ? '생성 중...' : '⬇️ 정답 PDF'}
@@ -4191,7 +4190,7 @@ export default function WorkbookPage() {
                       {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 문제 PDF'}
                     </button>
                   )}
-                  {maxResultPassages > 1 && currentType !== 'passage_translation' && (
+                  {maxResultPassages > 1 && currentType && !NO_ANSWER_TYPES.has(currentType) && (
                     <button onClick={() => handleDownloadAllPdf(true)} disabled={downloadingAllPdf}
                       className="px-4 py-2.5 text-sm font-black border-2 border-slate-900 bg-white text-slate-900 hover:bg-slate-900 hover:text-white rounded-xl shadow-lg transition-all disabled:opacity-50">
                       {downloadingAllPdf ? '병합 중...' : '⬇️ 전체 정답 PDF'}
@@ -4433,12 +4432,9 @@ export default function WorkbookPage() {
                   </React.Fragment>
                 );
               case 'passage_translation':
-                return (
-                  <React.Fragment key={key}>
-                    <PdfPassageTranslationP1 result={result} id={problemId} title={fullTitle} />
-                    <PdfPassageTranslationP2 result={result} id={answerId} title={fullTitle} />
-                  </React.Fragment>
-                );
+                return <PdfPassageTranslationP1 key={key} result={result} id={problemId} title={fullTitle} />;
+              case 'vocab_syn_ant':
+                return <PdfVocabSynAnt key={key} result={result} id={problemId} title={fullTitle} />;
               case 'paragraph_order':
                 return (
                   <React.Fragment key={key}>

@@ -4,7 +4,7 @@ import { getFeaturePrice, getConBalance } from '@/lib/credits';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 const WB_TYPE_LABELS: Record<string, string> = {
-  passage_analysis: '구문분석', passage_translation: '지문해석지',
+  passage_analysis: '구문분석', passage_translation: '지문해석지', vocab_syn_ant: '동반의어표',
   translation: '문장해석', word_order: '단어배열', english_writing: '영작',
   vocab_choice: '어휘고르기', vocab_fill: '어휘채우기',
   grammar_choice: '어법고르기', grammar_correct: '어법고치기', grammar_correct_adv: '어법고치기(심화)',
@@ -27,6 +27,7 @@ export type WorkbookType =
   | 'word_order'
   | 'english_writing'
   | 'passage_translation'
+  | 'vocab_syn_ant'
   | 'tf_questions'
   | 'title_summary'
   | 'paragraph_order'
@@ -252,12 +253,9 @@ _(N:X)_ 마커는 오직 "en" 필드에만 사용합니다.
 4. 지문 전체 문장을 모두 포함합니다 (생략 금지). 영어 원문은 절대 변형하지 않습니다.
 5. 각 문장에서 핵심 어휘(학생이 알아야 할 중요 단어) 1~3개를 key_words로 지정합니다.
    key_words는 원문에 나오는 단어 형태 그대로 (원형 아님).
-6. 지문 전체에서 핵심 어휘 15~25개를 추출하여 vocab_table을 만듭니다.
-   vocab_table 각 항목: 원형(표제어), 뜻, 유의어 3개(+뜻), 반의어 1개(+뜻).
-   유의어/반의어가 없거나 부적절하면 빈 문자열("")로 둡니다.
-7. 지문의 주제·제목을 title_en(영어)과 title_ko(한국어)로 작성합니다. 지문에 명시된 제목이 없으면 핵심 주제를 간결하게 작성합니다.
-8. 지문 전체를 2~3문장으로 압축한 한글 요약을 korean_summary로 작성합니다.
-9. 오른쪽 해석지 상단 키워드 박스용 내용 압축 불렛을 keyword_bullets 배열로 정확히 2개 작성합니다.
+6. 지문의 주제·제목을 title_en(영어)과 title_ko(한국어)로 작성합니다. 지문에 명시된 제목이 없으면 핵심 주제를 간결하게 작성합니다.
+7. 지문 전체를 2~3문장으로 압축한 한글 요약을 korean_summary로 작성합니다.
+8. 오른쪽 해석지 상단 키워드 박스용 내용 압축 불렛을 keyword_bullets 배열로 정확히 2개 작성합니다.
    각 불렛은 핵심 논리 흐름 1단계를 15~25자 이내 한글로 압축합니다.
 
 출력 형식 (순수 JSON만):
@@ -272,7 +270,20 @@ _(N:X)_ 마커는 오직 "en" 필드에만 사용합니다.
       "ko": "자연스러운 한국어 해석.",
       "key_words": ["locked", "tower"]
     }
-  ],
+  ]
+}`;
+
+    // ── 동반의어표 ───────────────────────────────────────────────────────────
+    case 'vocab_syn_ant':
+      return header('아래 영어 지문으로 동반의어표를 생성하세요.') +
+`생성 규칙:
+1. 지문 전체에서 핵심 어휘 15~25개를 추출하여 vocab_table을 만듭니다.
+2. vocab_table 각 항목: 원형(표제어), 뜻, 유의어 3개(+뜻), 반의어 1개(+뜻).
+   유의어/반의어가 없거나 부적절하면 빈 문자열("")로 둡니다.
+3. 원문 영어는 절대 변형하지 않습니다 (단어 추출 용도로만 참고).
+
+출력 형식 (순수 JSON만):
+{
   "vocab_table": [
     {
       "word": "lock", "meaning": "잠그다; 갇히다",
