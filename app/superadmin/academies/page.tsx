@@ -33,6 +33,7 @@ const PROVIDER_BADGE: Record<string, { label: string; className: string }> = {
 interface ChargeModal {
   academy: Academy;
   amount: string;
+  amount_krw: string;
   description: string;
   is_free: boolean;
   loading: boolean;
@@ -122,7 +123,7 @@ export default function AcademiesPage() {
   };
 
   const openChargeModal = (academy: Academy) => {
-    setChargeModal({ academy, amount: '', description: '', is_free: false, loading: false, result: '' });
+    setChargeModal({ academy, amount: '', amount_krw: '', description: '', is_free: false, loading: false, result: '' });
   };
 
   const openDeductModal = (academy: Academy) => {
@@ -169,6 +170,11 @@ export default function AcademiesPage() {
     if (!chargeModal || !chargeModal.amount) return;
     const amount = parseInt(chargeModal.amount, 10);
     if (isNaN(amount) || amount <= 0) return;
+    const amountKrw = chargeModal.amount_krw ? parseInt(chargeModal.amount_krw, 10) : undefined;
+    if (!chargeModal.is_free && (!amountKrw || amountKrw <= 0)) {
+      setChargeModal(prev => prev ? { ...prev, result: '유료 충전은 실제 입금액(원)을 입력해주세요.' } : null);
+      return;
+    }
 
     setChargeModal(prev => prev ? { ...prev, loading: true, result: '' } : null);
 
@@ -181,6 +187,7 @@ export default function AcademiesPage() {
           amount,
           description: chargeModal.description,
           is_free: chargeModal.is_free,
+          amount_krw: amountKrw,
         }),
       });
       const data = await res.json();
@@ -420,6 +427,21 @@ export default function AcademiesPage() {
                   ))}
                 </div>
               </div>
+
+              {!chargeModal.is_free && (
+                <div>
+                  <label className="block text-xs font-black text-slate-400 mb-2">실제 입금액 (원)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="예: 10000"
+                    value={chargeModal.amount_krw}
+                    onChange={e => setChargeModal(prev => prev ? { ...prev, amount_krw: e.target.value } : null)}
+                    className="w-full px-4 py-3 bg-slate-800 border-2 border-slate-700 rounded-xl text-white font-black focus:border-yellow-500 focus:outline-none text-sm"
+                  />
+                  <p className="text-xs text-slate-500 mt-1.5 font-bold">매출 분석 페이지 집계에 쓰입니다. 계좌이체로 확인된 실제 입금액을 입력해주세요.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-black text-slate-400 mb-2">메모 (선택)</label>

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 
 const menuItems = [
-  { href: '/superadmin',                   label: '데이터 분석',       icon: '📊' },
+  { href: '/superadmin',                   label: '대시보드',          icon: '📊' },
   { href: '/superadmin/academies',         label: '학원 관리',         icon: '🏫' },
   { href: '/superadmin/credits-pricing',   label: 'CON 관리',          icon: '⭐' },
   { href: '/superadmin/con-history',       label: 'CON 이력 조회',     icon: '📋' },
@@ -17,6 +17,7 @@ const menuItems = [
   { href: '/superadmin/samples',           label: '문제 예시 관리',    icon: '📂' },
   { href: '/superadmin/notices',           label: '공지사항 관리',     icon: '📢' },
   { href: '/superadmin/page-stats',        label: '페이지 통계',       icon: '📉' },
+  { href: '/superadmin/revenue',           label: '매출 분석',         icon: '💰' },
   { href: '/superadmin/site-settings',     label: '사이트 설정',       icon: '⚙️' },
 ];
 

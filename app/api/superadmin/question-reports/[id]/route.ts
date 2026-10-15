@@ -63,6 +63,8 @@ export async function PATCH(
       p_amount: report.con_amount,
       p_description: `문제 품질 신고 환불 (${report.question_type} 유형)`,
       p_created_by: user?.email ?? 'superadmin',
+      p_feature_key: 'question_report_refund',
+      p_is_free: true,
     });
 
     if (conError) {

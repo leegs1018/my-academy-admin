@@ -74,7 +74,8 @@ function featureLabel(key: string | null, description?: string): string {
     kiosk: '키오스크 SMS',
     alimtalk: '알림톡',
     payapp_charge: '카드결제', payapp_refund: '카드결제 환불',
-    admin_deduct: '관리자 차감',
+    admin_charge: '슈퍼어드민 충전', admin_deduct: '관리자 차감',
+    question_report_refund: '문제 신고 환불',
     signup_bonus: '가입 보너스', profile_completion_bonus: '프로필 완성 보너스',
     signup_bonus_referral: '추천인 코드 보너스', referral_reward: '추천인 적립',
   };

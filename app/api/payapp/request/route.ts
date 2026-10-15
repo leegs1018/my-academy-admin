@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     returnurl: `${baseUrl}/admin/con-charge?payment=complete`,
     var1: userId,
     var2: String(totalCon),
+    var3: String(priceWon), // 매출 집계용 — 콜백에서 CON 수량으로 원가를 역산하지 않고 그대로 읽어오기 위함
   });
 
   try {

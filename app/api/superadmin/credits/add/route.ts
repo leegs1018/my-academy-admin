@@ -21,15 +21,20 @@ export async function POST(request: NextRequest) {
   );
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { academy_id, amount, description, is_free } = await request.json() as {
+  const { academy_id, amount, description, is_free, amount_krw } = await request.json() as {
     academy_id: string;
     amount: number;
     description: string;
     is_free?: boolean;
+    amount_krw?: number;
   };
 
   if (!academy_id || !amount || amount <= 0) {
     return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 });
+  }
+  // 무료 지급이 아니면 매출 집계를 위해 실제 입금액(원)이 필요하다.
+  if (!is_free && (!amount_krw || amount_krw <= 0)) {
+    return NextResponse.json({ error: '유료 충전은 실제 입금액(원)을 입력해주세요.' }, { status: 400 });
   }
 
   const chargeDesc = description
@@ -44,6 +49,9 @@ export async function POST(request: NextRequest) {
     p_amount: amount,
     p_description: chargeDesc,
     p_created_by: user?.email ?? 'superadmin',
+    p_feature_key: 'admin_charge',
+    p_is_free: is_free ?? false,
+    p_amount_krw: is_free ? null : amount_krw,
   });
 
   if (error) {

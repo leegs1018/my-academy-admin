@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   // 모든 파라미터 로그 (페이앱이 어떤 데이터를 보내는지 확인용)
   console.log('[payapp/callback] 수신 데이터:', JSON.stringify(body));
 
-  const { linkkey, linkval, pay_state, mul_no, var1: userId, var2: conAmountStr } = body;
+  const { linkkey, linkval, pay_state, mul_no, var1: userId, var2: conAmountStr, var3: priceWonStr } = body;
 
   // 연동 KEY/VALUE 검증
   if (linkkey !== process.env.PAYAPP_LINKKEY || linkval !== process.env.PAYAPP_LINKVAL) {
@@ -41,6 +41,9 @@ export async function POST(req: NextRequest) {
 
     const totalCon = parseInt(conAmountStr);
     if (isNaN(totalCon) || totalCon <= 0) return new Response('FAIL', { status: 400 });
+    // var3(실결제 금액)은 이 기능 배포 이후 요청 건부터만 전달된다 — 없으면 매출 집계에서
+    // 제외되도록 null로 둔다 (CON 수량으로 역산하지 않음 — 보너스 비율 변경 시 부정확해질 수 있음).
+    const priceWon = priceWonStr ? parseInt(priceWonStr) : null;
 
     const dupKey = `[카드결제] ${mul_no}`;
 
@@ -61,6 +64,9 @@ export async function POST(req: NextRequest) {
       p_amount: totalCon,
       p_description: dupKey,
       p_created_by: 'payapp',
+      p_feature_key: 'payapp_charge',
+      p_is_free: false,
+      p_amount_krw: priceWon,
     });
 
     if (error) {
@@ -115,7 +121,7 @@ export async function POST(req: NextRequest) {
     // 원래 충전 내역 조회
     const { data: originalCharge } = await supabase
       .from('con_transactions')
-      .select('academy_id, amount')
+      .select('academy_id, amount, amount_krw')
       .eq('description', chargeKey)
       .maybeSingle();
 
@@ -129,6 +135,7 @@ export async function POST(req: NextRequest) {
       p_amount: originalCharge.amount,
       p_feature_key: 'payapp_refund',
       p_description: refundKey,
+      p_amount_krw: originalCharge.amount_krw,
     });
 
     if (error) {

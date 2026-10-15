@@ -57,7 +57,7 @@ export default function SuperAdminDashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-black text-white">📊 데이터 분석</h1>
+        <h1 className="text-3xl font-black text-white">📊 대시보드</h1>
         <p className="text-sm text-slate-500 mt-1 font-bold">CON EDU 플랫폼 전체 현황</p>
       </div>
 
