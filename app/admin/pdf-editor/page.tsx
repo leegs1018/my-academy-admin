@@ -176,6 +176,12 @@ async function generateMockPdfBlob(hideAnswerArea = false, suffix = ''): Promise
   noPrintEls.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
   const answerAreaEls = hideAnswerArea ? document.querySelectorAll('.mw-answer-area') : null;
   answerAreaEls?.forEach(el => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
+  // no-print/정답 영역을 막 숨긴 직후라 레이아웃이 아직 재계산/폰트 교체 중일 수 있다 —
+  // 바로 offsetHeight를 재고 캡처하면 간헐적으로 실제 렌더링보다 더 큰 높이로 측정되어
+  // 캡처된 이미지 하단에 빈 공간이 생기는 경우가 있었다. 두 프레임을 기다려 레이아웃이
+  // 완전히 안정된 뒤에 측정·캡처한다.
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => requestAnimationFrame(r));
   try {
     const { toJpeg, getFontEmbedCSS } = await import('html-to-image');
     const { jsPDF } = await import('jspdf');
@@ -1287,7 +1293,12 @@ export default function PdfEditorPage() {
                     </div>
                   </div>
                   <div className="p-4">
-                    <p className="text-slate-700 font-bold leading-relaxed whitespace-pre-wrap text-xl">{r.passageText}</p>
+                    {/* 원장님이 PDF/워드에서 복사해 붙여넣을 때 줄마다 강제 개행이 섞여 들어오는 경우가 많다 —
+                        그대로 whitespace-pre-wrap으로 보여주면 문장 중간에 줄이 끊기고 PDF 캡처 시 빈 공간이
+                        생겨서, 줄바꿈을 공백으로 풀어 변형 지문처럼 자연스럽게 흐르도록 표시한다. */}
+                    <p className="text-slate-700 font-bold leading-relaxed text-xl" style={{ wordBreak: 'break-word' }}>
+                      {r.passageText.replace(/\s+/g, ' ').trim()}
+                    </p>
                   </div>
                 </div>
 
