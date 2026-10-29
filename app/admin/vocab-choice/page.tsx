@@ -1815,7 +1815,7 @@ function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResul
         {sentences.map((sentence, si) => {
           const chunks = parseVocabPassage(sentence, result.answer_key as string || '');
           return (
-            <p key={si} style={sentStyle}>
+            <p key={si} data-pdf-row="true" style={sentStyle}>
               {chunks.map((c, i) => {
                 if (c.type === 'text') return <span key={i}>{c.text}</span>;
                 const opts = [c.a, c.b, c.c].filter((o): o is string => o !== undefined);
@@ -1882,7 +1882,7 @@ function PdfVocabFill({ result, isAnswer, title, id, showKorean }: { result: Wor
             {sentences.map((s, si) => {
               const rawParts = s.en.split(/_\((\d+):([a-zA-Z])\)_/);
               return (
-                <tr key={si}>
+                <tr key={si} data-pdf-row="true">
                   <td style={{ padding: '8px 14px 8px 0', fontSize: 15, lineHeight: 2.0, verticalAlign: 'top', textAlign: 'justify' }}>
                     {renderBlank(rawParts)}
                   </td>
@@ -1973,7 +1973,7 @@ function PdfGrammarCorrect({ result, isAnswer, title, id }: { result: WorkbookRe
       <PdfPageHeader>{title}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rawSentences.map((sent, si) => (
-          <p key={si} style={{ ...PDF_P, lineHeight: 2.5, margin: 0 }}>
+          <p key={si} data-pdf-row="true" style={{ ...PDF_P, lineHeight: 2.5, margin: 0 }}>
             {renderSentence(sent, si)}
           </p>
         ))}
@@ -2003,7 +2003,7 @@ function PdfGrammarCorrectAdv({ result, isAnswer, title, id }: { result: Workboo
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {(sentences || []).map((s, i) => (
-          <div key={i} style={{ display: 'flex', gap: 6 }}>
+          <div key={i} data-pdf-row="true" style={{ display: 'flex', gap: 6 }}>
             <span style={{ fontSize: 14, fontWeight: 900, color: '#888', minWidth: 20 }}>{s.num}.</span>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: 15, lineHeight: 1.9 }}>{s.text}</p>
@@ -2031,7 +2031,7 @@ function PdfTranslation({ result, isAnswer, title, id }: { result: WorkbookResul
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {(sentences || []).map((s, i) => (
-          <div key={i}>
+          <div key={i} data-pdf-row="true">
             <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: '#000', lineHeight: 1.9 }}>{s.en}</p>
             <div style={{ borderBottom: '1px solid #94A3B8', paddingBottom: 2, display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 20 }}>
               <span style={{ fontSize: 13, fontWeight: 900, color: '#94A3B8', whiteSpace: 'nowrap' }}>({s.num})</span>
@@ -2163,7 +2163,7 @@ function PdfPassageTranslationP1({ result, id, title }: { result: WorkbookResult
           <colgroup><col style={{ width: '60%' }} /><col style={{ width: '40%' }} /></colgroup>
           <tbody>
             {(sentences || []).map((s, i) => (
-              <tr key={i}>
+              <tr key={i} data-pdf-row="true">
                 <td style={{
                   padding: '8px 14px 8px 0',
                   fontSize: 15.5, lineHeight: 2.0, fontWeight: 700,
@@ -2207,7 +2207,7 @@ function PdfVocabSynAnt({ result, id, title }: { result: WorkbookResult; id: str
         </thead>
         <tbody>
           {vocabTable.map((row, i) => (
-            <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+            <tr key={i} data-pdf-row="true" style={{ background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
               <td style={{ padding: '3px 6px', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0' }}>
                 <span style={{ fontWeight: 900 }}>{row.word}</span>
                 {row.meaning && <span style={{ color: '#64748B', marginLeft: 3 }}>({row.meaning})</span>}
@@ -2417,7 +2417,7 @@ function PdfPassageAnalysis({ result, id, title }: { result: WorkbookResult; id:
         <div style={{ width: '30%', background: '#334155', color: '#fff', padding: '5px 12px', borderLeft: '1px solid #4B5563' }}>한국어 번역</div>
       </div>
       {sentences.map((sent, si) => (
-        <div key={si} style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 6, marginBottom: 5, overflow: 'hidden' }}>
+        <div key={si} data-pdf-row="true" style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 6, marginBottom: 5, overflow: 'hidden' }}>
           {/* 왼쪽 70%: 구문분석 */}
           <div style={{ width: '70%', padding: '10px 12px', background: '#fff', borderRight: '1px solid #F1F5F9' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 6px', alignItems: 'flex-end' }}>
@@ -2496,7 +2496,7 @@ function PdfTfQuestions({ result, isAnswer, title, id }: { result: WorkbookResul
       <PdfPageHeader>{title}{isAnswer ? ' (정답)' : ''}</PdfPageHeader>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {questions.map((q, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+          <div key={i} data-pdf-row="true" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
             <span style={{ flexShrink: 0, minWidth: 24, fontSize: 14, fontWeight: 900, color: '#64748B' }}>{q.num}.</span>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: 14, lineHeight: 1.9 }}>{q.statement}</p>
