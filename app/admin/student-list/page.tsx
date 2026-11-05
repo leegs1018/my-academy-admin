@@ -18,7 +18,8 @@ export default function StudentListPage() {
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<any>(null);
-  const [newMemo, setNewMemo] = useState(''); 
+  const [newMemo, setNewMemo] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const schoolLevels = ['유치', '초등', '중등', '고등', 'N수생', '기타'];
   const parentRelations = ['어머님 (모)', '아버님 (부)', '기타'];
@@ -130,6 +131,36 @@ export default function StudentListPage() {
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredStudents.map(s => s.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach(id => next.delete(id));
+      else visibleIds.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  const deleteSelectedStudents = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`선택한 ${selectedIds.size}명의 학생 기록이 모두 삭제됩니다. 정말 삭제하시겠습니까?`)) return;
+    const { error } = await supabase.from('students').delete().in('id', Array.from(selectedIds));
+    if (!error) {
+      alert('삭제되었습니다.');
+      setSelectedIds(new Set());
+      fetchStudents();
+    }
+  };
+
   const openEditModal = (student: any) => {
     let memoArray = [];
     try {
@@ -197,6 +228,14 @@ export default function StudentListPage() {
       <div className="flex justify-between items-center border-b border-gray-200 pb-5">
         <h1 className="text-2xl font-black text-gray-900 tracking-tight">학생 명부</h1>
         <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={deleteSelectedStudents}
+              className="flex items-center gap-1.5 bg-red-500 text-white px-4 py-2 rounded-xl hover:bg-red-600 font-black text-sm transition-colors"
+            >
+              선택 삭제 ({selectedIds.size})
+            </button>
+          )}
           <button
             onClick={() => router.push('/admin/student')}
             className="flex items-center gap-1.5 bg-gray-900 text-white px-4 py-2 rounded-xl hover:bg-gray-700 font-black text-sm transition-colors"
@@ -282,6 +321,15 @@ export default function StudentListPage() {
         <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 font-black text-xs text-center uppercase tracking-wider">
             <tr>
+              <th className="p-5 w-10">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-gray-900 cursor-pointer"
+                  checked={filteredStudents.length > 0 && filteredStudents.every(s => selectedIds.has(s.id))}
+                  onChange={toggleSelectAllVisible}
+                />
+              </th>
+              <th className="p-5 w-14">No.</th>
               <th className="p-5 text-left">이름</th>
               <th className="p-5">상태</th>
               <th className="p-5 text-left">학교 / 학년</th>
@@ -293,8 +341,17 @@ export default function StudentListPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 text-sm text-center">
-            {filteredStudents.map((s) => (
+            {filteredStudents.map((s, idx) => (
               <tr key={s.id} className="hover:bg-gray-50 transition-all font-medium">
+                <td className="p-5">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-gray-900 cursor-pointer"
+                    checked={selectedIds.has(s.id)}
+                    onChange={() => toggleSelect(s.id)}
+                  />
+                </td>
+                <td className="p-5 font-bold text-gray-400">{idx + 1}</td>
                 <td className="p-5 text-left">
                   <span onClick={() => openEditModal(s)} className="font-black text-gray-900 text-lg cursor-pointer hover:underline underline-offset-4 decoration-2">{s.name}</span>
                 </td>
