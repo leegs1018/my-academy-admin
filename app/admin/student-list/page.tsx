@@ -316,6 +316,14 @@ export default function StudentListPage() {
         </button>
       </div>
 
+      {/* 현재 필터 기준 인원 요약 */}
+      <div className="flex flex-wrap gap-2 text-xs font-black">
+        <span className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">총 {filteredStudents.length}명</span>
+        <span className="px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">재원 {filteredStudents.filter(s => s.status === '재원').length}명</span>
+        <span className="px-3 py-1.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">휴원 {filteredStudents.filter(s => s.status === '휴원').length}명</span>
+        <span className="px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-100">퇴원 {filteredStudents.filter(s => s.status === '퇴원').length}명</span>
+      </div>
+
       {/* 명단 테이블 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-left border-collapse min-w-[1200px]">
