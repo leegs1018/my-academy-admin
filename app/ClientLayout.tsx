@@ -120,6 +120,21 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             if (item) setReferralRewardCon(item.cost_per_use);
           })
           .catch(() => {});
+
+        // 수퍼어드민 "마지막 접속" 표시용 — Supabase Auth의 last_sign_in_at은 로그인
+        // 세션이 길게 유지되는(재로그인 없이 토큰만 갱신되는) 경우 갱신되지 않아 실제
+        // 활동을 못 잡는다. 페이지 이동마다 직접 접속 시각을 남기되, 너무 잦은 쓰기를
+        // 막기 위해 10분에 한 번만 갱신한다.
+        try {
+          const THROTTLE_MS = 10 * 60 * 1000;
+          const last = Number(localStorage.getItem('con-edu-last-active-touch') || '0');
+          if (Date.now() - last > THROTTLE_MS) {
+            localStorage.setItem('con-edu-last-active-touch', String(Date.now()));
+            void supabase.from('academy_config')
+              .update({ last_active_at: new Date().toISOString() })
+              .eq('user_id', session.user.id);
+          }
+        } catch { /* localStorage 접근 실패는 무시 */ }
       }
     };
     getAcademyInfo();

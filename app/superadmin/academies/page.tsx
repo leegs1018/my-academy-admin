@@ -13,7 +13,7 @@ interface Academy {
   referral_code: string;
   own_referral_code: string | null;
   created_at: string;
-  last_sign_in_at: string | null;
+  last_active_at: string | null;
   student_count: number;
   sms_count: number;
   sms_enabled: boolean;
@@ -262,12 +262,12 @@ export default function AcademiesPage() {
               {filtered.map((a) => {
                 const date = new Date(a.created_at);
                 const dateStr = `${date.getFullYear().toString().slice(2)}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
-                const lastSignInStr = a.last_sign_in_at ? (() => {
-                  const d = new Date(a.last_sign_in_at as string);
+                const lastActiveStr = a.last_active_at ? (() => {
+                  const d = new Date(a.last_active_at as string);
                   return `${d.getFullYear().toString().slice(2)}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
                 })() : null;
-                const daysSinceSignIn = a.last_sign_in_at
-                  ? Math.floor((Date.now() - new Date(a.last_sign_in_at).getTime()) / 86400000)
+                const daysSinceActive = a.last_active_at
+                  ? Math.floor((Date.now() - new Date(a.last_active_at).getTime()) / 86400000)
                   : null;
                 const badge = PROVIDER_BADGE[a.provider] ?? PROVIDER_BADGE.email;
                 return (
@@ -335,13 +335,13 @@ export default function AcademiesPage() {
                     <td className="py-2 px-2 text-center font-bold text-slate-500 whitespace-nowrap">{dateStr}</td>
                     {/* 마지막 접속 */}
                     <td className="py-2 px-2 text-center font-bold whitespace-nowrap">
-                      {lastSignInStr ? (
+                      {lastActiveStr ? (
                         <span className={
-                          daysSinceSignIn !== null && daysSinceSignIn >= 30 ? 'text-red-400'
-                          : daysSinceSignIn !== null && daysSinceSignIn >= 7 ? 'text-yellow-400'
+                          daysSinceActive !== null && daysSinceActive >= 30 ? 'text-red-400'
+                          : daysSinceActive !== null && daysSinceActive >= 7 ? 'text-yellow-400'
                           : 'text-emerald-400'
                         }>
-                          {lastSignInStr}
+                          {lastActiveStr}
                         </span>
                       ) : (
                         <span className="text-slate-700">—</span>

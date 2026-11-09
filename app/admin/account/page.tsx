@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
+// 소셜 로그인 가입 시 auth/callback/route.ts가 임시로 붙여주는 이름(예: "오리온_128") 패턴.
+// 전화번호 입력란과 달리 이 필드는 미리 값이 채워져 있어 "이미 입력된 진짜 이름"처럼
+// 보이기 쉽다 — 원장님이 학원명은 안 바꾸고 전화번호만 입력하고 저장해버리는 경우를
+// 막기 위해, 아직 이 패턴 그대로면 눈에 띄게 경고해준다.
+const RANDOM_NAMES = ['오리온','페가수스','시리우스','카시오페이아','안드로메다','처녀자리','사자자리','전갈자리','쌍둥이자리','독수리자리','백조자리','큰곰자리','에리다누스','켄타우루스','에메랄드','사파이어','루비','오팔','토파즈','아폴로','아테나','헤르메스','아르테미스','포세이돈','북극성','은하수','금성','새벽별','달빛','유성'];
+const RANDOM_NAME_PATTERN = new RegExp(`^(${RANDOM_NAMES.join('|')})_\\d{3}$`);
+
 
 export default function AccountPage() {
   const router = useRouter();
@@ -464,8 +471,13 @@ export default function AccountPage() {
                 type="text"
                 value={academyName}
                 onChange={e => setAcademyName(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-gray-900 focus:bg-white outline-none transition-all font-bold text-gray-900 text-sm"
+                className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-2xl focus:bg-white outline-none transition-all font-bold text-gray-900 text-sm ${
+                  RANDOM_NAME_PATTERN.test(academyName.trim()) ? 'border-amber-400 focus:border-amber-500' : 'border-gray-100 focus:border-gray-900'
+                }`}
               />
+              {RANDOM_NAME_PATTERN.test(academyName.trim()) && (
+                <p className="text-xs font-bold text-amber-600 mt-1.5">⚠️ 가입 시 자동으로 붙은 임시 이름입니다. 실제 학원명으로 변경해주세요.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

@@ -44,6 +44,14 @@ export async function GET(request: NextRequest) {
       const config = configMap[u.id] ?? {};
       const snsIdentity = (u.identities ?? []).find((i: { provider: string }) => SNS.includes(i.provider));
       const provider = u.user_metadata?.provider || snsIdentity?.provider || u.app_metadata?.provider || 'email';
+      // "마지막 접속": Auth의 last_sign_in_at(재로그인 시에만 갱신)과 앱 자체 접속
+      // 기록(last_active_at, 페이지 이동마다 갱신) 중 더 최근 값을 사용한다 — 세션이
+      // 길게 유지되는 사용자(재로그인 없이 계속 사용)의 실제 활동을 놓치지 않기 위함.
+      const lastSignIn = u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : 0;
+      const lastActive = config.last_active_at ? new Date(config.last_active_at).getTime() : 0;
+      const lastActiveAt = Math.max(lastSignIn, lastActive) > 0
+        ? new Date(Math.max(lastSignIn, lastActive)).toISOString()
+        : null;
       return {
         user_id: u.id,
         academy_name: config.academy_name || '',
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
         referral_code: config.referral_code || '',
         own_referral_code: config.own_referral_code || null,
         created_at: u.created_at,
-        last_sign_in_at: u.last_sign_in_at ?? null,
+        last_active_at: lastActiveAt,
         role: u.user_metadata?.role ?? 'ai_only',
         sms_enabled: config.sms_enabled ?? false,
         sms_marketing_agreed: config.sms_marketing_agreed ?? false,
