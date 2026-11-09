@@ -136,12 +136,11 @@ export default function TermsContent() {
           </section>
 
           <section>
-            <h2 className="text-xl font-black text-slate-900 mb-4">제 8조 (환불 및 구독 해지)</h2>
+            <h2 className="text-xl font-black text-slate-900 mb-4">제 8조 (환불)</h2>
             <ol className="space-y-2 font-medium list-decimal list-inside text-slate-600">
-              <li>구독제 요금제의 특성상 결제 완료 후 일반적인 환불은 불가합니다.</li>
-              <li>다만, 홈페이지에 게시된 '환불 정책'에 명기된 조건에 따라 환불이 가능합니다.</li>
-              <li>사용자는 언제든지 구독을 해지할 수 있으며, 구독 해지 후 남은 기간에 대한 환불은 제공되지 않습니다.</li>
-              <li>환불 정책은 유료 서비스 변경에 따라 조정될 수 있으며, 변경 시 최소 일주일 전에 이용자에게 사전 고지합니다.</li>
+              <li>이용자가 CON을 충전한 날(영업일 기준)로부터 2일 이내에 환불을 요청하는 경우, 결제 금액의 100%를 환불합니다.</li>
+              <li>CON 충전일로부터 2일이 경과한 후 환불을 요청하는 경우, 카드 결제 수수료 등 제반 비용을 고려하여 결제 금액의 90%를 환불합니다.</li>
+              <li>환불 정책은 서비스 운영상 필요에 따라 조정될 수 있으며, 변경 시 최소 일주일 전에 이용자에게 사전 고지합니다.</li>
             </ol>
           </section>
 

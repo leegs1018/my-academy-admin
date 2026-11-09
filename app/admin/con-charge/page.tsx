@@ -493,6 +493,16 @@ function ConChargeContent() {
           )}
         </div>
       </div>
+
+      {/* 환불 규정 안내 */}
+      <div className="bg-gray-50 dark:bg-slate-800/60 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 space-y-1.5">
+        <p className="text-xs font-black text-gray-600 dark:text-slate-300">CON 환불 규정</p>
+        <ul className="text-xs font-bold text-gray-500 dark:text-slate-400 space-y-1">
+          <li>• 충전일(영업일 기준) <span className="font-black text-gray-700 dark:text-slate-200">2일 이내</span> 환불 요청 시 결제 금액의 <span className="font-black text-gray-700 dark:text-slate-200">100%</span> 환불</li>
+          <li>• 충전일로부터 2일 경과 후 환불 요청 시, 카드 결제 수수료 등의 사유로 결제 금액의 <span className="font-black text-gray-700 dark:text-slate-200">90%</span> 환불</li>
+          <li>• 환불 신청은 <a href="/admin/inquiries" className="underline font-black">문의하기</a>를 이용해주세요.</li>
+        </ul>
+      </div>
     </div>
   );
 }
