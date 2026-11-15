@@ -461,6 +461,7 @@ function ConChargeContent() {
                   <li>• 입금 확인 후 <span className="font-black">1시간 이내</span> CON이 지급됩니다.</li>
                   <li>• 3,000C 이상 <span className="font-black">+5%</span> · 5,000C 이상 <span className="font-black">+7%</span> · 10,000C 이상 <span className="font-black">+10%</span> 추가 적립</li>
                   <li>• 충전 관련 문의는 <a href="/admin/inquiries" className="underline font-black">문의하기</a>를 이용해주세요.</li>
+                  <li>• 현금영수증(소득공제·지출증빙)이 필요하시면 <a href="/admin/inquiries" className="underline font-black">문의하기</a>로 요청해주세요.</li>
                 </ul>
               </div>
 
