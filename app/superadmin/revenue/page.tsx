@@ -25,8 +25,8 @@ interface Summary {
 const KIND_LABEL: Record<RevenueRow['kind'], string> = { revenue: '매출', expense: '매입', refund: '환불' };
 const KIND_COLOR: Record<RevenueRow['kind'], string> = {
   revenue: 'bg-emerald-900/50 text-emerald-400',
-  expense: 'bg-sky-900/50 text-sky-400',
-  refund: 'bg-red-900/50 text-red-400',
+  expense: 'bg-red-900/50 text-red-400',
+  refund: 'bg-rose-900/50 text-rose-400',
 };
 
 function toLocalDate(date: Date): string {
@@ -198,11 +198,11 @@ export default function RevenuePage() {
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
           <p className="text-xs font-black text-slate-500 mb-1">매입</p>
-          <p className="text-2xl font-black text-sky-400">-{summary.expense.toLocaleString()}원</p>
+          <p className="text-2xl font-black text-red-400">-{summary.expense.toLocaleString()}원</p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
           <p className="text-xs font-black text-slate-500 mb-1">환불</p>
-          <p className="text-2xl font-black text-red-400">-{summary.refund.toLocaleString()}원</p>
+          <p className="text-2xl font-black text-rose-400">-{summary.refund.toLocaleString()}원</p>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
           <p className="text-xs font-black text-slate-500 mb-1">순이익</p>
@@ -246,7 +246,7 @@ export default function RevenuePage() {
                     )}
                   </td>
                   <td className="py-3 px-4 text-right font-black whitespace-nowrap">
-                    <span className={r.kind === 'revenue' ? 'text-emerald-400' : r.kind === 'expense' ? 'text-sky-400' : 'text-red-400'}>
+                    <span className={r.kind === 'revenue' ? 'text-emerald-400' : r.kind === 'expense' ? 'text-red-400' : 'text-rose-400'}>
                       {r.kind === 'revenue' ? '+' : '-'}{r.amount_krw.toLocaleString()}원
                     </span>
                   </td>
