@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('start_date') || '';
     const endDate = searchParams.get('end_date') || '';
     const page = parseInt(searchParams.get('page') || '1', 10);
-    const pageSize = 50;
+    const pageSize = 20;
 
     const db = createAdminClient();
     const rows: RevenueRow[] = [];
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         kind: r.type === 'charge' ? 'revenue' : 'refund',
         title: academyName,
         content: conProductName(r.type as 'charge' | 'deduct', r.feature_key as string | null, r.amount as number),
-        amount_krw: r.amount_krw as number,
+        amount_krw: Math.floor(r.amount_krw as number),
         currency: 'KRW',
       });
     }
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
               }
             }
             fxRate = rateCache.get(occDate) ?? 0;
-            amountKrw = Math.round(Number(fc.amount) * fxRate);
+            amountKrw = Number(fc.amount) * fxRate;
           }
           rows.push({
             id: `fixed-${fc.id}-${occDate}`,
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
             kind: fc.type === 'revenue' ? 'revenue' : 'expense',
             title: fc.title,
             content: fc.description || fc.title,
-            amount_krw: amountKrw,
+            amount_krw: Math.floor(amountKrw),
             currency: fc.currency,
             original_amount: fc.currency === 'USD' ? Number(fc.amount) : undefined,
             fx_rate: fxRate,
@@ -140,7 +140,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       transactions: paged, total, page, pageSize,
-      summary: { revenue, expense, refund, net: revenue - expense - refund },
+      summary: {
+        revenue: Math.floor(revenue), expense: Math.floor(expense), refund: Math.floor(refund),
+        net: Math.floor(revenue - expense - refund),
+      },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

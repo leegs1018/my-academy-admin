@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 
 interface RevenueRow {
@@ -42,7 +42,6 @@ export default function RevenuePage() {
   const today = toLocalDate(new Date());
 
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [page, setPage] = useState(1);
@@ -53,16 +52,16 @@ export default function RevenuePage() {
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  // 검색창 입력만으로는 조회가 실행되지 않도록, 최신 검색어는 ref로 들고 있다가
+  // 날짜 변경(자동) 또는 검색 버튼/Enter(수동) 때만 fetchData에서 꺼내 쓴다.
+  const searchRef = useRef(search);
+  useEffect(() => { searchRef.current = search; }, [search]);
 
   const fetchData = useCallback(async (p = 1) => {
     setLoading(true);
     setSearchError('');
     const params = new URLSearchParams({
-      search: debouncedSearch,
+      search: searchRef.current,
       start_date: startDate,
       end_date: endDate,
       page: String(p),
@@ -82,11 +81,12 @@ export default function RevenuePage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, startDate, endDate]);
+  }, [startDate, endDate]);
 
+  // 날짜 범위가 바뀔 때만 자동 조회한다 — 검색어는 "검색" 버튼/Enter로만 조회되게 한다.
   useEffect(() => { fetchData(1); }, [fetchData]);
 
-  const pageSize = 50;
+  const pageSize = 20;
   const totalPages = Math.ceil(total / pageSize);
 
   return (
