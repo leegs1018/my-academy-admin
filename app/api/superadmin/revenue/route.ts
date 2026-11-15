@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const search = (searchParams.get('search') || searchParams.get('academy_search') || '').trim().toLowerCase();
+    const kind = searchParams.get('kind') || 'all'; // all | revenue | expense | refund
     const startDate = searchParams.get('start_date') || '';
     const endDate = searchParams.get('end_date') || '';
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest) {
 
     filtered.sort((a, b) => b.date.localeCompare(a.date));
 
-    // ── 4) 집계 카드 ──────────────────────────────────────────────────
+    // ── 4) 집계 카드 — 구분(매출/매입) 필터와 무관하게 검색 범위 전체 기준 ───
     let revenue = 0, expense = 0, refund = 0;
     for (const r of filtered) {
       if (r.kind === 'revenue') revenue += r.amount_krw;
@@ -133,10 +134,13 @@ export async function GET(request: NextRequest) {
       else refund += r.amount_krw;
     }
 
-    // ── 5) 페이지네이션(병합 후 메모리상에서) ────────────────────────────
-    const total = filtered.length;
+    // ── 5) 구분(매출/매입/환불) 필터 — 리스트에만 적용 ───────────────────
+    const listFiltered = kind === 'all' ? filtered : filtered.filter(r => r.kind === kind);
+
+    // ── 6) 페이지네이션(병합 후 메모리상에서) ────────────────────────────
+    const total = listFiltered.length;
     const from = (page - 1) * pageSize;
-    const paged = filtered.slice(from, from + pageSize);
+    const paged = listFiltered.slice(from, from + pageSize);
 
     return NextResponse.json({
       transactions: paged, total, page, pageSize,

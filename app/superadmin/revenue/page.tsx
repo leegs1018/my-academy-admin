@@ -44,6 +44,7 @@ export default function RevenuePage() {
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const [kindFilter, setKindFilter] = useState<'all' | 'revenue' | 'expense' | 'refund'>('all');
   const [page, setPage] = useState(1);
 
   const [rows, setRows] = useState<RevenueRow[]>([]);
@@ -64,6 +65,7 @@ export default function RevenuePage() {
       search: searchRef.current,
       start_date: startDate,
       end_date: endDate,
+      kind: kindFilter,
       page: String(p),
     });
     try {
@@ -81,7 +83,7 @@ export default function RevenuePage() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, kindFilter]);
 
   // 날짜 범위가 바뀔 때만 자동 조회한다 — 검색어는 "검색" 버튼/Enter로만 조회되게 한다.
   useEffect(() => { fetchData(1); }, [fetchData]);
@@ -128,6 +130,20 @@ export default function RevenuePage() {
             </button>
           </div>
         </div>
+        {/* 구분 필터 */}
+        <div className="flex flex-wrap gap-2">
+          {([
+            { key: 'all', label: '전체' },
+            { key: 'revenue', label: '매출' },
+            { key: 'expense', label: '매입' },
+            { key: 'refund', label: '환불' },
+          ] as const).map(({ key, label }) => (
+            <button key={key} onClick={() => setKindFilter(key)}
+              className={`px-3 py-1.5 text-xs font-black rounded-lg border transition-all ${kindFilter === key ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
         {/* 날짜 퀵버튼 */}
         <div className="flex flex-wrap gap-2">
           {([
@@ -135,6 +151,7 @@ export default function RevenuePage() {
             { label: '어제', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = toLocalDate(d); setStartDate(s); setEndDate(s); } },
             { label: '지난 7일', fn: () => { const s = new Date(); s.setDate(s.getDate() - 6); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
             { label: '지난 30일', fn: () => { const s = new Date(); s.setDate(s.getDate() - 29); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
+            { label: '이번달', fn: () => { const n = new Date(); const s = new Date(n.getFullYear(), n.getMonth(), 1); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
             { label: '3개월', fn: () => { const s = new Date(); s.setMonth(s.getMonth() - 3); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
             { label: '6개월', fn: () => { const s = new Date(); s.setMonth(s.getMonth() - 6); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
             { label: '12개월', fn: () => { const s = new Date(); s.setMonth(s.getMonth() - 12); setStartDate(toLocalDate(s)); setEndDate(toLocalDate(new Date())); } },
