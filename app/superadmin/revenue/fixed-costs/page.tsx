@@ -32,6 +32,8 @@ export default function FixedCostsPage() {
   const [repeatCycle, setRepeatCycle] = useState<'weekly' | 'monthly' | 'once'>('monthly');
   const [currency, setCurrency] = useState<'KRW' | 'USD'>('KRW');
   const [amount, setAmount] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -47,6 +49,11 @@ export default function FixedCostsPage() {
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(items.length / pageSize));
+    if (page > maxPage) setPage(maxPage);
+  }, [items.length, page]);
 
   async function handleSubmit() {
     setError('');
@@ -68,6 +75,7 @@ export default function FixedCostsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '등록에 실패했습니다.');
       setTitle(''); setDescription(''); setStartDate(''); setEndDate(''); setAmount('');
+      setPage(1);
       await fetchItems();
     } catch (e) {
       setError(e instanceof Error ? e.message : '등록 중 오류가 발생했습니다.');
@@ -198,7 +206,7 @@ export default function FixedCostsPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map(it => (
+              {items.slice((page - 1) * pageSize, page * pageSize).map(it => (
                 <tr key={it.id} className="border-t border-slate-800/60 hover:bg-slate-800/20 transition-colors">
                   <td className="py-3 px-4 text-center">
                     <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${it.type === 'revenue' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-sky-900/50 text-sky-400'}`}>
@@ -226,6 +234,25 @@ export default function FixedCostsPage() {
             </tbody>
           </table>
         </div>
+        {items.length > pageSize && (
+          <div className="px-5 py-3 border-t border-slate-800 flex items-center justify-between">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-4 py-2 text-xs font-black bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all disabled:opacity-30"
+            >
+              이전
+            </button>
+            <span className="text-xs font-bold text-slate-400">{page} / {Math.ceil(items.length / pageSize)}</span>
+            <button
+              onClick={() => setPage(p => Math.min(Math.ceil(items.length / pageSize), p + 1))}
+              disabled={page >= Math.ceil(items.length / pageSize)}
+              className="px-4 py-2 text-xs font-black bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all disabled:opacity-30"
+            >
+              다음
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
