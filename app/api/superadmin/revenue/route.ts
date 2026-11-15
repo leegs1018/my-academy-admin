@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
 
       for (const fc of fixedCosts ?? []) {
         const occurrences = materializeOccurrences(
-          fc.start_date, fc.end_date, fc.repeat_cycle as 'weekly' | 'monthly', startDate, endDate
+          fc.start_date, fc.end_date, fc.repeat_cycle as 'weekly' | 'monthly' | 'once', startDate, endDate
         );
         for (const occDate of occurrences) {
           let amountKrw = Number(fc.amount);

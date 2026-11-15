@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     description?: string;
     start_date: string;
     end_date?: string | null;
-    repeat_cycle: 'weekly' | 'monthly';
+    repeat_cycle: 'weekly' | 'monthly' | 'once';
     currency: 'KRW' | 'USD';
     amount: number;
   };
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   if (!['revenue', 'expense'].includes(body.type)) {
     return NextResponse.json({ error: '구분 값이 올바르지 않습니다.' }, { status: 400 });
   }
-  if (!['weekly', 'monthly'].includes(body.repeat_cycle)) {
+  if (!['weekly', 'monthly', 'once'].includes(body.repeat_cycle)) {
     return NextResponse.json({ error: '반복 주기가 올바르지 않습니다.' }, { status: 400 });
   }
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       title: body.title.trim(),
       description: body.description?.trim() || null,
       start_date: body.start_date,
-      end_date: body.end_date || null,
+      end_date: body.repeat_cycle === 'once' ? null : (body.end_date || null),
       repeat_cycle: body.repeat_cycle,
       currency: body.currency ?? 'KRW',
       amount: body.amount,

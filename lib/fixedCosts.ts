@@ -4,7 +4,7 @@
 export function materializeOccurrences(
   startDate: string,
   endDate: string | null,
-  cycle: 'weekly' | 'monthly',
+  cycle: 'weekly' | 'monthly' | 'once',
   rangeStart: string,
   rangeEnd: string
 ): string[] {
@@ -14,6 +14,11 @@ export function materializeOccurrences(
   const rEnd = new Date(rangeEnd + 'T00:00:00Z');
   const hardEnd = endDate ? new Date(endDate + 'T00:00:00Z') : null;
   if (hardEnd && hardEnd < start) return occurrences;
+
+  if (cycle === 'once') {
+    if (start >= rStart && start <= rEnd) occurrences.push(startDate);
+    return occurrences;
+  }
 
   if (cycle === 'weekly') {
     let cur = new Date(start);

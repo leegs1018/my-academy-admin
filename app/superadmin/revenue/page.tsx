@@ -100,7 +100,7 @@ export default function RevenuePage() {
         </div>
         <Link href="/superadmin/revenue/fixed-costs"
           className="shrink-0 px-4 py-2.5 text-sm font-black bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-all whitespace-nowrap">
-          ⚙️ 고정비 관리
+          ⚙️ 고정비/단건 관리
         </Link>
       </div>
 
@@ -267,7 +267,7 @@ export default function RevenuePage() {
       </div>
 
       <p className="text-[10px] text-slate-600 font-bold">
-        * CON 결제 내역은 이 기능 배포 이전 거래의 경우 실제 결제 금액이 기록되어 있지 않아 집계에서 제외됩니다. 고정 매출/매입은 <Link href="/superadmin/revenue/fixed-costs" className="underline">고정비 관리</Link>에서 등록·관리합니다.
+        * CON 결제 내역은 이 기능 배포 이전 거래의 경우 실제 결제 금액이 기록되어 있지 않아 집계에서 제외됩니다. 고정/단건 매출·매입은 <Link href="/superadmin/revenue/fixed-costs" className="underline">고정비/단건 관리</Link>에서 등록·관리합니다.
       </p>
     </div>
   );

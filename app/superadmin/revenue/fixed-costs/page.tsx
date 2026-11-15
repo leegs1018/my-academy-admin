@@ -10,13 +10,13 @@ interface FixedCost {
   description: string | null;
   start_date: string;
   end_date: string | null;
-  repeat_cycle: 'weekly' | 'monthly';
+  repeat_cycle: 'weekly' | 'monthly' | 'once';
   currency: 'KRW' | 'USD';
   amount: number;
   created_at: string;
 }
 
-const CYCLE_LABEL: Record<FixedCost['repeat_cycle'], string> = { weekly: '매주', monthly: '매월' };
+const CYCLE_LABEL: Record<FixedCost['repeat_cycle'], string> = { weekly: '매주', monthly: '매월', once: '단건' };
 
 export default function FixedCostsPage() {
   const [items, setItems] = useState<FixedCost[]>([]);
@@ -29,7 +29,7 @@ export default function FixedCostsPage() {
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [repeatCycle, setRepeatCycle] = useState<'weekly' | 'monthly'>('monthly');
+  const [repeatCycle, setRepeatCycle] = useState<'weekly' | 'monthly' | 'once'>('monthly');
   const [currency, setCurrency] = useState<'KRW' | 'USD'>('KRW');
   const [amount, setAmount] = useState('');
 
@@ -61,7 +61,8 @@ export default function FixedCostsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type, title, description, start_date: startDate,
-          end_date: endDate || null, repeat_cycle: repeatCycle, currency, amount: Number(amount),
+          end_date: repeatCycle === 'once' ? null : (endDate || null),
+          repeat_cycle: repeatCycle, currency, amount: Number(amount),
         }),
       });
       const data = await res.json();
@@ -90,15 +91,15 @@ export default function FixedCostsPage() {
     <div className="space-y-6">
       <div>
         <Link href="/superadmin/revenue" className="text-xs font-black text-slate-500 hover:text-slate-300">← 매출 분석으로</Link>
-        <h1 className="text-3xl font-black text-white mt-2">⚙️ 고정비 관리</h1>
+        <h1 className="text-3xl font-black text-white mt-2">⚙️ 고정비 / 단건 거래 관리</h1>
         <p className="text-sm text-slate-500 mt-1 font-bold">
-          서버 유지비처럼 주기적으로 반복되는 고정 매출/매입을 등록하면 매출 분석 리스트에 자동으로 반영됩니다.
+          서버 유지비처럼 주기적으로 반복되는 고정 매출/매입이나, 한 번만 발생하는 단건 매출/매입을 등록하면 매출 분석 리스트에 자동으로 반영됩니다.
           달러(USD) 금액은 해당 발생일의 환율로 자동 환산됩니다.
         </p>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-        <h2 className="text-sm font-black text-white">새 고정비 등록</h2>
+        <h2 className="text-sm font-black text-white">새 고정비/단건 등록</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-black text-slate-400 mb-1.5">구분</label>
@@ -116,6 +117,10 @@ export default function FixedCostsPage() {
           <div>
             <label className="block text-xs font-black text-slate-400 mb-1.5">반복</label>
             <div className="flex gap-2">
+              <button onClick={() => setRepeatCycle('once')}
+                className={`flex-1 py-2.5 text-sm font-black rounded-xl border transition-all ${repeatCycle === 'once' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                단건
+              </button>
               <button onClick={() => setRepeatCycle('monthly')}
                 className={`flex-1 py-2.5 text-sm font-black rounded-xl border transition-all ${repeatCycle === 'monthly' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
                 매월
@@ -143,15 +148,17 @@ export default function FixedCostsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs font-black text-slate-400 mb-1.5">시작일</label>
+            <label className="block text-xs font-black text-slate-400 mb-1.5">{repeatCycle === 'once' ? '날짜' : '시작일'}</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
               className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-white focus:border-indigo-500 focus:outline-none" />
           </div>
-          <div>
-            <label className="block text-xs font-black text-slate-400 mb-1.5">마감일 (비우면 계속 반복)</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-white focus:border-indigo-500 focus:outline-none" />
-          </div>
+          {repeatCycle !== 'once' && (
+            <div>
+              <label className="block text-xs font-black text-slate-400 mb-1.5">마감일 (비우면 계속 반복)</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-white focus:border-indigo-500 focus:outline-none" />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-black text-slate-400 mb-1.5">금액</label>
             <div className="flex gap-2">
@@ -201,7 +208,9 @@ export default function FixedCostsPage() {
                   <td className="py-3 px-4 font-black text-white text-xs whitespace-nowrap">{it.title}</td>
                   <td className="py-3 px-4 text-xs font-bold text-slate-300">{it.description || '-'}</td>
                   <td className="py-3 px-4 text-center text-xs font-bold text-slate-400 whitespace-nowrap">
-                    {CYCLE_LABEL[it.repeat_cycle]} · {it.start_date} ~ {it.end_date || '계속'}
+                    {it.repeat_cycle === 'once'
+                      ? `${CYCLE_LABEL[it.repeat_cycle]} · ${it.start_date}`
+                      : `${CYCLE_LABEL[it.repeat_cycle]} · ${it.start_date} ~ ${it.end_date || '계속'}`}
                   </td>
                   <td className="py-3 px-4 text-right font-black text-white whitespace-nowrap">
                     {it.currency === 'USD' ? `$${it.amount.toLocaleString()}` : `${it.amount.toLocaleString()}원`}
