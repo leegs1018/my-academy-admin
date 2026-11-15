@@ -8,7 +8,7 @@ import { useRouter, usePathname } from 'next/navigation';
 const menuItems = [
   { href: '/superadmin',                   label: '대시보드',          icon: '📊' },
   { href: '/superadmin/academies',         label: '학원 관리',         icon: '🏫' },
-  { href: '/superadmin/credits-pricing',   label: 'CON 관리',          icon: '⭐' },
+  { href: '/superadmin/credits-pricing',   label: 'CON 단가 설정',      icon: '⭐' },
   { href: '/superadmin/con-history',       label: 'CON 이력 조회',     icon: '📋' },
   { href: '/superadmin/sms',               label: 'SMS 발송',          icon: '📱' },
   { href: '/superadmin/mock-exams',        label: '모의고사 지문 관리', icon: '📚' },

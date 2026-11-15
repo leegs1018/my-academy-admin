@@ -214,6 +214,8 @@ export default function ConPricingPage() {
   const [inserting, setInserting] = useState<string | null>(null);
 
   const [exchangeRate, setExchangeRate] = useState(1380);
+  const [rateDate, setRateDate] = useState('');
+  const [rateError, setRateError] = useState(false);
   const [modelPricing, setModelPricing] = useState<Record<ModelKey, ModelPricing>>(DEFAULT_MODEL_PRICING);
   const [costSaveStatus, setCostSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,6 +253,19 @@ export default function ConPricingPage() {
       }
       setLoading(false);
     }).catch(() => setLoading(false));
+
+    // 환율은 저장된 값보다 실시간 기준 환율을 우선한다.
+    fetch('/api/superadmin/fx-rate')
+      .then(r => r.json())
+      .then(data => {
+        if (typeof data.rate === 'number') {
+          setExchangeRate(data.rate);
+          setRateDate(data.date);
+        } else {
+          setRateError(true);
+        }
+      })
+      .catch(() => setRateError(true));
   }, []);
 
   useEffect(() => {
@@ -563,13 +578,18 @@ export default function ConPricingPage() {
           </div>
         </div>
 
-        {/* 환율 */}
+        {/* 환율 (자동) */}
         <div className="flex items-center gap-3 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
           <span className="text-xs font-black text-slate-300 whitespace-nowrap">💱 환율</span>
-          <input type="number" min="0" step="10" value={exchangeRate}
-            onChange={e => setExchangeRate(Number(e.target.value))}
-            className="w-28 text-center px-2 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white font-black focus:outline-none text-sm" />
-          <span className="text-xs text-slate-500 font-bold">원 / 1 USD</span>
+          <span className="min-w-28 text-center px-2 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-white font-black text-sm">
+            {exchangeRate.toLocaleString()}
+          </span>
+          <span className="text-xs text-slate-500 font-bold">
+            원 / 1 USD{rateDate && ` (${rateDate} 기준)`}
+          </span>
+          {rateError && (
+            <span className="text-xs font-bold text-red-400">⚠️ 실시간 환율 조회 실패 — 저장된 값 사용 중</span>
+          )}
         </div>
 
         {/* 모델별 토큰 단가 */}
