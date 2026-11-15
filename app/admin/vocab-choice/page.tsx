@@ -1827,7 +1827,7 @@ function PdfVocabChoice({ result, isAnswer, title, id }: { result: WorkbookResul
                           {j > 0 && ' / '}
                           {j === c.correctIdx
                             ? <span style={{ fontWeight: 900, color: '#DC2626', textDecoration: 'underline' }}>{opt}</span>
-                            : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>
+                            : <span style={{ color: '#999' }}>{opt}</span>
                           }
                         </span>
                       ))}]
@@ -2878,7 +2878,7 @@ function PdfResultContent({ result, type, isAnswer, title, id, embedded }: {
             if (isAnswer) return <span key={i} style={cb}>{c.num}[{opts.map((opt, j) => (
               <span key={j}>{j > 0 && ' / '}{j === c.correctIdx
                 ? <span style={{ fontWeight: 900, color: '#DC2626', textDecoration: 'underline' }}>{opt}</span>
-                : <span style={{ color: '#999', textDecoration: 'line-through' }}>{opt}</span>}
+                : <span style={{ color: '#999' }}>{opt}</span>}
               </span>
             ))}]</span>;
             return <span key={i} style={cb}>{c.num}[{opts.join(' / ')}]</span>;

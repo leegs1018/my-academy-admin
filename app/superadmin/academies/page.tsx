@@ -272,16 +272,20 @@ export default function AcademiesPage() {
                 const badge = PROVIDER_BADGE[a.provider] ?? PROVIDER_BADGE.email;
                 return (
                   <tr key={a.user_id} className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
-                    {/* 학원명 + 가입방법 */}
+                    {/* 학원명 + 가입방법 — 클릭하면 모바일에서도 바로 CON 충전 가능 */}
                     <td className="py-2 px-2">
                       {a.academy_name ? (
-                        <div className="flex items-center gap-1 flex-nowrap">
+                        <button
+                          onClick={() => openChargeModal(a)}
+                          title="클릭하면 CON 충전창이 열립니다"
+                          className="flex items-center gap-1 flex-nowrap text-left"
+                        >
                           <span className={`flex-shrink-0 inline-block px-1.5 py-0.5 text-[9px] font-black rounded ${badge.className}`}>{badge.label}</span>
-                          <span className="font-black text-white whitespace-nowrap">{a.academy_name}</span>
+                          <span className="font-black text-white whitespace-nowrap underline decoration-dotted decoration-slate-600 underline-offset-2">{a.academy_name}</span>
                           {!a.profile_completed && (
                             <span className="flex-shrink-0 text-[9px] font-black px-1 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-800 whitespace-nowrap">미완성</span>
                           )}
-                        </div>
+                        </button>
                       ) : (
                         <div>
                           <p className="font-black text-slate-500">(미설정)</p>
