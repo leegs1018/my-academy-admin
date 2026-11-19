@@ -72,6 +72,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: parsed.errorMessage || '결제 요청 실패' });
     }
 
+    // PayApp 콜백이 var3(실결제 금액)을 돌려주지 않는 경우를 대비해,
+    // 요청 시점의 금액 정보를 미리 저장해둔다 — 콜백에서 academy_id + CON수량으로 매칭해 복구.
+    // (저장 실패해도 결제 요청 자체는 정상 진행되게 별도로 처리)
+    try {
+      await supabase.from('payapp_pending_charges').insert({
+        academy_id: userId,
+        con_amount: totalCon,
+        price_won: priceWon,
+      });
+    } catch (e) {
+      console.error('[payapp/request] pending_charges 저장 실패:', e);
+    }
+
     return NextResponse.json({ ok: true, payurl: parsed.payurl });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '알 수 없는 오류';

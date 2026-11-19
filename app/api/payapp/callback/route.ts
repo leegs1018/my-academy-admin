@@ -41,9 +41,35 @@ export async function POST(req: NextRequest) {
 
     const totalCon = parseInt(conAmountStr);
     if (isNaN(totalCon) || totalCon <= 0) return new Response('FAIL', { status: 400 });
-    // var3(실결제 금액)은 이 기능 배포 이후 요청 건부터만 전달된다 — 없으면 매출 집계에서
-    // 제외되도록 null로 둔다 (CON 수량으로 역산하지 않음 — 보너스 비율 변경 시 부정확해질 수 있음).
-    const priceWon = priceWonStr ? parseInt(priceWonStr) : null;
+
+    // var3(실결제 금액)을 PayApp이 그대로 돌려주지 않는 경우가 있어,
+    // 요청 시점에 저장해둔 payapp_pending_charges에서 academy_id + CON수량으로 매칭해 복구한다.
+    let priceWon = priceWonStr ? parseInt(priceWonStr) : null;
+    if (priceWon === null || isNaN(priceWon)) {
+      const { data: pending } = await supabase
+        .from('payapp_pending_charges')
+        .select('id, price_won')
+        .eq('academy_id', userId)
+        .eq('con_amount', totalCon)
+        .eq('consumed', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (pending) {
+        priceWon = pending.price_won;
+        await supabase.from('payapp_pending_charges').update({ consumed: true }).eq('id', pending.id);
+      } else {
+        priceWon = null;
+      }
+    } else {
+      // var3가 정상적으로 왔으면, 매칭되는 pending 기록을 소모 처리해 누적되지 않게 한다.
+      await supabase
+        .from('payapp_pending_charges')
+        .update({ consumed: true })
+        .eq('academy_id', userId)
+        .eq('con_amount', totalCon)
+        .eq('consumed', false);
+    }
 
     const dupKey = `[카드결제] ${mul_no}`;
 
