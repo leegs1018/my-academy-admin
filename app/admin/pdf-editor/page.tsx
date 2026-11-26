@@ -374,6 +374,7 @@ export default function PdfEditorPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [academyName, setAcademyName] = useState('');
 
   // ── Mock 탭 state ──
   const [mockYears, setMockYears] = useState<number[]>([]);
@@ -504,9 +505,10 @@ export default function PdfEditorPage() {
         if (!user) return;
         const { data } = await supabase
           .from('academy_config')
-          .select('logo_url')
+          .select('logo_url, academy_name')
           .eq('user_id', user.id)
           .single();
+        if (data?.academy_name) setAcademyName(data.academy_name);
         if (!data?.logo_url) return;
         const { data: signed } = await supabase.storage
           .from('academy-logos')
@@ -648,7 +650,7 @@ export default function PdfEditorPage() {
     setBulkDownloading(true);
     const items = historyList.filter(i => selectedIds.has(i.id));
     for (const item of items) {
-      const base = item._source === 'input' ? (item.title || '영어문제') : `${item.year}_${item.institution}_${item.question_number}번`;
+      const base = item._source === 'input' ? `지문분석_${item.title || academyName || '학원'}` : `${item.year}_${item.institution}_${item.question_number}번`;
       if (item.pdf_path) {
         await downloadFromHistory(item.pdf_path, `${base}_문제.pdf`);
         await new Promise(r => setTimeout(r, 600));
@@ -808,8 +810,7 @@ export default function PdfEditorPage() {
       const blob = await generateMockPdfBlob(true, `-${activeMockResultTab}`);
       if (isEditing) setMockEditModeIdx(activeMockResultTab);
       if (!blob) throw new Error('PDF 요소를 찾을 수 없습니다.');
-      const r = mockResults[activeMockResultTab];
-      triggerDownload(blob, `${mockPdfTitle.trim() || `${r?.number}번_워크북`}_문제.pdf`);
+      triggerDownload(blob, `지문분석_${mockPdfTitle.trim() || academyName || '학원'}_문제.pdf`);
     } catch (e) {
       if (isEditing) setMockEditModeIdx(activeMockResultTab);
       alert(`PDF 저장 실패: ${pdfErrorMessage(e)}`);
@@ -822,8 +823,8 @@ export default function PdfEditorPage() {
     const d = mockEditedResults[activeMockResultTab] ?? r.materials;
     setMockPdfLoading('답안');
     try {
-      const blob = await buildAnswerPdfBlob(d, mockPdfTitle.trim() || `${r.number}번 워크북`);
-      triggerDownload(blob, `${mockPdfTitle.trim() || `${r.number}번_워크북`}_답안해설.pdf`);
+      const blob = await buildAnswerPdfBlob(d, mockPdfTitle.trim() || academyName || '학원');
+      triggerDownload(blob, `지문분석_${mockPdfTitle.trim() || academyName || '학원'}_답안해설.pdf`);
     } catch (e) { alert(`PDF 저장 실패: ${pdfErrorMessage(e)}`); }
     finally { setMockPdfLoading(false); }
   };
@@ -989,7 +990,7 @@ export default function PdfEditorPage() {
   const buildVocabText = () =>
     activeInputD?.vocabulary_table.map(r => `${r.word} (${r.meaning}) | ${r.syn1} (${r.syn1_m}) | ${r.syn2} (${r.syn2_m}) | ${r.syn3} (${r.syn3_m}) | ${r.antonym} (${r.antonym_m})`).join('\n') ?? '';
 
-  const baseName = pdfTitle.trim() || '영어문제';
+  const baseName = `지문분석_${pdfTitle.trim() || academyName || '학원'}`;
 
   // ── 문제 PDF 다운로드 ──
   const handleDownloadProblemPDF = async () => {
@@ -2167,7 +2168,7 @@ export default function PdfEditorPage() {
                   <div className="flex justify-center">
                     {item.pdf_path ? (
                       <button onClick={() => {
-                        const name = item._source === 'input' ? (item.title || '영어문제') : `${item.year}_${item.institution}_${item.question_number}번`;
+                        const name = item._source === 'input' ? `지문분석_${item.title || academyName || '학원'}` : `${item.year}_${item.institution}_${item.question_number}번`;
                         downloadFromHistory(item.pdf_path, `${name}_문제.pdf`);
                       }} className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 문제</button>
                     ) : <span className="text-xs text-slate-300 font-bold text-center w-full">저장중</span>}
@@ -2175,8 +2176,8 @@ export default function PdfEditorPage() {
                   <div className="flex justify-center">
                     {item.answer_pdf_path ? (
                       <button onClick={() => {
-                        const name = item._source === 'input' ? (item.title || '영어문제') : `${item.year}_${item.institution}_${item.question_number}번`;
-                        downloadFromHistory(item.answer_pdf_path!, `${name}_해설.pdf`);
+                        const name = item._source === 'input' ? `지문분석_${item.title || academyName || '학원'}` : `${item.year}_${item.institution}_${item.question_number}번`;
+                        downloadFromHistory(item.answer_pdf_path!, `${name}_답안해설.pdf`);
                       }} className="px-2 py-1 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg text-xs font-black transition-all w-full text-center">⬇️ 해설</button>
                     ) : <span className="text-xs text-slate-300 font-bold text-center w-full">-</span>}
                   </div>

@@ -102,6 +102,8 @@ const QUESTION_TYPE_OPTIONS: QuestionTypeOption[] = [
   { key: 'phrase_meaning',   label: '어구 의미 추론 유형',    description: '밑줄 어구의 문맥 속 의미 추론',      color: 'bg-orange-100 text-orange-700 border-orange-200' },
   { key: 'sentence_order',     label: '순서 배열 유형',    description: '글의 순서로 가장 적절한 것은?',          color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
   { key: 'sentence_insertion', label: '문장 삽입 유형',    description: '주어진 문장이 들어가기에 가장 적절한 곳', color: 'bg-violet-100 text-violet-700 border-violet-200' },
+  { key: 'content_match',      label: '내용 일치 유형',    description: '글의 내용과 일치하는 것 찾기',           color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { key: 'content_mismatch',   label: '내용 불일치 유형',  description: '글의 내용과 일치하지 않는 것 찾기',       color: 'bg-red-100 text-red-700 border-red-200' },
 ];
 
 const TYPE_COLOR_MAP: Record<string, string> = {};
@@ -481,6 +483,9 @@ async function generateQuestionPdfBlob(questions: ExamQuestion[], title: string,
         html += `<div style="font-size:12px;line-height:1.8;color:#334155;">${escP(sumText)}</div></div>`;
       }
     } else if (q.type === 'topic_title' && (q._passageText || originalPassage)) {
+      html += instrP(`${num}. ${esc(q.question_text)}`);
+      html += passageBox(escP(q._passageText || originalPassage || ''));
+    } else if ((q.type === 'content_match' || q.type === 'content_mismatch') && (q._passageText || originalPassage)) {
       html += instrP(`${num}. ${esc(q.question_text)}`);
       html += passageBox(escP(q._passageText || originalPassage || ''));
     } else if (q.modified_passage && q.type === 'grammar') {
@@ -2184,6 +2189,19 @@ function AiQuestionsContent() {
                           )}
                         </>
                       )}
+                      {/* content_match / content_mismatch: [질문] + [원본 지문] */}
+                      {(q.type === 'content_match' || q.type === 'content_mismatch') && (
+                        <>
+                          <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
+                            {q.question_text}
+                          </div>
+                          {(q._passageText || originalPassageText) && (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
+                              {q._passageText || originalPassageText}
+                            </div>
+                          )}
+                        </>
+                      )}
                       {/* grammar: [질문] + [지문 ①②③④⑤] */}
                       {q.type === 'grammar' && (
                         <>
@@ -2306,7 +2324,7 @@ function AiQuestionsContent() {
                       })()}
 
                       {/* 문제 지시문 (아래 유형은 위에서 이미 처리) */}
-                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && q.type !== 'sentence_order' && q.type !== 'sentence_insertion' && (
+                      {q.type !== 'vocab_paraphrase' && q.type !== 'summary' && q.type !== 'vocab_blank' && q.type !== 'topic_title' && q.type !== 'grammar' && q.type !== 'fill_blank' && q.type !== 'flow' && q.type !== 'phrase_meaning' && q.type !== 'sentence_order' && q.type !== 'sentence_insertion' && q.type !== 'content_match' && q.type !== 'content_mismatch' && (
                         <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">
                           {q.question_text}
                         </div>
@@ -2862,6 +2880,12 @@ function AiQuestionsContent() {
                         );
                       })()}
                       {q.type === 'topic_title' && (
+                        <>
+                          <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">{q.question_text}</div>
+                          {q._passageText && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{q._passageText}</div>}
+                        </>
+                      )}
+                      {(q.type === 'content_match' || q.type === 'content_mismatch') && (
                         <>
                           <div className="text-sm font-bold text-gray-800 mb-4 leading-relaxed whitespace-pre-wrap">{q.question_text}</div>
                           {q._passageText && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{q._passageText}</div>}
