@@ -67,6 +67,7 @@ const AI_DIRECT_KEYS = [
   'ai_type_topic_title','ai_type_grammar','ai_type_vocab_paraphrase',
   'ai_type_vocab_blank','ai_type_fill_blank','ai_type_summary',
   'ai_type_flow','ai_type_phrase_meaning','ai_type_sentence_order','ai_type_sentence_insertion',
+  'ai_type_content_match','ai_type_content_mismatch',
 ];
 const AI_MOCK_KEYS = AI_DIRECT_KEYS.map(k => k.replace('ai_type_', 'mock_ai_type_'));
 
@@ -74,7 +75,7 @@ const AI_QUESTION_TYPE_LABELS: Record<string, string> = {
   topic_title: '주제/제목', grammar: '어법', vocab_paraphrase: '어휘 바꿔쓰기',
   vocab_blank: '어휘 빈칸', fill_blank: '빈칸추론', summary: '요약문',
   flow: '글의 흐름', phrase_meaning: '함축 의미', sentence_order: '글의 순서',
-  sentence_insertion: '문장 삽입',
+  sentence_insertion: '문장 삽입', content_match: '내용 일치', content_mismatch: '내용 불일치',
 };
 const getQuestionTypeLabel = (k: string) => AI_QUESTION_TYPE_LABELS[k] ?? k;
 
@@ -136,6 +137,8 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
   ai_type_phrase_meaning:     T(1500, 1500, 'gpt-5.1', 2),         // 2단계
   ai_type_sentence_order:     T(1500, 1500, 'gpt-5.1', 2),         // 2단계
   ai_type_sentence_insertion: T(1500, 1500),                       // 1단계
+  ai_type_content_match:      T(1500, 1500),                       // 1단계
+  ai_type_content_mismatch:   T(1500, 1500),                       // 1단계
 
   // 실전 변형 모의고사 (모의고사 지문 약간 더 긺)
   mock_ai_type_topic_title:        T(1600, 1500),
@@ -148,6 +151,8 @@ const FEATURE_TOKENS: Record<string, FeatureTokens> = {
   mock_ai_type_phrase_meaning:     T(1600, 1500, 'gpt-5.1', 2),
   mock_ai_type_sentence_order:     T(1600, 1500, 'gpt-5.1', 2),
   mock_ai_type_sentence_insertion: T(1600, 1500),
+  mock_ai_type_content_match:      T(1600, 1500),
+  mock_ai_type_content_mismatch:   T(1600, 1500),
 };
 
 // ─── 섹션 설정 ────────────────────────────────────────────────────────────────
